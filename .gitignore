@@ -1,0 +1,13 @@
+.env
+*/.env
+
+*.log
+logs/
+
+node_modules/
+dist/
+
+.DS_Store
+Thumbs.db
+
+CLAUDE.local.md
