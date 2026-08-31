@@ -1,0 +1,23 @@
+{
+  "appenders": {
+    "console": { "type": "stdout" },
+    "file": {
+      "type": "dateFile",
+      "filename": "logs/app.log",
+      "pattern": "yyyyMMdd"
+    },
+    "errFile": {
+      "type": "dateFile",
+      "filename": "logs/err.log",
+      "pattern": "yyyyMMdd"
+    },
+    "errFileFilter": {
+      "type": "logLevelFilter",
+      "appender": "errFile",
+      "level": "error"
+    }
+  },
+  "categories": {
+    "default": { "appenders": ["console", "file", "errFileFilter"], "level": "info" }
+  }
+}
