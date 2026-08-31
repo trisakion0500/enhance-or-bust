@@ -1,3 +1,8 @@
+/**
+ * 환경변수 기반 프로젝트 설정값. 프로세스 시작 시 한 번 평가되어 전역에서 참조된다.
+ * `??` 기본값이 있는 필드는 로컬 개발 기본값이고, 없는 필드(계정/비밀번호류)는 `.env`에서만 채워진다.
+ * @author trisakion
+ */
 export const config = {
   port: Number(process.env.PORT ?? 3000),
   mongoUri: process.env.MONGO_URI ?? "mongodb://127.0.0.1:27017/?replicaSet=rs0",
