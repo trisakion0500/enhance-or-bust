@@ -64,10 +64,12 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
 각 컨텍스트는 독립된 도메인 모델과 Repository를 가진다. 컨텍스트 간 직접 참조를 피하고
 필요 시 도메인 이벤트나 애플리케이션 서비스 계층을 통해 연동한다.
 
-> 참고: Inventory/Progression/Economy/Battle-Stage 4개 컨텍스트는 논리적으로는 독립된
-> 도메인 모델/Repository 인터페이스를 유지하지만, 물리적으로는 MongoDB의 `players`
-> 단일 문서에 통합 저장된다 (낙관적 락 기반 원자성 확보 목적). Repository 구현체가
-> 여러 애그리게잇을 하나의 문서로 매핑/역매핑하는 역할을 담당한다. 상세는 아래
+> 참고: Inventory/Progression/Economy/Battle-Stage 4개 컨텍스트는 항상 같은 문서 안에서
+> 낙관적 락 하나로 원자적으로 바뀐다 — DDD에서 애그리게잇 경계는 곧 원자성 경계이므로,
+> 이 네 컨텍스트는 이미 하나의 애그리게잇(`Player`)이다. 그래서 Repository도 컨텍스트별로
+> 나누지 않고 `PlayerRepository` 하나로 둔다. 컨텍스트별 도메인 엔티티/값객체(Card,
+> Inventory, Economy 등)는 `Player` 애그리게잇 내부 구성요소로 계속 분리 관리한다 —
+> 코드 조직 목적의 논리적 분리일 뿐, 별도 Repository/영속성 경계는 아니다. 상세는 아래
 > "MongoDB 데이터 모델링 / 원자성 전략" 섹션 참고.
 
 ## 핵심 게임 규칙 요약
@@ -98,7 +100,9 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
 
 - **Inventory**: 카드 배열 embedding. 강화/합성(카드 3장 삭제+1장 생성 포함)도
   배열의 `$pull`/`$push`로 단일 문서 업데이트로 처리
-- **Progression**: `level`, `exp` 필드
+- **Progression**: 카드 인스턴스별 `level`/`exp` 필드(Inventory 배열의 각 카드 서브도큐먼트에
+  포함). 계정(플레이어) 단위 레벨은 현재 기획 범위 밖 — 필요해지면 GAME_DESIGN.md에 정식
+  추가 후 도입
 - **Economy**: 골드/강화석/다이아 필드. 강화/합성 시 재화 차감이 카드 상태 변경과
   항상 같이 일어나므로 Inventory와 같은 문서에 통합
 - **Battle-Stage**: `clearedStage` 필드만 저장. 판정(카드 스탯 합산 vs 필요 전투력
@@ -138,7 +142,7 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
 
 ## 마스터 데이터 로딩/리로드 전략 (확정)
 
-- 컨텐츠별 별도 컬렉션 분리: `card_templates`, `enhancement_rules`,
+- 컨텐츠별 별도 컬렉션 분리: `card_templates`, `grade_configs`, `enhancement_rules`,
   `synthesis_rules`, `stage_configs` 등 (컨텐츠 종류 증가를 전제)
 - 서버 기동 시 전체를 메모리에 로드하는 싱글톤 캐시 구조
 - 리로드는 MongoDB Change Streams로 처리. 컬렉션마다 워처를 두지 않고 DB 레벨
