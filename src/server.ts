@@ -1,6 +1,6 @@
 import express from "express";
-import log4js from "log4js";
 import { errorHandler } from "./common/errorHandler.js";
+import { requestId, requestLogger } from "./common/requestLogger.js";
 
 /**
  * Express `app`을 조립해 반환한다. DB/Redis 연결이나 `listen()` 같은 프로세스 부트스트랩은 다루지 않고
@@ -10,8 +10,9 @@ import { errorHandler } from "./common/errorHandler.js";
  */
 export function createServer() {
   const app = express();
-  app.use(log4js.connectLogger(log4js.getLogger(), { level: "info" }));
+  app.use(requestId);
   app.use(express.json());
+  app.use(requestLogger);
 
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
