@@ -1,5 +1,7 @@
 .env
 */.env
+.env.local
+.mcp.json
 
 *.log
 logs/

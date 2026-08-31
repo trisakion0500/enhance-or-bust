@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "trisakion-dev-convention-skill": {
+      "source": "trisakion0500/trisakion-dev-convention-skill",
+      "sourceType": "github",
+      "skillPath": "trisakion-dev-convention-skill/SKILL.md",
+      "computedHash": "7c417cb197c3fbcd6498f23922d255fa169ee056c98998e06782a3baec907ead"
+    }
+  }
+}
