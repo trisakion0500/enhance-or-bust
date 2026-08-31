@@ -5,7 +5,8 @@ import type { ErrorEntry } from "./errorEntry.js";
  * @author trisakion
  */
 export const ECONOMY_ERROR_MAP = {
-  VALIDATION_FAILED:  { code: 6000,   httpStatus: 400,    message: "요청 값이 올바르지 않습니다." },
-  NOT_FOUND:          { code: 6001,   httpStatus: 404,    message: "요청한 리소스를 찾을 수 없습니다." },
-  INTERNAL_ERROR:     { code: 6999,   httpStatus: 500,    message: "일시적인 서버 오류입니다. 잠시 후 다시 시도해주세요." },
+  VALIDATION_FAILED:      { code: 6000,   httpStatus: 400,    message: "요청 값이 올바르지 않습니다." },
+  NOT_FOUND:              { code: 6001,   httpStatus: 404,    message: "요청한 리소스를 찾을 수 없습니다." },
+  INSUFFICIENT_BALANCE:   { code: 6002,   httpStatus: 409,    message: "재화가 부족합니다." },
+  INTERNAL_ERROR:         { code: 6999,   httpStatus: 500,    message: "일시적인 서버 오류입니다. 잠시 후 다시 시도해주세요." },
 } satisfies Record<string, ErrorEntry>;
