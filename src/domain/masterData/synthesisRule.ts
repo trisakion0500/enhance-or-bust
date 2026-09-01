@@ -14,11 +14,16 @@ export interface GradeUpgradeSynthesisRule {
   successRate: number;
 }
 
-/** 강화 재료 합성 — 동일 원형 카드 N장 + 골드 소모 → 대상 카드 강화 단계 +1(100% 성공). */
+/**
+ * 강화 재료 합성 — 대상 카드와는 별개로, 동일 원형 재료 카드 N장을 골드와 함께 소모해
+ * 대상 카드의 강화 단계를 +1 시킨다(100% 성공, 파괴 없음). 대상 카드 자체는 소모되지
+ * 않으며 이 규칙 데이터에도 포함되지 않는다 — 어떤 카드를 대상으로 할지는 합성 요청 시점의
+ * 런타임 파라미터다.
+ */
 export interface EnhanceMaterialSynthesisRule {
   /** 규칙 종류 판별 태그 */
   type: "enhanceMaterial";
-  /** 소모할 동일 원형 카드 장수 */
+  /** 대상 카드 외에 추가로 소모할 동일 원형 재료 카드 장수(대상 카드는 포함하지 않음) */
   materialCount: number;
   /** 함께 소모할 골드 */
   goldCost: number;
