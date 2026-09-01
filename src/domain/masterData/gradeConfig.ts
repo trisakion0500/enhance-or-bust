@@ -7,7 +7,10 @@ import type { Grade } from "./grade.js";
  * @author trisakion
  */
 export interface GradeConfig {
+  /** 대상 카드 등급 */
   grade: Grade;
+  /** 이 등급 카드가 도달 가능한 최대 레벨 */
   maxLevel: number;
+  /** 이 등급 카드가 도달 가능한 최대 강화 단계 */
   maxEnhancementLevel: number;
 }
