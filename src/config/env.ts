@@ -14,4 +14,5 @@ export const config = {
   mongoAppPasswordLog: process.env.MONGO_APP_PASSWORD_LOG,
   redisUrl: process.env.REDIS_URL ?? "redis://127.0.0.1:6379",
   redisPassword: process.env.REDIS_PASSWORD,
+  masterDataPollIntervalMs: Number(process.env.MASTER_DATA_POLL_INTERVAL_MS ?? 5 * 60 * 1000),
 };

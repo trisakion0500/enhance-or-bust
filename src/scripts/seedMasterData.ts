@@ -1,3 +1,4 @@
+import type { Db } from "mongodb";
 import { connectMongo, mongoClient } from "../infra/mongo.js";
 import type { Grade } from "../domain/masterData/grade.js";
 import type { GradeConfig } from "../domain/masterData/gradeConfig.js";
@@ -5,6 +6,7 @@ import type { CardTemplate } from "../domain/masterData/cardTemplate.js";
 import type { EnhancementRule } from "../domain/masterData/enhancementRule.js";
 import type { SynthesisRule } from "../domain/masterData/synthesisRule.js";
 import type { StageConfig } from "../domain/masterData/stageConfig.js";
+import type { MasterDataContent } from "../domain/masterData/masterDataContent.js";
 
 /**
  * GAME_DESIGN.md 기준 마스터 데이터를 각 컬렉션에 upsert하는 1회성 시드 스크립트.
@@ -83,18 +85,33 @@ function buildStageConfigs(): StageConfig[] {
   return stages;
 }
 
-/** 각 마스터 데이터 컬렉션에 자연키 기준으로 upsert한다. */
+/**
+ * `master_data_meta`의 해당 컨텐츠 버전을 1 증가시킨다 — 마스터 데이터 캐시의 폴링
+ * 폴백(CLAUDE.md "마스터 데이터 로딩/리로드 전략")이 이 버전으로 DB와 캐시의 어긋남을
+ * 감지한다. 값이 바뀌지 않은 재실행이어도 그냥 증가시킨다 — 어차피 리로드는 멱등하고
+ * 안전망이 여분으로 한 번 더 도는 것뿐이라, 실제 변경분과 구분하는 값 비교 로직을 따로
+ * 두지 않는다.
+ */
+async function bumpMasterDataVersion(db: Db, content: MasterDataContent) {
+  await db.collection("master_data_meta").updateOne({ content }, { $inc: { version: 1 } }, { upsert: true });
+}
+
+/** 각 마스터 데이터 컬렉션에 자연키 기준으로 upsert하고, 컨텐츠별 버전을 갱신한다. */
 async function main() {
   const db = await connectMongo();
 
   await Promise.all(
     GRADE_CONFIGS.map(doc => db.collection("grade_configs").updateOne({ grade: doc.grade }, { $set: doc }, { upsert: true })),
   );
+  await bumpMasterDataVersion(db, "grade_configs");
+
   await Promise.all(
     buildCardTemplates().map(doc =>
       db.collection("card_templates").updateOne({ templateId: doc.templateId }, { $set: doc }, { upsert: true }),
     ),
   );
+  await bumpMasterDataVersion(db, "card_templates");
+
   await Promise.all(
     ENHANCEMENT_RULES.map(doc =>
       db
@@ -102,15 +119,20 @@ async function main() {
         .updateOne({ minTargetEnhancementLevel: doc.minTargetEnhancementLevel }, { $set: doc }, { upsert: true }),
     ),
   );
+  await bumpMasterDataVersion(db, "enhancement_rules");
+
   await Promise.all(
     SYNTHESIS_RULES.map(doc => {
       const key = doc.type === "gradeUpgrade" ? { type: doc.type, sourceGrade: doc.sourceGrade } : { type: doc.type };
       return db.collection("synthesis_rules").updateOne(key, { $set: doc }, { upsert: true });
     }),
   );
+  await bumpMasterDataVersion(db, "synthesis_rules");
+
   await Promise.all(
     buildStageConfigs().map(doc => db.collection("stage_configs").updateOne({ stageId: doc.stageId }, { $set: doc }, { upsert: true })),
   );
+  await bumpMasterDataVersion(db, "stage_configs");
 
   console.log("마스터 데이터 시드 완료");
   await mongoClient.close();

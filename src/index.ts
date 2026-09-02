@@ -7,6 +7,13 @@ import { config } from "./config/env.js";
 import { connectMongo, mongoClient } from "./infra/mongo.js";
 import { connectMongoLog, mongoLogClient } from "./infra/mongoLog.js";
 import { logger } from "./infra/logger.js";
+import { masterDataCache } from "./infra/masterDataCache.js";
+import {
+  startMasterDataPolling,
+  startMasterDataWatch,
+  stopMasterDataPolling,
+  stopMasterDataWatch,
+} from "./infra/masterDataWatcher.js";
 import { connectRedis, redisClient } from "./infra/redis.js";
 import { createServer } from "./server.js";
 
@@ -14,6 +21,11 @@ const db = await connectMongo();
 const logDb = await connectMongoLog();
 await connectRedis();
 logger.info(`connected to mongo db "${db.databaseName}", log db "${logDb.databaseName}", and redis`);
+
+await masterDataCache.loadAll(db);
+await startMasterDataWatch(db);
+startMasterDataPolling(db);
+logger.info("마스터 데이터 캐시 적재 완료, change stream/폴링 워처 시작");
 
 const app = createServer();
 const httpServer = app.listen(config.port, () => {
@@ -26,6 +38,8 @@ const httpServer = app.listen(config.port, () => {
  * 호출해야 프로세스가 실제로 내려간다.
  */
 async function shutdown() {
+  stopMasterDataPolling();
+  await stopMasterDataWatch();
   await Promise.all([mongoClient.close(), mongoLogClient.close(), redisClient.quit()]);
   httpServer.close(() => process.exit(0));
 }

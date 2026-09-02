@@ -87,7 +87,12 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
 ## 현재 상태
 
 - 기획 문서(GAME_DESIGN.md), README, TECH_STACK.md는 완성되어 있음
-- 코드는 없음 — 레포 구조, 도메인 모델, Repository 등 스캐폴딩 필요
+- 부트스트랩(Mongo/Redis 연결, log4js 로깅, 에러 핸들링 스켈레톤, Express 서버 골격),
+  Player 애그리게잇(Inventory/Economy) + MongoPlayerRepository(낙관적 락), 마스터
+  데이터 5종 캐시/Change Stream 워처(지수 백오프 포함)/시드 스크립트까지 구현됨
+- 미구현: 실제 API 라우트, Enhancement/Synthesis/Progression/Mailbox/Battle-Stage
+  도메인 서비스 로직(강화·합성 판정, 레벨업, 우편, 스테이지 판정), Redis 분산락,
+  신규 플레이어 생성 플로우, 인벤토리 슬롯 상한
 
 ## MongoDB 데이터 모델링 / 원자성 전략 (확정)
 
@@ -150,10 +155,14 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   리로드 핸들러만 실행
 - 각 컨텐츠(컬렉션) 문서는 자체 `version` 필드를 독립적으로 가짐. 여러 컨텐츠의
   버전을 하나의 합성 버전 문자열로 합치지 않음 (결합도만 높아지고 실익 없음)
+  - DB 버전 저장 위치는 별도 `master_data_meta` 컬렉션(`{content, version}` 1문서씩,
+    쓰기 시 `$inc`). resume token은 `change_stream_state` 컬렉션(단일 문서)에 저장
 - 안전망: Change Stream은 at-most-once push이며 콜백 처리 오류나 connection 끊김
   시 이벤트를 놓칠 수 있음
   - 콜백은 try/catch로 감싸서 이벤트 하나의 처리 실패가 스트림 전체를 죽이지 않게 함
-  - connection 재연결 대비 resume token 저장 후 `resumeAfter`로 재개
+  - connection 재연결 대비 resume token 저장 후 `resumeAfter`로 재개. 재연결 재시도는
+    지수 백오프(1초→2초→4초...60초 상한, 이후 60초 간격 유지)로 재시도 폭주를 방지하고,
+    이벤트를 정상 수신하면 백오프를 리셋
   - 주기적 폴링(예: 수 분 간격)으로 각 컨텐츠의 DB 버전과 메모리 캐시 버전을
     비교해 어긋나면 강제 리로드 (Change Streams가 주 채널, 폴링은 fallback)
 
