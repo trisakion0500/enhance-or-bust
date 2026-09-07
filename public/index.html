@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>강화하다 망함</title>
+</head>
+<body>
+  <div id="buttonDiv"></div>
+  <pre id="result"></pre>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script>
+    async function onGoogleLogin(response) {
+      const res = await fetch("/auth/google", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ credential: response.credential }),
+      });
+      document.getElementById("result").textContent = `${res.status} ${JSON.stringify(await res.json())}`;
+    }
+
+    async function init() {
+      const { googleClientId, authFlow } = await (await fetch("/auth/config")).json();
+      if (authFlow === "authorization_code") {
+        const link = document.createElement("a");
+        link.href = "/auth/google/login";
+        link.textContent = "구글로 로그인";
+        document.getElementById("buttonDiv").appendChild(link);
+        return;
+      }
+      google.accounts.id.initialize({ client_id: googleClientId, callback: onGoogleLogin });
+      google.accounts.id.renderButton(document.getElementById("buttonDiv"), { theme: "outline", size: "large" });
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>

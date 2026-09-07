@@ -1,4 +1,4 @@
-import type { Collection, Db } from "mongodb";
+import type { Collection, Db, MongoServerError } from "mongodb";
 import { BusinessException } from "../common/businessException.js";
 import { ERROR_MAP } from "../common/errorMap.js";
 import { Card } from "../domain/player/card.js";
@@ -20,6 +20,11 @@ interface CardDocument {
 interface PlayerDocument {
   _id: string;
   version: number;
+  platformType: string;
+  platformUserId: string;
+  name: string;
+  email: string;
+  picture?: string;
   inventory: CardDocument[];
   economy: { gold: number; enhancementStone: number; diamond: number };
   clearedStage: number;
@@ -40,11 +45,29 @@ export class MongoPlayerRepository implements PlayerRepository {
   }
 
   /**
+   * `(platformType, platformUserId)` 복합 unique 인덱스를 생성한다. 이미 있으면 아무 일도 안 하는
+   * 멱등 연산이라 매 기동마다 호출해도 안전하다 — 부트스트랩(`index.ts`)에서 1회 호출한다.
+   */
+  async ensureIndexes(): Promise<void> {
+    await this.collection.createIndex({ platformType: 1, platformUserId: 1 }, { unique: true });
+  }
+
+  /**
    * @param playerId 조회할 플레이어 ID
    * @returns 해당 플레이어, 없으면 null
    */
   async findById(playerId: string): Promise<Player | null> {
     const doc = await this.collection.findOne({ _id: playerId });
+    return doc ? MongoPlayerRepository.toDomain(doc) : null;
+  }
+
+  /**
+   * @param platformType 로그인 수단 식별자
+   * @param platformUserId 해당 플랫폼이 발급한 고유 사용자 ID
+   * @returns 해당 플레이어, 없으면 null
+   */
+  async findByPlatform(platformType: string, platformUserId: string): Promise<Player | null> {
+    const doc = await this.collection.findOne({ platformType, platformUserId });
     return doc ? MongoPlayerRepository.toDomain(doc) : null;
   }
 
@@ -64,6 +87,21 @@ export class MongoPlayerRepository implements PlayerRepository {
   }
 
   /**
+   * @param player 삽입할 신규 플레이어
+   */
+  async create(player: Player): Promise<void> {
+    const doc = MongoPlayerRepository.toDocument(player);
+    try {
+      await this.collection.insertOne(doc);
+    } catch (err) {
+      // _id 또는 (platformType, platformUserId) unique 인덱스 중복 — 동시 최초 로그인 레이스로 이미
+      // 다른 요청이 생성을 마쳤다는 뜻이라 무해하게 무시한다. 이 경우 이 player.playerId는 실제로
+      // 저장되지 않았을 수 있으므로, 호출부가 findByPlatform으로 실제 저장된 값을 다시 확인해야 한다.
+      if ((err as MongoServerError).code !== 11000) throw err;
+    }
+  }
+
+  /**
    * @param doc DB에서 읽은 원본 문서
    * @returns 매핑된 도메인 애그리게잇
    */
@@ -71,7 +109,18 @@ export class MongoPlayerRepository implements PlayerRepository {
     const cards = doc.inventory.map(c => new Card(c.cardId, c.templateId, c.level, c.exp, c.enhancementLevel));
     const inventory = new Inventory(cards);
     const economy = new Economy(doc.economy.gold, doc.economy.enhancementStone, doc.economy.diamond);
-    return new Player(doc._id, doc.version, inventory, economy, doc.clearedStage);
+    return new Player(
+      doc._id,
+      doc.version,
+      doc.platformType,
+      doc.platformUserId,
+      doc.name,
+      doc.email,
+      doc.picture,
+      inventory,
+      economy,
+      doc.clearedStage,
+    );
   }
 
   /**
@@ -82,6 +131,11 @@ export class MongoPlayerRepository implements PlayerRepository {
     return {
       _id: player.playerId,
       version: player.version,
+      platformType: player.platformType,
+      platformUserId: player.platformUserId,
+      name: player.name,
+      email: player.email,
+      picture: player.picture,
       inventory: player.inventory.getCards().map(card => ({
         cardId: card.cardId,
         templateId: card.templateId,

@@ -14,6 +14,7 @@ import {
   stopMasterDataPolling,
   stopMasterDataWatch,
 } from "./infra/masterDataWatcher.js";
+import { MongoPlayerRepository } from "./infra/mongoPlayerRepository.js";
 import { connectRedis, redisClient } from "./infra/redis.js";
 import { createServer } from "./server.js";
 
@@ -27,7 +28,9 @@ await startMasterDataWatch(db);
 startMasterDataPolling(db);
 logger.info("마스터 데이터 캐시 적재 완료, change stream/폴링 워처 시작");
 
-const app = createServer();
+const playerRepository = new MongoPlayerRepository(db);
+await playerRepository.ensureIndexes();
+const app = createServer(playerRepository);
 const httpServer = app.listen(config.port, () => {
   logger.info(`listening on port ${config.port}`);
 });

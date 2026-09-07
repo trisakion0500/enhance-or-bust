@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "express": "4.22.2",
+    "google-auth-library": "11.0.2",
     "log4js": "6.9.1",
     "mongodb": "6.21.0",
     "redis": "4.7.1"

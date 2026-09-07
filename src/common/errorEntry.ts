@@ -8,6 +8,7 @@
  *  - 경제(Economy)               : 6000
  *  - 우편(Mailbox)               : 7000
  *  - 전투/스테이지(Battle-Stage)  : 8000
+ *  - 인증(Auth)                  : 9000
  * @author trisakion
  */
 export interface ErrorEntry {

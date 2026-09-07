@@ -15,4 +15,12 @@ export const config = {
   redisUrl: process.env.REDIS_URL ?? "redis://127.0.0.1:6379",
   redisPassword: process.env.REDIS_PASSWORD,
   masterDataPollIntervalMs: Number(process.env.MASTER_DATA_POLL_INTERVAL_MS ?? 5 * 60 * 1000),
+  googleClientId: process.env.GOOGLE_CLIENT_ID,
+  /** `id_token`(Google Identity Services, 기본값) 또는 `authorization_code`. */
+  googleAuthFlow: (process.env.GOOGLE_AUTH_FLOW ?? "id_token") as "id_token" | "authorization_code",
+  /** authorization_code 플로우 전용 — code를 토큰으로 교환할 때 필요. */
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  /** authorization_code 플로우 전용 — 구글 콘솔에 등록한 redirect URI와 정확히 일치해야 함. */
+  googleRedirectUri: process.env.GOOGLE_REDIRECT_URI,
+  sessionTtlSec: Number(process.env.SESSION_TTL_SEC ?? 7 * 24 * 60 * 60),
 };

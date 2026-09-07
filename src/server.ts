@@ -1,22 +1,28 @@
 import express from "express";
 import { errorHandler } from "./common/errorHandler.js";
 import { requestId, requestLogger } from "./common/requestLogger.js";
+import type { PlayerRepository } from "./domain/player/playerRepository.js";
+import { createAuthRoutes } from "./routes/authRoutes.js";
 
 /**
  * Express `app`을 조립해 반환한다. DB/Redis 연결이나 `listen()` 같은 프로세스 부트스트랩은 다루지 않고
  * 미들웨어/라우트 등록만 책임진다 — 이 분리 덕분에 실제 포트를 열거나 인프라에 붙지 않고도 라우트 단위 테스트가 가능하다.
+ * @param playerRepository Player 영속성 포트(DI) — 인증 라우터가 로그인/신규가입 시 사용
  * @returns 설정이 끝난 Express `app` 인스턴스
  * @author trisakion
  */
-export function createServer() {
+export function createServer(playerRepository: PlayerRepository) {
   const app = express();
   app.use(requestId);
   app.use(express.json());
   app.use(requestLogger);
+  app.use(express.static("public"));
 
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
   });
+
+  app.use(createAuthRoutes(playerRepository));
 
   app.use(errorHandler);
 

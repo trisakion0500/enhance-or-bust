@@ -72,6 +72,56 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
 > 코드 조직 목적의 논리적 분리일 뿐, 별도 Repository/영속성 경계는 아니다. 상세는 아래
 > "MongoDB 데이터 모델링 / 원자성 전략" 섹션 참고.
 
+## 인증 전략 (확정)
+
+- 로그인/회원가입은 구글 로그인 단일 수단만 지원 — 별도 회원가입 폼/비밀번호 없음
+- 로그인 플로우는 `GOOGLE_AUTH_FLOW` 환경변수로 택일한다(둘 다 상시 지원, 활성화된
+  쪽 라우트만 등록됨). 서비스 요구사항이 아니라 학습 목적으로 둘 다 구현해둔 것 —
+  운영상 어느 한쪽이 필요해서 나뉜 게 아니다
+  - `id_token`(기본값, Google Identity Services): 프론트가 구글 ID 토큰(credential)을
+    받아 `POST /auth/google`로 전달
+  - `authorization_code`(OAuth 2.0 Authorization Code Flow): 프론트가
+    `GET /auth/google/login`으로 이동 → 구글 동의 화면 → `GET /auth/google/callback`
+    (`code` + `state` CSRF 검증) → 서버가 `GOOGLE_CLIENT_SECRET`으로 code를 토큰과 교환.
+    Client Secret은 confidential client(서버)만 보관하며 프론트엔 절대 노출하지 않는다
+  - 두 플로우 모두 결국 `google-auth-library`의 `verifyIdToken()`으로 서명/audience를
+    검증해 `sub`(구글 고유 사용자 ID)를 추출하고(공통 매핑은 `toProfile()`), 이후
+    로그인/가입 처리는 `authService.ts`의 `loginOrRegister()`로 합류한다. 클라이언트가
+    주장하는 값이 아니라 토큰 자체를 서버가 검증 — 서버 권위 원칙
+- `Player.playerId`(`players._id`)는 구글 `sub` 같은 프로바이더 값을 그대로 쓰지 않고
+  `randomUUID()`로 발급하는 내부 전용 식별자다. 대신 `platformType`(예: "google")과
+  `platformUserId`(구글이면 `sub`) 필드를 별도로 두고, 이 둘의 조합에 MongoDB 복합
+  unique 인덱스를 건다(MySQL로 치면 `(platform_type, platform_user_id)` UK와 동일한
+  역할 — `MongoPlayerRepository.ensureIndexes()`, 서버 기동 시 1회 호출). `playerId`를
+  프로바이더 값과 분리해두는 이유: 나중에 구글 외 다른 로그인 수단이 추가되거나, 여러
+  로그인 수단을 한 플레이어에 연결하는 기능이 생겨도 `playerId` 체계 자체는 안 바뀐다
+  - 로그인 조회는 `PlayerRepository.findByPlatform(platformType, platformUserId)`로
+    한다 — 로그인 시점엔 아직 내부 `playerId`를 모르므로 이게 진입점
+  - `randomUUID()`는 인스턴스 간 조율 없이 각자 로컬에서 생성해도 안전(122비트 랜덤,
+    충돌 확률상 무해)하고, MySQL `AUTO_INCREMENT`처럼 단일 진실 공급원이 필요 없어
+    서비스 서버를 N대로 늘려도 영향 없다. MongoDB가 1대(레플리카셋 포함)인 한 프라이머리가
+    하나뿐이라 unique 인덱스가 동시 요청 순서를 항상 일관되게 판정한다
+- 최초 로그인 시 신규 Player를 생성(빈 인벤토리, 초기 골드 1000, `clearedStage=0`,
+  구글 프로필의 `name`/`email`/`picture` 포함). 이름/프로필 사진은 최초 가입 시 1회만
+  가져오고 이후 구글과 재동기화하지 않는다 — 닉네임/프로필 사진을 게임 내에서 바꾸는
+  기능이 나중에 추가될 수 있는데, 구글 쪽과 계속 동기화하면 게임 내 변경을 도로 덮어쓰게
+  되기 때문. `PlayerRepository.create()`는 삽입 전용(update 아님)이며, 동시 최초 로그인
+  레이스로 unique 인덱스 중복 에러(11000)가 나면 조용히 무시한다 — 이때 자신이 만든
+  `playerId`가 실제로 저장됐다는 보장이 없으므로, 호출부(`authService.ts`의
+  `loginOrRegister()`)는 그 뒤 반드시 `findByPlatform`으로 실제 저장된 `playerId`를
+  다시 조회해 세션을 발급한다
+- 세션은 랜덤 opaque 토큰을 발급해 Redis에 `session:<token> → playerId` 형태로
+  TTL(기본 7일, `SESSION_TTL_SEC`)과 함께 저장한다(Redis 용도 절의 "세션/인증 토큰 관리"
+  그대로). JWT처럼 자체 서명된 토큰이 아니라, Redis에서 지우면 즉시 무효화할 수 있다
+- 세션 토큰은 httpOnly 쿠키(`sessionToken`)로 내려준다. 프론트(정적 파일)와 API를 같은
+  오리진에서 같이 서빙하므로 CORS 설정이 필요 없다
+- 로그인 이후 요청을 세션으로 인증하는 미들웨어(`req.playerId` 세팅)는 아직 없음 — 실제로
+  인증이 필요한 첫 라우트(강화 등)를 만들 때 같이 추가한다
+- 앱(모바일) 확장 시: iOS/Android는 구글 콘솔에 플랫폼별 Client ID를 추가 등록하되, 앱에서
+  ID 토큰을 요청할 때 이 웹 Client ID를 대상(audience)으로 지정하는 게 구글 권장 방식이라
+  (`serverClientId`/`serverClientID` 옵션) 서버 코드는 변경 없이 그대로 동작한다. 그래서
+  audience 배열 지원 같은 선제적 변경은 지금 하지 않는다
+
 ## 핵심 게임 규칙 요약
 
 - **카드 등급**: N(60%, 공10-20) / R(30%, 25-40) / SR(8%, 50-80) / SSR(2%, 100-150)
@@ -89,10 +139,12 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
 - 기획 문서(GAME_DESIGN.md), README, TECH_STACK.md는 완성되어 있음
 - 부트스트랩(Mongo/Redis 연결, log4js 로깅, 에러 핸들링 스켈레톤, Express 서버 골격),
   Player 애그리게잇(Inventory/Economy) + MongoPlayerRepository(낙관적 락), 마스터
-  데이터 5종 캐시/Change Stream 워처(지수 백오프 포함)/시드 스크립트까지 구현됨
-- 미구현: 실제 API 라우트, Enhancement/Synthesis/Progression/Mailbox/Battle-Stage
-  도메인 서비스 로직(강화·합성 판정, 레벨업, 우편, 스테이지 판정), Redis 분산락,
-  신규 플레이어 생성 플로우, 인벤토리 슬롯 상한
+  데이터 5종 캐시/Change Stream 워처(지수 백오프 포함)/시드 스크립트, 구글 로그인
+  연동 신규가입/로그인(`GOOGLE_AUTH_FLOW`로 `id_token`/`authorization_code` 선택,
+  최초 가입 시 이름/이메일/프로필 사진 저장) + Redis 세션 발급까지 구현됨
+- 미구현: 실제 API 라우트(인증 제외), Enhancement/Synthesis/Progression/Mailbox/
+  Battle-Stage 도메인 서비스 로직(강화·합성 판정, 레벨업, 우편, 스테이지 판정),
+  Redis 분산락, 세션 인증 미들웨어(보호 라우트 도입 시 추가), 인벤토리 슬롯 상한
 
 ## MongoDB 데이터 모델링 / 원자성 전략 (확정)
 

@@ -1,0 +1,70 @@
+import { randomUUID } from "node:crypto";
+import { Economy } from "../domain/player/economy.js";
+import { Inventory } from "../domain/player/inventory.js";
+import { Player } from "../domain/player/player.js";
+import type { PlayerRepository } from "../domain/player/playerRepository.js";
+import type { GoogleProfile } from "../infra/googleAuth.js";
+import { exchangeGoogleAuthCode, verifyGoogleIdToken } from "../infra/googleAuth.js";
+import { createSession } from "../infra/sessionStore.js";
+
+/** 신규 플레이어에게 지급하는 초기 골드. 다른 재화/카드는 지급하지 않고 빈 인벤토리로 시작한다. */
+const INITIAL_GOLD = 1000;
+
+/**
+ * 검증된 소셜 프로필로 로그인하고, 처음 로그인하는 사용자면 신규 Player를 생성한다. `playerId`는
+ * 프로바이더 값(`sub` 등)과 무관한 내부 식별자(`randomUUID()`)로 새로 발급한다 — 나중에 구글 외
+ * 다른 로그인 수단이 추가되거나, 여러 수단을 한 플레이어에 연결하는 기능이 생겨도 `playerId` 체계를
+ * 안 건드리기 위함. 어느 플로우든 프로바이더 프로필 검증까지 끝낸 뒤 이 함수로 합류한다.
+ * @param platformType 로그인 수단 식별자(예: "google")
+ * @param profile 검증된 소셜 프로필
+ * @param playerRepository Player 영속성 포트
+ * @returns 발급된 세션 토큰
+ */
+async function loginOrRegister(platformType: string, profile: GoogleProfile, playerRepository: PlayerRepository): Promise<string> {
+  const { sub: platformUserId, name, email, picture } = profile;
+
+  const existing = await playerRepository.findByPlatform(platformType, platformUserId);
+  if (existing) return createSession(existing.playerId);
+
+  const player = new Player(
+    randomUUID(),
+    0,
+    platformType,
+    platformUserId,
+    name ?? "",
+    email ?? "",
+    picture,
+    new Inventory(),
+    new Economy(INITIAL_GOLD),
+  );
+  await playerRepository.create(player);
+
+  // create()가 동시 최초 로그인 레이스로 조용히 무시됐을 수 있다 — 이 경우 위에서 만든 player.playerId는
+  // 실제로 저장되지 않았으므로, 실제 저장된(먼저 이긴 쪽의) playerId를 다시 조회해 세션을 발급해야 한다.
+  const persisted = await playerRepository.findByPlatform(platformType, platformUserId);
+  return createSession(persisted!.playerId);
+}
+
+/**
+ * Google Identity Services 방식 로그인 — 프론트가 이미 발급받은 ID 토큰을 검증해 로그인/가입한다.
+ * @param idToken 프론트에서 받은 구글 ID 토큰(credential)
+ * @param playerRepository Player 영속성 포트
+ * @returns 발급된 세션 토큰
+ * @author trisakion
+ */
+export async function loginWithGoogleIdToken(idToken: string, playerRepository: PlayerRepository): Promise<string> {
+  const profile = await verifyGoogleIdToken(idToken);
+  return loginOrRegister("google", profile, playerRepository);
+}
+
+/**
+ * Authorization Code Flow 방식 로그인 — 구글 콜백으로 받은 code를 토큰과 교환해 로그인/가입한다.
+ * @param code 구글 콜백 쿼리로 받은 authorization code
+ * @param playerRepository Player 영속성 포트
+ * @returns 발급된 세션 토큰
+ * @author trisakion
+ */
+export async function loginWithGoogleAuthCode(code: string, playerRepository: PlayerRepository): Promise<string> {
+  const profile = await exchangeGoogleAuthCode(code);
+  return loginOrRegister("google", profile, playerRepository);
+}

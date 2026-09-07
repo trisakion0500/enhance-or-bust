@@ -1,3 +1,4 @@
+import { AUTH_ERROR_MAP } from "./errorMapAuth.js";
 import { BATTLE_STAGE_ERROR_MAP } from "./errorMapBattleStage.js";
 import { COMMON_ERROR_MAP } from "./errorMapCommon.js";
 import { ECONOMY_ERROR_MAP } from "./errorMapEconomy.js";
@@ -21,4 +22,5 @@ export const ERROR_MAP = {
   ECONOMY: ECONOMY_ERROR_MAP,
   MAILBOX: MAILBOX_ERROR_MAP,
   BATTLE_STAGE: BATTLE_STAGE_ERROR_MAP,
+  AUTH: AUTH_ERROR_MAP,
 };
