@@ -14,6 +14,8 @@ export const config = {
   mongoAppPasswordLog: process.env.MONGO_APP_PASSWORD_LOG,
   redisUrl: process.env.REDIS_URL ?? "redis://127.0.0.1:6379",
   redisPassword: process.env.REDIS_PASSWORD,
+  /** 로컬 개발용 Redis 하나를 여러 프로젝트가 같이 쓸 때 키 충돌을 막는 프리픽스. 모든 Redis 키 앞에 붙인다. */
+  redisKeyPrefix: process.env.REDIS_KEY_PREFIX ?? "eob:",
   masterDataPollIntervalMs: Number(process.env.MASTER_DATA_POLL_INTERVAL_MS ?? 5 * 60 * 1000),
   googleClientId: process.env.GOOGLE_CLIENT_ID,
   /** `id_token`(Google Identity Services, 기본값) 또는 `authorization_code`. */

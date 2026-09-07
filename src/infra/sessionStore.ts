@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { config } from "../config/env.js";
 import { redisClient } from "./redis.js";
 
-const SESSION_KEY_PREFIX = "session:";
+const SESSION_KEY_PREFIX = config.redisKeyPrefix + "session:";
 
 /**
  * 세션 토큰을 발급해 Redis에 `playerId`와 함께 TTL로 저장한다(CLAUDE.md에 확정된 "세션/인증
