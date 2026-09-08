@@ -30,7 +30,7 @@ export interface EnhanceMaterialSynthesisRule {
 }
 
 /**
- * 합성 규칙 마스터 데이터(`synthesis_rules` 컬렉션). 레시피 종류(등급 승급/강화 재료)가
+ * 합성 규칙 마스터 데이터(`master_synthesis_rules` 컬렉션). 레시피 종류(등급 승급/강화 재료)가
  * 서로 다른 필드를 가져 판별 유니온으로 표현한다.
  * @author trisakion
  */

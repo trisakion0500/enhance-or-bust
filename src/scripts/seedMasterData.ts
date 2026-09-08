@@ -9,7 +9,7 @@ import { buildStageConfigs } from "../contexts/battleStage/seedData.js";
 /**
  * GAME_DESIGN.md 기준 마스터 데이터를 각 컬렉션에 upsert하는 1회성 시드 스크립트.
  * 자연키로 upsert하므로 재실행해도 중복 삽입되지 않는다(멱등). 실제 시드 데이터 값은 각
- * 컨텍스트의 `seedData.ts`(card_templates/grade_configs는 `shared-kernel/masterData/seedData.ts`)가
+ * 컨텍스트의 `seedData.ts`(master_card_templates/master_grade_configs는 `shared-kernel/masterData/seedData.ts`)가
  * 갖고 있고, 이 파일은 그것들을 모아 upsert만 수행하는 오케스트레이터다.
  *
  * ponytail: 최초 부트스트랩 전용 — 배치별 Promise.all이 중간 실패해도 트랜잭션/락 없이
@@ -34,38 +34,40 @@ async function main() {
   const db = await connectMongo();
 
   await Promise.all(
-    GRADE_CONFIGS.map(doc => db.collection("grade_configs").updateOne({ grade: doc.grade }, { $set: doc }, { upsert: true })),
+    GRADE_CONFIGS.map(doc => db.collection("master_grade_configs").updateOne({ grade: doc.grade }, { $set: doc }, { upsert: true })),
   );
-  await bumpMasterDataVersion(db, "grade_configs");
+  await bumpMasterDataVersion(db, "master_grade_configs");
 
   await Promise.all(
     buildCardTemplates().map(doc =>
-      db.collection("card_templates").updateOne({ templateId: doc.templateId }, { $set: doc }, { upsert: true }),
+      db.collection("master_card_templates").updateOne({ templateId: doc.templateId }, { $set: doc }, { upsert: true }),
     ),
   );
-  await bumpMasterDataVersion(db, "card_templates");
+  await bumpMasterDataVersion(db, "master_card_templates");
 
   await Promise.all(
     ENHANCEMENT_RULES.map(doc =>
       db
-        .collection("enhancement_rules")
+        .collection("master_enhancement_rules")
         .updateOne({ minTargetEnhancementLevel: doc.minTargetEnhancementLevel }, { $set: doc }, { upsert: true }),
     ),
   );
-  await bumpMasterDataVersion(db, "enhancement_rules");
+  await bumpMasterDataVersion(db, "master_enhancement_rules");
 
   await Promise.all(
     SYNTHESIS_RULES.map(doc => {
       const key = doc.type === "gradeUpgrade" ? { type: doc.type, sourceGrade: doc.sourceGrade } : { type: doc.type };
-      return db.collection("synthesis_rules").updateOne(key, { $set: doc }, { upsert: true });
+      return db.collection("master_synthesis_rules").updateOne(key, { $set: doc }, { upsert: true });
     }),
   );
-  await bumpMasterDataVersion(db, "synthesis_rules");
+  await bumpMasterDataVersion(db, "master_synthesis_rules");
 
   await Promise.all(
-    buildStageConfigs().map(doc => db.collection("stage_configs").updateOne({ stageId: doc.stageId }, { $set: doc }, { upsert: true })),
+    buildStageConfigs().map(doc =>
+      db.collection("master_stage_configs").updateOne({ stageId: doc.stageId }, { $set: doc }, { upsert: true }),
+    ),
   );
-  await bumpMasterDataVersion(db, "stage_configs");
+  await bumpMasterDataVersion(db, "master_stage_configs");
 
   console.log("마스터 데이터 시드 완료");
   await mongoClient.close();

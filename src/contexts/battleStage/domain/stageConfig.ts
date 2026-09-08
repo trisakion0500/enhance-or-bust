@@ -1,7 +1,7 @@
 import type { Element } from "../../../shared-kernel/masterData/element.js";
 
 /**
- * 스테이지 설정 마스터 데이터(`stage_configs` 컬렉션). 스테이지마다 문서 하나 — 몬스터
+ * 스테이지 설정 마스터 데이터(`master_stage_configs` 컬렉션). 스테이지마다 문서 하나 — 몬스터
  * 스탯은 공식(기본값×1.15^스테이지번호)으로 계산한 값을 기획자가 검토 후 저장하며,
  * 필요 시 특정 스테이지만 예외적으로 다른 값으로 덮어쓸 수 있다.
  * @author trisakion

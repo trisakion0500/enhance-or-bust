@@ -4,17 +4,17 @@
  * @author trisakion
  */
 export type MasterDataContent =
-  | "card_templates"
-  | "grade_configs"
-  | "enhancement_rules"
-  | "synthesis_rules"
-  | "stage_configs";
+  | "master_card_templates"
+  | "master_grade_configs"
+  | "master_enhancement_rules"
+  | "master_synthesis_rules"
+  | "master_stage_configs";
 
 /** {@link MasterDataContent}의 전체 목록 — 전체 로드/워처 대상 컬렉션 필터링에 쓴다. */
 export const MASTER_DATA_CONTENTS: readonly MasterDataContent[] = [
-  "card_templates",
-  "grade_configs",
-  "enhancement_rules",
-  "synthesis_rules",
-  "stage_configs",
+  "master_card_templates",
+  "master_grade_configs",
+  "master_enhancement_rules",
+  "master_synthesis_rules",
+  "master_stage_configs",
 ];

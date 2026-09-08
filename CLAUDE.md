@@ -218,8 +218,10 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
 
 ## 마스터 데이터 로딩/리로드 전략 (확정)
 
-- 컨텐츠별 별도 컬렉션 분리: `card_templates`, `grade_configs`, `enhancement_rules`,
-  `synthesis_rules`, `stage_configs` 등 (컨텐츠 종류 증가를 전제)
+- 컨텐츠별 별도 컬렉션 분리: `master_card_templates`, `master_grade_configs`,
+  `master_enhancement_rules`, `master_synthesis_rules`, `master_stage_configs` 등
+  (컨텐츠 종류 증가를 전제) — `master_` 프리픽스로 런타임 쓰기 컬렉션(players, mailbox)과
+  구분한다
 - 서버 기동 시 전체를 메모리에 로드하는 싱글톤 캐시 구조
 - 리로드는 MongoDB Change Streams로 처리. 컬렉션마다 워처를 두지 않고 DB 레벨
   Change Stream 워처 1개로 전체 감시 → `event.ns.coll`로 컨텐츠 구분 후 해당

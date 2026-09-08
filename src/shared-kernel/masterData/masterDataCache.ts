@@ -48,26 +48,26 @@ class MasterDataCache {
    */
   async reload(db: Db, content: MasterDataContent): Promise<void> {
     switch (content) {
-      case "card_templates": {
-        const docs = await db.collection<CardTemplate>("card_templates").find().toArray();
+      case "master_card_templates": {
+        const docs = await db.collection<CardTemplate>("master_card_templates").find().toArray();
         this.cardTemplates = new Map(docs.map(doc => [doc.templateId, doc]));
         break;
       }
-      case "grade_configs": {
-        const docs = await db.collection<GradeConfig>("grade_configs").find().toArray();
+      case "master_grade_configs": {
+        const docs = await db.collection<GradeConfig>("master_grade_configs").find().toArray();
         this.gradeConfigs = new Map(docs.map(doc => [doc.grade, doc]));
         break;
       }
-      case "enhancement_rules": {
-        this.enhancementRules = await db.collection<EnhancementRule>("enhancement_rules").find().toArray();
+      case "master_enhancement_rules": {
+        this.enhancementRules = await db.collection<EnhancementRule>("master_enhancement_rules").find().toArray();
         break;
       }
-      case "synthesis_rules": {
-        this.synthesisRules = await db.collection<SynthesisRule>("synthesis_rules").find().toArray();
+      case "master_synthesis_rules": {
+        this.synthesisRules = await db.collection<SynthesisRule>("master_synthesis_rules").find().toArray();
         break;
       }
-      case "stage_configs": {
-        const docs = await db.collection<StageConfig>("stage_configs").find().toArray();
+      case "master_stage_configs": {
+        const docs = await db.collection<StageConfig>("master_stage_configs").find().toArray();
         this.stageConfigs = new Map(docs.map(doc => [doc.stageId, doc]));
         break;
       }

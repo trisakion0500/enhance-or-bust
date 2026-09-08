@@ -1,5 +1,5 @@
 /**
- * 강화 단계 구간별 성공률/비용 규칙(`enhancement_rules` 컬렉션). 구간마다 문서 하나
+ * 강화 단계 구간별 성공률/비용 규칙(`master_enhancement_rules` 컬렉션). 구간마다 문서 하나
  * (GAME_DESIGN.md 2절 기준 +0~5/+6~10/+11~15 총 3개). 등급과 무관하게 공통 적용되며,
  * 실제 도달 가능한 최대 강화 단계만 `GradeConfig`를 따른다. 구간 비교 대상은
  * {@link Card.enhancementLevel}(카드의 현재 강화 단계)이 아니라 시도해서 도달하려는
