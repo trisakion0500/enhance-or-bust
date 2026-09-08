@@ -1,5 +1,10 @@
-/** 발송 후 만료까지 걸리는 일수(GAME_DESIGN.md 7절). 기획자 조정 대상이 아닌 고정값이라 마스터 데이터가 아니라 코드 상수로 둔다. */
-export const MAIL_EXPIRY_DAYS = 7;
+/**
+ * 발송 후 만료까지 걸리는 기본 시간(ms, GAME_DESIGN.md 7절 — 7일). 컨텐츠별 만료 시간은
+ * `mailContent.ts`의 `MAIL_CONTENTS` 레지스트리로 관리하며, 이 값은 레지스트리를 쓰지
+ * 않는 호출(테스트 등)의 기본값으로만 쓰인다. 일→ms 환산까지 여기서 끝내둬서 호출부는
+ * `Date`에 그대로 더하기만 하면 된다.
+ */
+export const MAIL_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * 우편에 첨부되는 보상. 모든 필드가 선택적이며, 값이 있는 필드만 수령 시 지급된다.
@@ -30,7 +35,7 @@ export class Mail {
    * @param sourceType 발송 트리거 종류(예: "stage_clear") — sourceId와 조합해 중복 발송 차단에 쓰인다
    * @param sourceId 발송 트리거 인스턴스 식별자(예: "{playerId}:{stageId}:{clearedAt}") — (sourceType, sourceId) 조합에 유니크 인덱스가 걸린다
    * @param createdAt 발송 시각
-   * @param expiresAt 만료 시각(발송 시각 + MAIL_EXPIRY_DAYS일) — 이후로는 목록/수령 모두 차단
+   * @param expiresAt 만료 시각(발송 시각 + 컨텐츠별 만료 시간) — 이후로는 목록/수령 모두 차단
    * @param claimedAt 수령 시각, 아직 수령 전이면 null
    */
   constructor(

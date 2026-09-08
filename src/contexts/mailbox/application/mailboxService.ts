@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { BusinessException } from "../../../shared-kernel/businessException.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
-import { Mail, MAIL_EXPIRY_DAYS } from "../domain/mail.js";
+import { Mail, MAIL_EXPIRY_MS } from "../domain/mail.js";
 import type { MailAttachments } from "../domain/mail.js";
 import type { MailboxRepository } from "../domain/mailboxRepository.js";
 
@@ -16,6 +16,9 @@ import type { MailboxRepository } from "../domain/mailboxRepository.js";
  * @param sourceId 발송 트리거 인스턴스 식별자(중복 발송 차단 키의 일부) — 이미 같은 조합으로
  *   발송된 적 있으면 조용히 무시된다(멱등)
  * @param mailboxRepository Mailbox 영속성 포트
+ * @param expiryMs 발송 시각으로부터 만료까지 걸리는 시간(ms) — 실제 게임 트리거는
+ *   `mailContent.ts`의 `MAIL_CONTENTS` 레지스트리 값을 넘겨야 하고, 생략 시 기본값
+ *   {@link MAIL_EXPIRY_MS}가 쓰인다(레지스트리에 없는 임시/테스트용 발송)
  * @throws {BusinessException} attachments에 음수/NaN 값이 있으면 MAILBOX.VALIDATION_FAILED
  * @author trisakion
  */
@@ -26,6 +29,7 @@ export async function sendMail(
   sourceType: string,
   sourceId: string,
   mailboxRepository: MailboxRepository,
+  expiryMs: number = MAIL_EXPIRY_MS,
 ): Promise<void> {
   for (const amount of [attachments.gold, attachments.enhancementStone, attachments.diamond]) {
     if (amount !== undefined && (!Number.isFinite(amount) || amount < 0))
@@ -33,7 +37,7 @@ export async function sendMail(
   }
 
   const createdAt = new Date();
-  const expiresAt = new Date(createdAt.getTime() + MAIL_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+  const expiresAt = new Date(createdAt.getTime() + expiryMs);
   const mail = new Mail(randomUUID(), playerId, title, attachments, sourceType, sourceId, createdAt, expiresAt, null);
   await mailboxRepository.insertMail(mail);
 }

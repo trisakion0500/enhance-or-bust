@@ -14,6 +14,16 @@ import { connectRedis, redisClient } from "../../../infra/redis.js";
 import { createSession } from "../../auth/infrastructure/sessionStore.js";
 import { createServer } from "../../../server.js";
 
+interface MailDto {
+  mailId: string;
+  title: string;
+  sourceType: string;
+  attachments: { gold?: number; enhancementStone?: number };
+  createdAt: string;
+  expiresAt: string;
+  claimedAt: string | null;
+}
+
 /**
  * 전투/스테이지 API E2E 테스트. 다른 컨텍스트와 동일하게 Mongo/Redis에 실제로 붙어
  * `createServer()`가 만드는 앱을 임시 포트로 띄운 뒤 `fetch`로 호출한다.
@@ -78,9 +88,11 @@ async function createTestPlayer(options: TestPlayerOptions = {}) {
   return { playerId, cardId, cookie: `sessionToken=${token}` };
 }
 
-/** 테스트가 만든 플레이어 문서를 지운다. */
+/** 테스트가 만든 플레이어/우편 문서를 지운다. */
 async function deleteTestPlayer(playerId: string) {
-  await mongoClient.db(process.env.MONGO_APP_DATABASE).collection<{ _id: string }>("players").deleteOne({ _id: playerId });
+  const db = mongoClient.db(process.env.MONGO_APP_DATABASE);
+  await db.collection<{ _id: string }>("players").deleteOne({ _id: playerId });
+  await db.collection<{ playerId: string }>("mailbox").deleteMany({ playerId });
 }
 
 /** playerId로 현재 플레이어 문서를 직접 읽는다(응답 바디만으로는 확인 못 하는 최종 DB 상태 검증용). */
@@ -105,7 +117,19 @@ async function clearStage(stageId: number, squadCardIds: string[], cookie: strin
   return { res, body: await res.json() };
 }
 
-test("최초 클리어 성공 시 정상 보상이 지급되고 clearedStage가 오른다", async () => {
+/** 클리어 보상은 이제 즉시 지급이 아니라 우편 발송이라 응답만으로는 검증 못 하고, 우편함을 직접 조회해야 한다. */
+async function listMails(cookie: string): Promise<MailDto[]> {
+  const res = await fetch(`${baseUrl}/mailbox`, { headers: { Cookie: cookie } });
+  const body = await res.json();
+  return body.mails;
+}
+
+async function claimMail(mailId: string, cookie: string) {
+  const res = await fetch(`${baseUrl}/mailbox/${mailId}/claim`, { method: "POST", headers: { Cookie: cookie } });
+  return { res, body: await res.json() };
+}
+
+test("최초 클리어 성공 시 clearedStage/EXP는 즉시 반영되고, 골드/강화석은 우편으로 발송된다", async () => {
   const { playerId, cardId, cookie } = await createTestPlayer();
   try {
     const { res, body } = await clearStage(1, [cardId], cookie);
@@ -115,7 +139,7 @@ test("최초 클리어 성공 시 정상 보상이 지급되고 clearedStage가 
     assert.equal(body.won, true);
     assert.equal(body.rewardGold, 10);
     assert.equal(body.clearedStage, 1);
-    assert.equal(body.gold, 1_000_010);
+    assert.equal(body.gold, 1_000_000); // 우편 수령 전이라 아직 안 오름
     assert.deepEqual(body.expGained, [{ cardId, exp: 5, leveledUp: false, levelsGained: 0 }]);
     // stage1: enhancementStoneMin=1, enhancementStoneMax=2, 드랍률 50% — 드랍 안 되면 0, 되면 1~2.
     assert.ok(body.rewardEnhancementStone === 0 || (body.rewardEnhancementStone >= 1 && body.rewardEnhancementStone <= 2), JSON.stringify(body));
@@ -123,6 +147,24 @@ test("최초 클리어 성공 시 정상 보상이 지급되고 clearedStage가 
     const player = await readPlayer(playerId);
     assert.equal(player!.clearedStage, 1);
     assert.equal(player!.inventory.find(c => c.cardId === cardId)!.exp, 5);
+    assert.equal(player!.economy.gold, 1_000_000); // 우편 수령 전이라 아직 안 오름
+
+    const mails = await listMails(cookie);
+    assert.equal(mails.length, 1);
+    assert.equal(mails[0].title, "스테이지 클리어 보상"); // MAIL_CONTENTS.STAGE_CLEAR.title
+    assert.equal(mails[0].sourceType, "stage_clear");
+    assert.equal(mails[0].attachments.gold, body.rewardGold);
+    assert.equal(mails[0].attachments.enhancementStone, body.rewardEnhancementStone);
+    assert.equal(mails[0].claimedAt, null);
+    // MAIL_CONTENTS.STAGE_CLEAR.expiryMs가 실제로 적용됐는지 — 발송~만료 간격을 직접 확인.
+    const expiryMs = new Date(mails[0].expiresAt).getTime() - new Date(mails[0].createdAt).getTime();
+    assert.equal(expiryMs, 7 * 24 * 60 * 60 * 1000);
+
+    const { res: claimRes } = await claimMail(mails[0].mailId, cookie);
+    assert.equal(claimRes.status, 200);
+    const claimedPlayer = await readPlayer(playerId);
+    assert.equal(claimedPlayer!.economy.gold, 1_000_000 + body.rewardGold);
+    assert.equal(claimedPlayer!.economy.enhancementStone, body.rewardEnhancementStone);
   } finally {
     await deleteTestPlayer(playerId);
   }
@@ -145,7 +187,7 @@ test("EXP가 다음 레벨 필요치를 채우면 레벨업하고 잔여 EXP가 
   }
 });
 
-test("클리어한 스테이지를 재도전(파밍)하면 clearedStage는 그대로고 보상은 farmRewardRate만큼 축소된다", async () => {
+test("클리어한 스테이지를 재도전(파밍)하면 clearedStage는 그대로고 보상은 farmRewardRate만큼 축소돼 우편으로 발송된다", async () => {
   const { playerId, cardId, cookie } = await createTestPlayer({ clearedStage: 5 });
   try {
     const { body } = await clearStage(3, [cardId], cookie);
@@ -157,6 +199,10 @@ test("클리어한 스테이지를 재도전(파밍)하면 clearedStage는 그�
 
     const player = await readPlayer(playerId);
     assert.equal(player!.clearedStage, 5);
+
+    const mails = await listMails(cookie);
+    assert.equal(mails.length, 1);
+    assert.equal(mails[0].attachments.gold, 15);
   } finally {
     await deleteTestPlayer(playerId);
   }
@@ -178,6 +224,9 @@ test("전투력이 부족한 스테이지에 도전하면 패배하고 보상/cl
     const player = await readPlayer(playerId);
     assert.equal(player!.clearedStage, 50);
     assert.equal(player!.economy.gold, 1_000_000);
+
+    const mails = await listMails(cookie);
+    assert.equal(mails.length, 0); // 패배 시엔 우편도 발송되지 않아야 함
   } finally {
     await deleteTestPlayer(playerId);
   }

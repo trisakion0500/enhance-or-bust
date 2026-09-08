@@ -151,10 +151,11 @@
   지급한다. `clearedStage + 1`을 넘어서는 스테이지는 진입 자체가 거부된다(순서 진행).
 - **클리어 보상**: 골드(`rewardGold × 배율`) + EXP(출전 카드마다 `rewardExp × 배율`,
   4절 참고) + 확률적 강화석(`enhancementStoneDropRate` 확률로
-  `enhancementStoneMin`~`enhancementStoneMax` 사이 수량 × 배율). Mailbox 자체는 구현됐지만
-  스테이지 클리어 보상은 아직 우편 경유로 전환하지 않고 재화/카드 상태에 직접 지급한다 —
-  전환은 후속 작업(CLAUDE.md "현재 상태" 참고). 카드 드랍은 이번 스코프에 포함하지
-  않음(추후 별도 설계).
+  `enhancementStoneMin`~`enhancementStoneMax` 사이 수량 × 배율). 골드/강화석은 우편
+  (Mailbox) 경유로 발송되고, EXP와 `clearedStage`는 카드 성장/진행 상태라 즉시 반영된다
+  — EXP는 우편의 일반 전리품 모델(gold/stone/diamond/신규카드)로 표현할 수 없는 "특정
+  보유 카드의 스탯 증가"라 의도적으로 우편 경유에서 제외했다(CLAUDE.md "현재 상태" 참고).
+  카드 드랍은 이번 스코프에 포함하지 않음(추후 별도 설계).
 
 **검증 원칙**: 클라이언트는 "스테이지 N 도전 + 출전 스쿼드" 요청만 보내고, 서버가 유저의
 현재 보유 카드 스탯을 직접 조회해 전투를 시뮬레이션한 뒤 판정한다.
@@ -173,7 +174,10 @@
 
 ### 정책
 
-- 만료 기한: 발송 후 **7일**, 만료된 우편은 배치 잡으로 정리
+- 만료 기한: 발송 트리거(컨텐츠)별로 다르게 둘 수 있다 — 정책이 트리거마다 달라질 수
+  있어 고정 단일값으로 두지 않는다. 현재 유일한 실사용 트리거인 스테이지 클리어 보상은
+  발송 후 **7일**(구현은 `mailContent.ts`의 `MAIL_CONTENTS` 레지스트리 참고). 만료된
+  우편은 배치 잡으로 정리
 - 수령 시 중복 처리 방지: 조건부 갱신 또는 락으로 이중 지급 차단
 - 대량 발송(전체 유저 대상 이벤트 보상)은 배치 처리로 분리 설계
 
@@ -186,7 +190,7 @@
 | EnhanceCard | Inventory, Economy | 재화 차감 + 카드 상태 변경(강화/파괴) |
 | SynthesizeCard | Inventory, Economy | 소재 카드 소모 + 결과 카드 생성 |
 | ClaimMail | Mailbox, Inventory, Economy | 우편 상태 변경 + 첨부물 지급 |
-| ClearStage | Battle, Progression, Economy | 전투 판정 + EXP 지급 + 재화 보상(Mailbox는 구현됐지만 아직 경유로 전환 전이라 Player 애그리게잇에 직접 지급 — CLAUDE.md 참고) |
+| ClearStage | Battle, Progression, Economy, Mailbox | 전투 판정 + EXP/clearedStage 즉시 지급(Player 애그리게잇 직접 변경) + 골드/강화석은 우편(Mailbox) 발송(EXP는 우편 모델과 안 맞아 제외 — CLAUDE.md 참고) |
 
 모든 Use-case는 관련 트랜잭션을 통해 원자성을 보장하며,
 도메인 레이어는 저장소 구현을 알지 못하고 Repository 인터페이스에만 의존한다.

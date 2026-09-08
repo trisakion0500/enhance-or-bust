@@ -31,7 +31,7 @@ export function createServer(playerRepository: PlayerRepository, mailboxReposito
   app.use(createAuthRoutes(playerRepository));
   app.use(createEnhancementRoutes(playerRepository));
   app.use(createSynthesisRoutes(playerRepository));
-  app.use(createBattleStageRoutes(playerRepository));
+  app.use(createBattleStageRoutes(playerRepository, mailboxRepository));
   app.use(createMailboxRoutes(mailboxRepository));
 
   app.use(errorHandler);

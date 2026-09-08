@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { BusinessException } from "../../../shared-kernel/businessException.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
 import type { Player } from "../../player/domain/player.js";
@@ -7,6 +8,9 @@ import { addExp } from "../../player/domain/progression.js";
 import { computeCombatStats } from "../domain/combatStats.js";
 import { simulateBattle } from "../domain/battleSimulator.js";
 import type { RoundLog } from "../domain/battleSimulator.js";
+import type { MailboxRepository } from "../../mailbox/domain/mailboxRepository.js";
+import { sendMail } from "../../mailbox/application/mailboxService.js";
+import { MAIL_CONTENTS } from "../../mailbox/domain/mailContent.js";
 
 /** 낙관적 락 충돌 시 재조회 후 재시도할 최대 횟수(강화/합성 API와 동일한 정책). */
 const MAX_OPTIMISTIC_LOCK_RETRIES = 5;
@@ -32,17 +36,17 @@ export interface ClearStageResult {
   won: boolean;
   /** 라운드별 진행 로그 */
   rounds: RoundLog[];
-  /** 이번에 지급된 골드(패배 시 0) */
+  /** 이번에 우편으로 발송된 골드(패배 시 0) */
   rewardGold: number;
-  /** 이번에 지급된 강화석(드랍 실패 또는 패배 시 0) */
+  /** 이번에 우편으로 발송된 강화석(드랍 실패 또는 패배 시 0) */
   rewardEnhancementStone: number;
-  /** 출전 카드별 EXP 획득 결과(패배 시 빈 배열) */
+  /** 출전 카드별 EXP 획득 결과(패배 시 빈 배열) — EXP는 우편 경유 없이 즉시 카드에 반영된다 */
   expGained: ExpGainResult[];
   /** 이 시도 이후 플레이어의 최종 clearedStage(최초 클리어가 아니면 변화 없음) */
   clearedStage: number;
-  /** 이 시도 이후 플레이어의 최종 보유 골드 */
+  /** 이 시도 시점 플레이어의 지갑 잔액 — rewardGold는 우편 수령 전이라 아직 반영 안 됨 */
   gold: number;
-  /** 이 시도 이후 플레이어의 최종 보유 강화석 */
+  /** 이 시도 시점 플레이어의 지갑 잔액 — rewardEnhancementStone은 우편 수령 전이라 아직 반영 안 됨 */
   enhancementStone: number;
 }
 
@@ -53,6 +57,7 @@ export interface ClearStageResult {
  * @param stageId 도전할 스테이지 번호
  * @param squadCardIds 출전시킬 카드 ID 목록(1~5장, 보유 카드 중에서)
  * @param playerRepository Player 영속성 포트
+ * @param mailboxRepository Mailbox 영속성 포트 — 승리 시 골드/강화석 보상을 우편으로 발송
  * @returns 전투 결과(승패, 라운드 로그, 보상)
  * @throws {BusinessException} 검증 실패, 아직 도전 불가능한 스테이지(STAGE_LOCKED), 카드/스테이지
  *   Not Found, 또는 재시도 초과 시 낙관적 락 충돌(COMMON.CONFLICT)
@@ -63,7 +68,12 @@ export async function clearStage(
   stageId: number,
   squadCardIds: string[],
   playerRepository: PlayerRepository,
+  mailboxRepository: MailboxRepository,
 ): Promise<ClearStageResult> {
+  // 낙관적 락 재시도 전체에 걸쳐 같은 값을 재사용 — sendMail의 (sourceType, sourceId) 멱등
+  // 처리가 재시도로 인한 중복 발송을 막아주려면 시도마다 새 값이면 안 된다.
+  const sourceId = randomUUID();
+
   for (let attempt = 0; attempt < MAX_OPTIMISTIC_LOCK_RETRIES; attempt++) {
     const player = await playerRepository.findById(playerId);
     if (!player) throw new BusinessException(ERROR_MAP.COMMON.NOT_FOUND, { playerId });
@@ -73,6 +83,18 @@ export async function clearStage(
 
     try {
       await playerRepository.save(player);
+      if (result.won) {
+        const content = MAIL_CONTENTS.STAGE_CLEAR;
+        await sendMail(
+          playerId,
+          content.title,
+          { gold: result.rewardGold, enhancementStone: result.rewardEnhancementStone },
+          content.contentType,
+          sourceId,
+          mailboxRepository,
+          content.expiryMs,
+        );
+      }
       return result;
     } catch (err) {
       if (!(err instanceof BusinessException) || err.entry !== ERROR_MAP.COMMON.CONFLICT) throw err;
@@ -132,14 +154,14 @@ function applyClearStage(player: Player, stageId: number, squadCardIds: string[]
   const isFirstClear = stageId === player.clearedStage + 1;
   const rate = isFirstClear ? 1 : stage.farmRewardRate;
 
+  // 골드/강화석은 여기서 player.economy에 직접 지급하지 않는다 — 계산만 하고, 실제 지급은
+  // save() 성공 후 호출부(clearStage)가 우편으로 발송한다.
   const rewardGold = Math.round(stage.rewardGold * rate);
-  player.economy.addGold(rewardGold);
 
   let rewardEnhancementStone = 0;
   if (Math.random() < stage.enhancementStoneDropRate) {
     const amount = stage.enhancementStoneMin + Math.floor(Math.random() * (stage.enhancementStoneMax - stage.enhancementStoneMin + 1));
     rewardEnhancementStone = Math.round(amount * rate);
-    player.economy.addEnhancementStone(rewardEnhancementStone);
   }
 
   const expPerCard = Math.round(stage.rewardExp * rate);
