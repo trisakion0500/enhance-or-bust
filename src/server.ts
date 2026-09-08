@@ -3,6 +3,7 @@ import { errorHandler } from "./shared-kernel/errorHandler.js";
 import { requestId, requestLogger } from "./shared-kernel/requestLogger.js";
 import type { PlayerRepository } from "./contexts/player/domain/playerRepository.js";
 import { createAuthRoutes } from "./contexts/auth/routes/authRoutes.js";
+import { createBattleStageRoutes } from "./contexts/battleStage/routes/battleStageRoutes.js";
 import { createEnhancementRoutes } from "./contexts/enhancement/routes/enhancementRoutes.js";
 import { createSynthesisRoutes } from "./contexts/synthesis/routes/synthesisRoutes.js";
 
@@ -27,6 +28,7 @@ export function createServer(playerRepository: PlayerRepository) {
   app.use(createAuthRoutes(playerRepository));
   app.use(createEnhancementRoutes(playerRepository));
   app.use(createSynthesisRoutes(playerRepository));
+  app.use(createBattleStageRoutes(playerRepository));
 
   app.use(errorHandler);
 

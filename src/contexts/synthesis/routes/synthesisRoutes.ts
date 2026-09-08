@@ -3,13 +3,9 @@ import { synthesizeEnhanceMaterial, synthesizeGradeUpgrade } from "../applicatio
 import { BusinessException } from "../../../shared-kernel/businessException.js";
 import { asyncHandler } from "../../../shared-kernel/errorHandler.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
+import { isStringArray } from "../../../shared-kernel/requestValidation.js";
 import { requireAuth } from "../../../shared-kernel/sessionAuth.js";
 import type { PlayerRepository } from "../../player/domain/playerRepository.js";
-
-/** 배열인지, 원소가 전부 non-empty string인지 검증한다(두 합성 라우트가 공통으로 쓰는 요청 검증). */
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every(v => typeof v === "string" && v.length > 0);
-}
 
 /**
  * 합성 라우터. 강화 라우터와 동일하게 세션 인증이 필요해 라우터 전체에 `requireAuth`를 붙인다.

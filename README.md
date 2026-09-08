@@ -45,8 +45,8 @@ Redis, 구글 OAuth 클라이언트 정보 등).
 - [x] 세션 인증 미들웨어
 - [x] 강화(Enhancement) API + E2E 테스트
 - [x] 합성(Synthesis) API(등급 승급/강화 재료) + E2E 테스트
-- [ ] Progression 도메인 로직
+- [x] Progression(레벨업) + Battle-Stage(전투/스테이지) API + E2E 테스트
 - [ ] Mailbox 도메인 로직
-- [ ] Battle-Stage 도메인 로직
 - [ ] Redis 분산 락
 - [ ] 인벤토리 슬롯 상한
+- [ ] 스테이지 클리어 확률적 카드 드랍

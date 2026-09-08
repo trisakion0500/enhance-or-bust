@@ -1,3 +1,4 @@
+import type { Element } from "./element.js";
 import type { Grade } from "./grade.js";
 
 /**
@@ -13,4 +14,8 @@ export interface CardTemplate {
   grade: Grade;
   /** 기본 공격력(등급별 범위 내 고정값, GAME_DESIGN.md 1절) */
   baseAttack: number;
+  /** 기본 체력(전투 시뮬레이션용, GAME_DESIGN.md 6절) */
+  baseHp: number;
+  /** 원소 속성(3원소 상성, GAME_DESIGN.md 6절) */
+  element: Element;
 }

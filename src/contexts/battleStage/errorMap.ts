@@ -7,5 +7,6 @@ import type { ErrorEntry } from "../../shared-kernel/errorEntry.js";
 export const BATTLE_STAGE_ERROR_MAP = {
   VALIDATION_FAILED:  { code: 8000,   httpStatus: 400,    message: "요청 값이 올바르지 않습니다." },
   NOT_FOUND:          { code: 8001,   httpStatus: 404,    message: "요청한 리소스를 찾을 수 없습니다." },
+  STAGE_LOCKED:       { code: 8002,   httpStatus: 409,    message: "아직 도전할 수 없는 스테이지입니다." },
   INTERNAL_ERROR:     { code: 8999,   httpStatus: 500,    message: "일시적인 서버 오류입니다. 잠시 후 다시 시도해주세요." },
 } satisfies Record<string, ErrorEntry>;
