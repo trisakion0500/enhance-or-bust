@@ -21,7 +21,25 @@
 
 - 상세 기획서: [`docs/design/GAME_DESIGN.md`](./docs/design/GAME_DESIGN.md)
 
+## 실행 방법
+
+사전 준비: `.env.example`을 복사해 `.env`를 만들고 값을 채운다(로컬 MongoDB replica set,
+Redis, 구글 OAuth 클라이언트 정보 등).
+
+| 명령 | 설명 |
+|---|---|
+| `npm run dev` | 개발 서버 실행 (파일 변경 시 자동 재시작) |
+| `npm run seed` | 마스터 데이터(카드 원형/등급/강화·합성 규칙/스테이지) 시드 |
+| `npm test` | E2E 테스트 실행 (로컬 Mongo/Redis에 실제로 붙어서 검증) |
+| `npm run build` | TypeScript 컴파일 (`dist/`) |
+| `npm start` | 빌드된 결과물 실행 (프로덕션용) |
+
 ## 현재 상태
 
-기획/아키텍처 확정, 기본 스캐폴딩(Express + MongoDB + Redis 연결, `/health`) 완료.
-바운디드 컨텍스트별 도메인 모델은 아직 없음.
+기획/아키텍처 확정. 구현 완료: 부트스트랩(Mongo/Redis 연결, 로깅, 에러 핸들링), Player
+애그리게잇(Inventory/Economy, 낙관적 락) + Repository, 마스터 데이터 캐시(Change
+Stream/폴링 워처, 시드 스크립트), 구글 로그인(Google Identity Services/Authorization
+Code Flow) + Redis 세션 인증, 세션 인증 미들웨어, 강화(Enhancement) API + E2E 테스트.
+
+미구현: Synthesis/Progression/Mailbox/Battle-Stage 도메인 로직, Redis 분산 락,
+인벤토리 슬롯 상한.

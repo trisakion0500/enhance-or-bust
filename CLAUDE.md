@@ -117,8 +117,8 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   오리진에서 같이 서빙하므로 CORS 설정이 필요 없다
 - 로그인 이후 요청을 세션으로 인증하는 미들웨어 `requireAuth`(`src/common/sessionAuth.ts`)가
   `sessionToken` 쿠키를 Redis 세션과 대조해 `req.playerId`를 세팅한다. 전역 `app.use`가 아니라
-  보호가 필요한 라우터에 개별적으로 붙이는 방식 — 아직 보호 대상 라우트가 없어 서버 조립
-  (`server.ts`)에는 연결돼 있지 않고, 첫 보호 라우트(강화 등)를 만들 때 그 라우터에 붙인다
+  보호가 필요한 라우터에 개별적으로 붙이는 방식 — 강화 라우터(`enhancementRoutes.ts`)가 첫
+  적용 사례이며, 새 보호 라우트를 추가할 때마다 그 라우터에 `router.use(requireAuth)`로 붙인다
 - 앱(모바일) 확장 시: iOS/Android는 구글 콘솔에 플랫폼별 Client ID를 추가 등록하되, 앱에서
   ID 토큰을 요청할 때 이 웹 Client ID를 대상(audience)으로 지정하는 게 구글 권장 방식이라
   (`serverClientId`/`serverClientID` 옵션) 서버 코드는 변경 없이 그대로 동작한다. 그래서
@@ -144,10 +144,11 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   데이터 5종 캐시/Change Stream 워처(지수 백오프 포함)/시드 스크립트, 구글 로그인
   연동 신규가입/로그인(`GOOGLE_AUTH_FLOW`로 `id_token`/`authorization_code` 선택,
   최초 가입 시 이름/이메일/프로필 사진 저장) + Redis 세션 발급, 세션 인증 미들웨어
-  (`requireAuth`, 아직 어느 라우트에도 연결은 안 됨)까지 구현됨
-- 미구현: 실제 API 라우트(인증 제외), Enhancement/Synthesis/Progression/Mailbox/
-  Battle-Stage 도메인 서비스 로직(강화·합성 판정, 레벨업, 우편, 스테이지 판정),
-  Redis 분산락, 인벤토리 슬롯 상한
+  (`requireAuth`), 강화 API(`POST /enhancement/:cardId`, `requireAuth` 적용 — 낙관적
+  락 충돌 시 애플리케이션 레벨 재조회·재시도)까지 구현됨
+- 미구현: Synthesis/Progression/Mailbox/Battle-Stage 도메인 서비스 로직(합성 판정,
+  레벨업, 우편, 스테이지 판정), Redis 분산락(현재 강화 API는 재시도로만 동시 요청을
+  흡수하며, 재시도 폭주 방지용 락은 아직 없음), 인벤토리 슬롯 상한
 
 ## MongoDB 데이터 모델링 / 원자성 전략 (확정)
 
@@ -220,6 +221,23 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
     이벤트를 정상 수신하면 백오프를 리셋
   - 주기적 폴링(예: 수 분 간격)으로 각 컨텐츠의 DB 버전과 메모리 캐시 버전을
     비교해 어긋나면 강제 리로드 (Change Streams가 주 채널, 폴링은 fallback)
+
+## 테스트 전략 (확정)
+
+- E2E만 작성한다. 단위 테스트는 아직 없음 — 도메인 로직이 라우트 하나당 서비스 함수 하나로
+  단순해서 API 레벨 검증이 곧 로직 검증과 크게 다르지 않고, 실제로 값어치가 큰 건 라우트→
+  미들웨어→서비스→DB까지 이어지는 전체 경로가 맞물려 돌아가는지다
+- Node 내장 테스트 러너(`node:test`, `node:assert/strict`)만 쓴다. Jest/Vitest/Mocha 같은
+  테스트 프레임워크나 supertest 같은 HTTP 어서션 라이브러리를 추가하지 않음 — Node 22 기준
+  내장 러너와 전역 `fetch`만으로 충분
+- mock이나 인메모리 DB 대역 라이브러리(mongodb-memory-server 등)를 쓰지 않고, 로컬 개발용
+  실제 Mongo/Redis에 그대로 붙는다. `createServer()`(DI로 조립만 하고 `listen()`은 안 하는
+  팩토리, `server.ts`)를 임시 포트로 띄워 `fetch`로 호출
+- 각 테스트가 자기 테스트 데이터(플레이어 등)를 직접 만들고 `finally`에서 직접 지운다 —
+  테스트 간 공유 상태 없이 독립적으로 격리. `platformType: "test"`로 실제 구글 로그인 유저와
+  구분되게 만듦
+- 파일 네이밍: `*.e2e.test.ts`, 대상 라우트 파일 옆에 둔다(예: `enhancementRoutes.ts` ↔
+  `enhancementRoutes.e2e.test.ts`). `npm test`가 `tsx --test`로 이 패턴을 전부 실행
 
 ## 작업 시 유의사항
 
