@@ -36,10 +36,17 @@ Redis, 구글 OAuth 클라이언트 정보 등).
 
 ## 현재 상태
 
-기획/아키텍처 확정. 구현 완료: 부트스트랩(Mongo/Redis 연결, 로깅, 에러 핸들링), Player
-애그리게잇(Inventory/Economy, 낙관적 락) + Repository, 마스터 데이터 캐시(Change
-Stream/폴링 워처, 시드 스크립트), 구글 로그인(Google Identity Services/Authorization
-Code Flow) + Redis 세션 인증, 세션 인증 미들웨어, 강화(Enhancement) API + E2E 테스트.
+기획/아키텍처 확정.
 
-미구현: Synthesis/Progression/Mailbox/Battle-Stage 도메인 로직, Redis 분산 락,
-인벤토리 슬롯 상한.
+- [x] 부트스트랩 (Mongo/Redis 연결, 로깅, 에러 핸들링)
+- [x] Player 애그리게잇 (Inventory/Economy, 낙관적 락) + Repository
+- [x] 마스터 데이터 캐시 (Change Stream/폴링 워처, 시드 스크립트)
+- [x] 구글 로그인 (Google Identity Services/Authorization Code Flow) + Redis 세션 인증
+- [x] 세션 인증 미들웨어
+- [x] 강화(Enhancement) API + E2E 테스트
+- [ ] Synthesis 도메인 로직
+- [ ] Progression 도메인 로직
+- [ ] Mailbox 도메인 로직
+- [ ] Battle-Stage 도메인 로직
+- [ ] Redis 분산 락
+- [ ] 인벤토리 슬롯 상한
