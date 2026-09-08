@@ -7,8 +7,12 @@ import { Inventory } from "../domain/inventory.js";
 import { Player } from "../domain/player.js";
 import type { PlayerRepository } from "../domain/playerRepository.js";
 
-/** `Card` 엔티티의 MongoDB 저장 형태 — 필드는 같지만 메서드 없는 순수 데이터 셰이프. */
-interface CardDocument {
+/**
+ * `Card` 엔티티의 MongoDB 저장 형태 — 필드는 같지만 메서드 없는 순수 데이터 셰이프.
+ * `export`한 이유: Mailbox 컨텍스트의 ClaimMail 트랜잭션(`MongoMailboxRepository`)이
+ * players 컬렉션에 카드를 직접 `$push`할 때 이 형태를 그대로 재사용한다.
+ */
+export interface CardDocument {
   cardId: string;
   templateId: string;
   level: number;
@@ -16,8 +20,11 @@ interface CardDocument {
   enhancementLevel: number;
 }
 
-/** `Player` 애그리게잇의 MongoDB 저장 형태(`players` 컬렉션 문서 스키마). */
-interface PlayerDocument {
+/**
+ * `Player` 애그리게잇의 MongoDB 저장 형태(`players` 컬렉션 문서 스키마). `export`한 이유는
+ * {@link CardDocument}와 동일 — Mailbox의 ClaimMail 트랜잭션이 재사용한다.
+ */
+export interface PlayerDocument {
   _id: string;
   version: number;
   platformType: string;

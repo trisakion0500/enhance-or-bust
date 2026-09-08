@@ -151,9 +151,10 @@
   지급한다. `clearedStage + 1`을 넘어서는 스테이지는 진입 자체가 거부된다(순서 진행).
 - **클리어 보상**: 골드(`rewardGold × 배율`) + EXP(출전 카드마다 `rewardExp × 배율`,
   4절 참고) + 확률적 강화석(`enhancementStoneDropRate` 확률로
-  `enhancementStoneMin`~`enhancementStoneMax` 사이 수량 × 배율). 우편함(Mailbox)이 아직
-  미구현이라 지금은 재화/카드 상태에 직접 지급하고, 우편 경유는 Mailbox 구현 시 전환한다.
-  카드 드랍은 이번 스코프에 포함하지 않음(추후 별도 설계).
+  `enhancementStoneMin`~`enhancementStoneMax` 사이 수량 × 배율). Mailbox 자체는 구현됐지만
+  스테이지 클리어 보상은 아직 우편 경유로 전환하지 않고 재화/카드 상태에 직접 지급한다 —
+  전환은 후속 작업(CLAUDE.md "현재 상태" 참고). 카드 드랍은 이번 스코프에 포함하지
+  않음(추후 별도 설계).
 
 **검증 원칙**: 클라이언트는 "스테이지 N 도전 + 출전 스쿼드" 요청만 보내고, 서버가 유저의
 현재 보유 카드 스탯을 직접 조회해 전투를 시뮬레이션한 뒤 판정한다.
@@ -185,7 +186,7 @@
 | EnhanceCard | Inventory, Economy | 재화 차감 + 카드 상태 변경(강화/파괴) |
 | SynthesizeCard | Inventory, Economy | 소재 카드 소모 + 결과 카드 생성 |
 | ClaimMail | Mailbox, Inventory, Economy | 우편 상태 변경 + 첨부물 지급 |
-| ClearStage | Battle, Progression, Economy | 전투 판정 + EXP 지급 + 재화 보상(현재 우편함 미구현이라 Mailbox 경유 없이 Player 애그리게잇에 직접 지급 — CLAUDE.md 참고) |
+| ClearStage | Battle, Progression, Economy | 전투 판정 + EXP 지급 + 재화 보상(Mailbox는 구현됐지만 아직 경유로 전환 전이라 Player 애그리게잇에 직접 지급 — CLAUDE.md 참고) |
 
 모든 Use-case는 관련 트랜잭션을 통해 원자성을 보장하며,
 도메인 레이어는 저장소 구현을 알지 못하고 Repository 인터페이스에만 의존한다.

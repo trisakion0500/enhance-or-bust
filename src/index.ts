@@ -15,6 +15,7 @@ import {
   stopMasterDataWatch,
 } from "./shared-kernel/masterData/masterDataWatcher.js";
 import { MongoPlayerRepository } from "./contexts/player/infrastructure/mongoPlayerRepository.js";
+import { MongoMailboxRepository } from "./contexts/mailbox/infrastructure/mongoMailboxRepository.js";
 import { connectRedis, redisClient } from "./infra/redis.js";
 import { createServer } from "./server.js";
 
@@ -30,7 +31,9 @@ logger.info("마스터 데이터 캐시 적재 완료, change stream/폴링 워�
 
 const playerRepository = new MongoPlayerRepository(db);
 await playerRepository.ensureIndexes();
-const app = createServer(playerRepository);
+const mailboxRepository = new MongoMailboxRepository(db);
+await mailboxRepository.ensureIndexes();
+const app = createServer(playerRepository, mailboxRepository);
 const httpServer = app.listen(config.port, () => {
   logger.info(`listening on port ${config.port}`);
 });

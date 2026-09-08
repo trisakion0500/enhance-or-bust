@@ -9,6 +9,7 @@ import { Player } from "../../player/domain/player.js";
 import { connectMongo, mongoClient } from "../../../infra/mongo.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
 import { MongoPlayerRepository } from "../../player/infrastructure/mongoPlayerRepository.js";
+import { MongoMailboxRepository } from "../../mailbox/infrastructure/mongoMailboxRepository.js";
 import { connectRedis, redisClient } from "../../../infra/redis.js";
 import { createSession } from "../../auth/infrastructure/sessionStore.js";
 import { createServer } from "../../../server.js";
@@ -29,7 +30,7 @@ before(async () => {
   await masterDataCache.loadAll(db);
 
   playerRepository = new MongoPlayerRepository(db);
-  httpServer = createServer(playerRepository).listen(0);
+  httpServer = createServer(playerRepository, new MongoMailboxRepository(db)).listen(0);
   await new Promise<void>(resolve => httpServer.once("listening", resolve));
   const { port } = httpServer.address() as AddressInfo;
   baseUrl = `http://127.0.0.1:${port}`;

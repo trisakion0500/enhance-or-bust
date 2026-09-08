@@ -7,5 +7,7 @@ import type { ErrorEntry } from "../../shared-kernel/errorEntry.js";
 export const MAILBOX_ERROR_MAP = {
   VALIDATION_FAILED:  { code: 7000,   httpStatus: 400,    message: "요청 값이 올바르지 않습니다." },
   NOT_FOUND:          { code: 7001,   httpStatus: 404,    message: "요청한 리소스를 찾을 수 없습니다." },
+  ALREADY_CLAIMED:    { code: 7002,   httpStatus: 409,    message: "이미 수령한 우편입니다." },
+  EXPIRED:            { code: 7003,   httpStatus: 409,    message: "만료된 우편입니다." },
   INTERNAL_ERROR:     { code: 7999,   httpStatus: 500,    message: "일시적인 서버 오류입니다. 잠시 후 다시 시도해주세요." },
 } satisfies Record<string, ErrorEntry>;
