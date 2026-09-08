@@ -1,9 +1,10 @@
 import express from "express";
-import { errorHandler } from "./common/errorHandler.js";
-import { requestId, requestLogger } from "./common/requestLogger.js";
-import type { PlayerRepository } from "./domain/player/playerRepository.js";
-import { createAuthRoutes } from "./routes/authRoutes.js";
-import { createEnhancementRoutes } from "./routes/enhancementRoutes.js";
+import { errorHandler } from "./shared-kernel/errorHandler.js";
+import { requestId, requestLogger } from "./shared-kernel/requestLogger.js";
+import type { PlayerRepository } from "./contexts/player/domain/playerRepository.js";
+import { createAuthRoutes } from "./contexts/auth/routes/authRoutes.js";
+import { createEnhancementRoutes } from "./contexts/enhancement/routes/enhancementRoutes.js";
+import { createSynthesisRoutes } from "./contexts/synthesis/routes/synthesisRoutes.js";
 
 /**
  * Express `app`을 조립해 반환한다. DB/Redis 연결이나 `listen()` 같은 프로세스 부트스트랩은 다루지 않고
@@ -25,6 +26,7 @@ export function createServer(playerRepository: PlayerRepository) {
 
   app.use(createAuthRoutes(playerRepository));
   app.use(createEnhancementRoutes(playerRepository));
+  app.use(createSynthesisRoutes(playerRepository));
 
   app.use(errorHandler);
 

@@ -44,7 +44,7 @@ Redis, 구글 OAuth 클라이언트 정보 등).
 - [x] 구글 로그인 (Google Identity Services/Authorization Code Flow) + Redis 세션 인증
 - [x] 세션 인증 미들웨어
 - [x] 강화(Enhancement) API + E2E 테스트
-- [ ] Synthesis 도메인 로직
+- [x] 합성(Synthesis) API(등급 승급/강화 재료) + E2E 테스트
 - [ ] Progression 도메인 로직
 - [ ] Mailbox 도메인 로직
 - [ ] Battle-Stage 도메인 로직

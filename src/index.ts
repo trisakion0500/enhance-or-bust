@@ -7,14 +7,14 @@ import { config } from "./config/env.js";
 import { connectMongo, mongoClient } from "./infra/mongo.js";
 import { connectMongoLog, mongoLogClient } from "./infra/mongoLog.js";
 import { logger } from "./infra/logger.js";
-import { masterDataCache } from "./infra/masterDataCache.js";
+import { masterDataCache } from "./shared-kernel/masterData/masterDataCache.js";
 import {
   startMasterDataPolling,
   startMasterDataWatch,
   stopMasterDataPolling,
   stopMasterDataWatch,
-} from "./infra/masterDataWatcher.js";
-import { MongoPlayerRepository } from "./infra/mongoPlayerRepository.js";
+} from "./shared-kernel/masterData/masterDataWatcher.js";
+import { MongoPlayerRepository } from "./contexts/player/infrastructure/mongoPlayerRepository.js";
 import { connectRedis, redisClient } from "./infra/redis.js";
 import { createServer } from "./server.js";
 

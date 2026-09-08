@@ -115,7 +115,7 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   그대로). JWT처럼 자체 서명된 토큰이 아니라, Redis에서 지우면 즉시 무효화할 수 있다
 - 세션 토큰은 httpOnly 쿠키(`sessionToken`)로 내려준다. 프론트(정적 파일)와 API를 같은
   오리진에서 같이 서빙하므로 CORS 설정이 필요 없다
-- 로그인 이후 요청을 세션으로 인증하는 미들웨어 `requireAuth`(`src/common/sessionAuth.ts`)가
+- 로그인 이후 요청을 세션으로 인증하는 미들웨어 `requireAuth`(`src/shared-kernel/sessionAuth.ts`)가
   `sessionToken` 쿠키를 Redis 세션과 대조해 `req.playerId`를 세팅한다. 전역 `app.use`가 아니라
   보호가 필요한 라우터에 개별적으로 붙이는 방식 — 강화 라우터(`enhancementRoutes.ts`)가 첫
   적용 사례이며, 새 보호 라우트를 추가할 때마다 그 라우터에 `router.use(requireAuth)`로 붙인다
@@ -145,10 +145,14 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   연동 신규가입/로그인(`GOOGLE_AUTH_FLOW`로 `id_token`/`authorization_code` 선택,
   최초 가입 시 이름/이메일/프로필 사진 저장) + Redis 세션 발급, 세션 인증 미들웨어
   (`requireAuth`), 강화 API(`POST /enhancement/:cardId`, `requireAuth` 적용 — 낙관적
-  락 충돌 시 애플리케이션 레벨 재조회·재시도)까지 구현됨
-- 미구현: Synthesis/Progression/Mailbox/Battle-Stage 도메인 서비스 로직(합성 판정,
-  레벨업, 우편, 스테이지 판정), Redis 분산락(현재 강화 API는 재시도로만 동시 요청을
-  흡수하며, 재시도 폭주 방지용 락은 아직 없음), 인벤토리 슬롯 상한
+  락 충돌 시 애플리케이션 레벨 재조회·재시도), 합성 API(`POST /synthesis/grade-upgrade`
+  — 동일 등급 3장 소모, 80% 성공, 실패 시 소재 1장만 소모; `POST
+  /synthesis/enhance-material` — 대상 카드 외 동일 원형 2장+골드 소모, 100% 성공으로
+  대상 카드 강화 단계 +1. 둘 다 강화 API와 동일한 낙관적 락 재조회·재시도 패턴)까지
+  구현됨
+- 미구현: Progression/Mailbox/Battle-Stage 도메인 서비스 로직(레벨업, 우편, 스테이지
+  판정), Redis 분산락(현재 강화/합성 API는 재시도로만 동시 요청을 흡수하며, 재시도
+  폭주 방지용 락은 아직 없음), 인벤토리 슬롯 상한
 
 ## MongoDB 데이터 모델링 / 원자성 전략 (확정)
 
