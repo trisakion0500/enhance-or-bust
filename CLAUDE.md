@@ -115,8 +115,10 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   그대로). JWT처럼 자체 서명된 토큰이 아니라, Redis에서 지우면 즉시 무효화할 수 있다
 - 세션 토큰은 httpOnly 쿠키(`sessionToken`)로 내려준다. 프론트(정적 파일)와 API를 같은
   오리진에서 같이 서빙하므로 CORS 설정이 필요 없다
-- 로그인 이후 요청을 세션으로 인증하는 미들웨어(`req.playerId` 세팅)는 아직 없음 — 실제로
-  인증이 필요한 첫 라우트(강화 등)를 만들 때 같이 추가한다
+- 로그인 이후 요청을 세션으로 인증하는 미들웨어 `requireAuth`(`src/common/sessionAuth.ts`)가
+  `sessionToken` 쿠키를 Redis 세션과 대조해 `req.playerId`를 세팅한다. 전역 `app.use`가 아니라
+  보호가 필요한 라우터에 개별적으로 붙이는 방식 — 아직 보호 대상 라우트가 없어 서버 조립
+  (`server.ts`)에는 연결돼 있지 않고, 첫 보호 라우트(강화 등)를 만들 때 그 라우터에 붙인다
 - 앱(모바일) 확장 시: iOS/Android는 구글 콘솔에 플랫폼별 Client ID를 추가 등록하되, 앱에서
   ID 토큰을 요청할 때 이 웹 Client ID를 대상(audience)으로 지정하는 게 구글 권장 방식이라
   (`serverClientId`/`serverClientID` 옵션) 서버 코드는 변경 없이 그대로 동작한다. 그래서
@@ -141,10 +143,11 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   Player 애그리게잇(Inventory/Economy) + MongoPlayerRepository(낙관적 락), 마스터
   데이터 5종 캐시/Change Stream 워처(지수 백오프 포함)/시드 스크립트, 구글 로그인
   연동 신규가입/로그인(`GOOGLE_AUTH_FLOW`로 `id_token`/`authorization_code` 선택,
-  최초 가입 시 이름/이메일/프로필 사진 저장) + Redis 세션 발급까지 구현됨
+  최초 가입 시 이름/이메일/프로필 사진 저장) + Redis 세션 발급, 세션 인증 미들웨어
+  (`requireAuth`, 아직 어느 라우트에도 연결은 안 됨)까지 구현됨
 - 미구현: 실제 API 라우트(인증 제외), Enhancement/Synthesis/Progression/Mailbox/
   Battle-Stage 도메인 서비스 로직(강화·합성 판정, 레벨업, 우편, 스테이지 판정),
-  Redis 분산락, 세션 인증 미들웨어(보호 라우트 도입 시 추가), 인벤토리 슬롯 상한
+  Redis 분산락, 인벤토리 슬롯 상한
 
 ## MongoDB 데이터 모델링 / 원자성 전략 (확정)
 

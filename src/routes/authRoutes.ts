@@ -3,6 +3,7 @@ import type { Response } from "express";
 import { Router } from "express";
 import { loginWithGoogleAuthCode, loginWithGoogleIdToken } from "../application/authService.js";
 import { BusinessException } from "../common/businessException.js";
+import { readCookie } from "../common/cookies.js";
 import { ERROR_MAP } from "../common/errorMap.js";
 import { asyncHandler } from "../common/errorHandler.js";
 import { config } from "../config/env.js";
@@ -17,20 +18,6 @@ const OAUTH_STATE_COOKIE_NAME = "oauthState";
 
 /** 로컬 http 개발 환경에선 secure 쿠키가 저장되지 않아 배포(HTTPS) 환경에서만 켠다. */
 const isSecureCookie = process.env.NODE_ENV === "production";
-
-/**
- * `Cookie` 헤더에서 값 하나만 읽는다. 현재 쿠키 파싱이 필요한 곳이 이 라우터의 state 검증 하나뿐이라
- * `cookie-parser` 의존성을 추가하는 대신 최소 구현으로 둔다.
- * @param cookieHeader `req.headers.cookie` 원본
- * @param name 찾을 쿠키 이름
- * @returns 쿠키 값, 없으면 undefined
- */
-function readCookie(cookieHeader: string | undefined, name: string): string | undefined {
-  return cookieHeader
-    ?.split("; ")
-    .find(pair => pair.startsWith(`${name}=`))
-    ?.slice(name.length + 1);
-}
 
 /**
  * 인증 라우터. 프론트가 로그인 UI 초기화에 쓸 설정 조회(`GET /auth/config`)와, `config.googleAuthFlow`에
