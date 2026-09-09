@@ -1,4 +1,5 @@
 import { BusinessException } from "../../../shared-kernel/businessException.js";
+import { config } from "../../../config/env.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
 import type { PlayerRepository } from "../domain/playerRepository.js";
@@ -44,6 +45,8 @@ export interface PlayerSummary {
   clearedStage: number;
   /** 보유 카드 목록(마스터 데이터 조인 포함) */
   inventory: CardSummary[];
+  /** 전투 출전 스쿼드 최대 장수 — 프론트가 별도 설정 조회 없이 이 값으로 UI를 제한한다 */
+  squadMaxSize: number;
 }
 
 /**
@@ -82,5 +85,6 @@ export async function getPlayerSummary(playerId: string, playerRepository: Playe
     economy: { gold: player.economy.gold, enhancementStone: player.economy.enhancementStone, diamond: player.economy.diamond },
     clearedStage: player.clearedStage,
     inventory,
+    squadMaxSize: config.squadMaxSize,
   };
 }

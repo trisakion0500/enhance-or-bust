@@ -31,4 +31,6 @@ export const config = {
   mailboxCleanupRetentionMonths: Number(process.env.MAILBOX_CLEANUP_RETENTION_MONTHS ?? 3),
   /** 인벤토리 슬롯 상한(장 수). 우편 수령(ClaimMail) 시점에 카드 첨부물 검증(초과 시 거부, 자세한 경계는 CLAUDE.md "Inventory 슬롯 상한 구현 노트" 참고). */
   inventorySlotCap: Number(process.env.INVENTORY_SLOT_CAP ?? 200),
+  /** 전투 출전 스쿼드 최대 장수. */
+  squadMaxSize: Number(process.env.SQUAD_MAX_SIZE ?? 5),
 };

@@ -13,9 +13,7 @@ import type { RoundLog } from "../domain/battleSimulator.js";
 import type { MailboxRepository } from "../../mailbox/domain/mailboxRepository.js";
 import { sendMail } from "../../mailbox/application/mailboxService.js";
 import { MAIL_CONTENTS } from "../../mailbox/domain/mailContent.js";
-
-/** 출전 스쿼드 최대 장수 — 초기 표준값(TBD). */
-const SQUAD_MAX_SIZE = 5;
+import { config } from "../../../config/env.js";
 
 /** 출전 카드 1장이 이번 전투로 얻은 EXP 결과. */
 export interface ExpGainResult {
@@ -56,7 +54,7 @@ export interface ClearStageResult {
  * 전투를 시뮬레이션해 판정하며, 패배 시에는 상태 변경이 없어 저장을 생략한다.
  * @param playerId 도전하는 플레이어
  * @param stageId 도전할 스테이지 번호
- * @param squadCardIds 출전시킬 카드 ID 목록(1~5장, 보유 카드 중에서)
+ * @param squadCardIds 출전시킬 카드 ID 목록(1~config.squadMaxSize장, 보유 카드 중에서)
  * @param playerRepository Player 영속성 포트
  * @param mailboxRepository Mailbox 영속성 포트 — 승리 시 골드/강화석/드랍 카드 보상을 우편으로 발송
  * @returns 전투 결과(승패, 라운드 로그, 보상)
@@ -113,7 +111,7 @@ export async function clearStage(
  * @returns 응답으로 돌려줄 결과와, 실제로 `player`가 변경돼 저장이 필요한지 여부(패배 시 false)
  */
 function applyClearStage(player: Player, stageId: number, squadCardIds: string[]): { result: ClearStageResult; mutated: boolean } {
-  if (squadCardIds.length === 0 || squadCardIds.length > SQUAD_MAX_SIZE || new Set(squadCardIds).size !== squadCardIds.length)
+  if (squadCardIds.length === 0 || squadCardIds.length > config.squadMaxSize || new Set(squadCardIds).size !== squadCardIds.length)
     throw new BusinessException(ERROR_MAP.BATTLE_STAGE.VALIDATION_FAILED, { squadCardIds });
 
   if (stageId > player.clearedStage + 1)
