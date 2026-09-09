@@ -3,37 +3,36 @@
 <head>
   <meta charset="utf-8" />
   <title>강화하다 망함</title>
+  <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
-  <div id="buttonDiv"></div>
-  <pre id="result"></pre>
+  <section id="loginScreen">
+    <h1>강화하다 망함</h1>
+    <div id="buttonDiv"></div>
+    <pre id="loginResult"></pre>
+  </section>
+
+  <section id="gameScreen" hidden>
+    <header>
+      <strong id="playerName"></strong>
+      <span>골드 <b id="gold"></b></span>
+      <span>강화석 <b id="enhancementStone"></b></span>
+      <span>다이아 <b id="diamond"></b></span>
+      <span>클리어 스테이지 <b id="clearedStage"></b></span>
+    </header>
+
+    <nav>
+      <button type="button" class="tabButton" data-tab="inventory">인벤토리</button>
+      <button type="button" class="tabButton" data-tab="battle">전투</button>
+      <button type="button" class="tabButton" data-tab="mailbox">우편함</button>
+    </nav>
+
+    <section id="inventoryPanel" class="tabPanel"></section>
+    <section id="battlePanel" class="tabPanel" hidden></section>
+    <section id="mailboxPanel" class="tabPanel" hidden></section>
+  </section>
 
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script>
-    async function onGoogleLogin(response) {
-      const res = await fetch("/auth/google", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ credential: response.credential }),
-      });
-      document.getElementById("result").textContent = `${res.status} ${JSON.stringify(await res.json())}`;
-    }
-
-    async function init() {
-      const { googleClientId, authFlow } = await (await fetch("/auth/config")).json();
-      if (authFlow === "authorization_code") {
-        const link = document.createElement("a");
-        link.href = "/auth/google/login";
-        link.textContent = "구글로 로그인";
-        document.getElementById("buttonDiv").appendChild(link);
-        return;
-      }
-      google.accounts.id.initialize({ client_id: googleClientId, callback: onGoogleLogin });
-      google.accounts.id.renderButton(document.getElementById("buttonDiv"), { theme: "outline", size: "large" });
-    }
-
-    window.onload = init;
-  </script>
+  <script type="module" src="/js/app.js"></script>
 </body>
 </html>

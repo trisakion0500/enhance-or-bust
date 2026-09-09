@@ -7,6 +7,7 @@ import { createAuthRoutes } from "./contexts/auth/routes/authRoutes.js";
 import { createBattleStageRoutes } from "./contexts/battleStage/routes/battleStageRoutes.js";
 import { createEnhancementRoutes } from "./contexts/enhancement/routes/enhancementRoutes.js";
 import { createMailboxRoutes } from "./contexts/mailbox/routes/mailboxRoutes.js";
+import { createPlayerRoutes } from "./contexts/player/routes/playerRoutes.js";
 import { createSynthesisRoutes } from "./contexts/synthesis/routes/synthesisRoutes.js";
 
 /**
@@ -33,6 +34,7 @@ export function createServer(playerRepository: PlayerRepository, mailboxReposito
   app.use(createSynthesisRoutes(playerRepository));
   app.use(createBattleStageRoutes(playerRepository, mailboxRepository));
   app.use(createMailboxRoutes(mailboxRepository));
+  app.use(createPlayerRoutes(playerRepository));
 
   app.use(errorHandler);
 

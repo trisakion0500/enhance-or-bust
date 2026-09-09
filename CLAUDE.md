@@ -101,8 +101,10 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
     충돌 확률상 무해)하고, MySQL `AUTO_INCREMENT`처럼 단일 진실 공급원이 필요 없어
     서비스 서버를 N대로 늘려도 영향 없다. MongoDB가 1대(레플리카셋 포함)인 한 프라이머리가
     하나뿐이라 unique 인덱스가 동시 요청 순서를 항상 일관되게 판정한다
-- 최초 로그인 시 신규 Player를 생성(빈 인벤토리, 초기 골드 1000, `clearedStage=0`,
-  구글 프로필의 `name`/`email`/`picture` 포함). 이름/프로필 사진은 최초 가입 시 1회만
+- 최초 로그인 시 신규 Player를 생성(최저 등급 원형 중 랜덤 1장으로 시작 카드 지급,
+  초기 골드 1000, `clearedStage=0`, 구글 프로필의 `name`/`email`/`picture` 포함) —
+  `authService.ts`의 `pickStarterCard()`, 최저 등급은 `masterDataCache.getCardTemplatesByGrade()`로
+  조회(등급 순서 N < R < SR < SSR 중 N 고정, 원형 간 가중치 없이 균등 확률). 이름/프로필 사진은 최초 가입 시 1회만
   가져오고 이후 구글과 재동기화하지 않는다 — 닉네임/프로필 사진을 게임 내에서 바꾸는
   기능이 나중에 추가될 수 있는데, 구글 쪽과 계속 동기화하면 게임 내 변경을 도로 덮어쓰게
   되기 때문. `PlayerRepository.create()`는 삽입 전용(update 아님)이며, 동시 최초 로그인
@@ -146,7 +148,7 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
 - 기획 문서(GAME_DESIGN.md), README, TECH_STACK.md는 완성되어 있음
 - 부트스트랩(Mongo/Redis 연결, log4js 로깅, 에러 핸들링 스켈레톤, Express 서버 골격),
   Player 애그리게잇(Inventory/Economy) + MongoPlayerRepository(낙관적 락), 마스터
-  데이터 5종 캐시/Change Stream 워처(지수 백오프 포함)/시드 스크립트, 구글 로그인
+  데이터 6종 캐시/Change Stream 워처(지수 백오프 포함)/시드 스크립트, 구글 로그인
   연동 신규가입/로그인(`GOOGLE_AUTH_FLOW`로 `id_token`/`authorization_code` 선택,
   최초 가입 시 이름/이메일/프로필 사진 저장) + Redis 세션 발급, 세션 인증 미들웨어
   (`requireAuth`), 강화 API(`POST /enhancement/:cardId`, `requireAuth` 적용 — 낙관적
@@ -195,8 +197,22 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   카드 첨부물이 있으면 상한 초과 여부를 검증해 초과 시 `MAILBOX.INVENTORY_FULL`
   (7004)로 거부하고 우편은 미수령 상태로 남긴다(all-or-nothing). 스테이지 진입
   시점의 사전 차단은 없음 — 자세한 경계는 "Inventory 슬롯 상한 구현 노트" 참고
+- 프론트엔드 핵심 루프(인벤토리+전투+우편) 추가 — 싱글 페이지(SPA-lite, 라우팅
+  라이브러리 없이 JS로 섹션만 토글), `public/js/`에 바운디드 컨텍스트 1:1 대응 모듈
+  (`inventory.js`/`battle.js`/`mailbox.js`) + 공용 `api.js`(fetch 래퍼)/`app.js`(진입점,
+  로그인·탭 전환·공유 `state.player`). `GET /player/me`(신규, `playerService.ts`) 하나로
+  로그인 여부 확인과 게임 화면 초기 데이터(재화/clearedStage/보유 카드 — 카드는 마스터
+  데이터와 서버가 미리 조인해 등급/공격력/체력/속성까지 포함)를 겸한다. 상태를 바꾸는
+  액션(전투 도전, 우편 수령) 뒤에는 `app.js`의 `refreshPlayer()` 하나가 헤더/인벤토리/
+  전투/우편함 패널을 전부 다시 그린다 — 각 패널이 따로 로컬 상태를 들고 있지 않음.
+  강화/합성 화면과 카드 이미지/애니메이션(GAME_DESIGN.md "최소 UI" 원칙)은 범위 밖
+- 몬스터 기본 스탯(`seedData.ts`의 `BASE_MONSTER_HP/ATTACK/DEFENSE`) 절반 하향 — 시작
+  카드가 1장뿐인 상태에서 원래 값 기준으로는 최약체 시작 카드가 스테이지1부터, 평균
+  카드도 스테이지2에서 결정론적으로(전투에 확률 요소 없음) 막히는 게 실사용 중 확인돼
+  조정. 1.15배 성장 공식(GAME_DESIGN.md 6절 확정)은 그대로 두고 기준값만 낮춤 — 구체
+  수치는 여전히 "임시값"(코드 주석 참고), 정식 밸런싱은 추후
 - 미구현: EXP의 Mailbox 경유 전환(카드 성장은 우편의 일반 전리품 모델과 안 맞아
-  의도적으로 제외 — 즉시 지급 유지)
+  의도적으로 제외 — 즉시 지급 유지), 프론트엔드 강화/합성 화면
 
 ## MongoDB 데이터 모델링 / 원자성 전략 (확정)
 

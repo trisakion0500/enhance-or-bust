@@ -1,4 +1,5 @@
-import type { ChangeStream, Db, MongoServerError } from "mongodb";
+import type { ChangeStream, Db } from "mongodb";
+import { MongoError } from "mongodb";
 import { config } from "../../config/env.js";
 import type { MasterDataContent } from "./masterDataContent.js";
 import { MASTER_DATA_CONTENTS } from "./masterDataContent.js";
@@ -55,8 +56,11 @@ export async function startMasterDataWatch(db: Db): Promise<void> {
   changeStream.on("error", async err => {
     logger.error("마스터 데이터 change stream 오류, 재연결 시도", err);
     // resume token이 oplog 보존 범위를 벗어나 재개 불가능해진 경우 — 토큰을 버리고
-    // 캐시를 전체 재적재한 뒤 처음부터 다시 구독한다.
-    if ((err as MongoServerError).codeName === "ChangeStreamHistoryLost") {
+    // 캐시를 전체 재적재한 뒤 처음부터 다시 구독한다. MongoDB는 이 상황을 codeName
+    // "ChangeStreamHistoryLost"뿐 아니라 errorLabel "NonResumableChangeStreamError"로도
+    // 표시하므로(둘 중 하나만 잡으면 재시도 루프가 영원히 실패한다), 공식 권장대로
+    // hasErrorLabel()로 판단한다.
+    if (err instanceof MongoError && err.hasErrorLabel("NonResumableChangeStreamError")) {
       await stateCollection.deleteOne({ _id: "masterData" });
       await masterDataCache.loadAll(db);
     }

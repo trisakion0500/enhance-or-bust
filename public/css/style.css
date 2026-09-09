@@ -1,0 +1,18 @@
+:root { color-scheme: light dark; }
+
+body { font-family: system-ui, sans-serif; margin: 1rem; }
+
+header { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
+
+nav { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid currentColor; padding: 0.25rem 0.5rem; text-align: left; }
+
+fieldset { margin: 0.5rem 0; }
+
+pre { white-space: pre-wrap; word-break: break-all; padding: 0.5rem; border: 1px solid currentColor; }
+
+.mail { border: 1px solid currentColor; padding: 0.5rem; margin-bottom: 0.5rem; }
+
+[hidden] { display: none !important; }

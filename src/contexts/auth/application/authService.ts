@@ -1,4 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { BusinessException } from "../../../shared-kernel/businessException.js";
+import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
+import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
+import { Card } from "../../player/domain/card.js";
 import { Economy } from "../../player/domain/economy.js";
 import { Inventory } from "../../player/domain/inventory.js";
 import { Player } from "../../player/domain/player.js";
@@ -7,8 +11,24 @@ import type { GoogleProfile } from "../infrastructure/googleAuth.js";
 import { exchangeGoogleAuthCode, verifyGoogleIdToken } from "../infrastructure/googleAuth.js";
 import { createSession } from "../infrastructure/sessionStore.js";
 
-/** 신규 플레이어에게 지급하는 초기 골드. 다른 재화/카드는 지급하지 않고 빈 인벤토리로 시작한다. */
+/** 신규 플레이어에게 지급하는 초기 골드. */
 const INITIAL_GOLD = 1000;
+
+/** 최저 등급(GAME_DESIGN.md 1절 등급 순서 N < R < SR < SSR 중 최하위) — 신규 가입 시 이 등급에서 카드 1장을 랜덤으로 뽑아 지급한다. */
+const STARTER_CARD_GRADE = "N";
+
+/**
+ * 신규 가입 시 지급할 시작 카드를 최저 등급 원형 중에서 균등 확률로 하나 뽑는다(등급 내
+ * 드랍 가중치를 따로 두는 스테이지 카드 드랍과 달리, 시작 카드는 원형 종류만 다를 뿐
+ * 전부 같은 등급이라 가중치를 둘 이유가 없다).
+ * @throws {BusinessException} 최저 등급 원형이 시드되어 있지 않으면 AUTH.INTERNAL_ERROR(마스터 데이터 누락)
+ */
+function pickStarterCard(): Card {
+  const templates = masterDataCache.getCardTemplatesByGrade(STARTER_CARD_GRADE);
+  if (templates.length === 0) throw new BusinessException(ERROR_MAP.AUTH.INTERNAL_ERROR, { grade: STARTER_CARD_GRADE });
+  const template = templates[Math.floor(Math.random() * templates.length)];
+  return new Card(randomUUID(), template.templateId);
+}
 
 /**
  * 검증된 소셜 프로필로 로그인하고, 처음 로그인하는 사용자면 신규 Player를 생성한다. `playerId`는
@@ -34,7 +54,7 @@ async function loginOrRegister(platformType: string, profile: GoogleProfile, pla
     name ?? "",
     email ?? "",
     picture,
-    new Inventory(),
+    new Inventory([pickStarterCard()]),
     new Economy(INITIAL_GOLD),
   );
   await playerRepository.create(player);
