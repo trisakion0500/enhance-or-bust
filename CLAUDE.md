@@ -184,9 +184,19 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   정지)까지 구현됨. Redis 분산락(강화/합성/전투-스테이지 대상, 우편(Mailbox)의
   `claimMail()`은 대상 아님 — `$inc` 원자 증가만 써서 애초에 재시도 루프 자체가 없어
   락이 불필요)도 위 문단에 통합해 구현됨
-- 미구현: 인벤토리 슬롯 상한, 스테이지 클리어 보상의 확률적 카드
-  드랍(GAME_DESIGN.md 6절에서 이번 스코프 제외로 명시), EXP의 Mailbox 경유 전환(카드
-  성장은 우편의 일반 전리품 모델과 안 맞아 의도적으로 제외 — 즉시 지급 유지)
+- 스테이지 클리어 보상에 확률적 카드 드랍 추가 — 스테이지별 카드 드랍 가중치는
+  `master_stage_card_drops` 컬렉션(문서당 (stageId, templateId) 하나, "마스터 데이터
+  로딩/리로드 전략" 절 참고)에서 뽑고, 드랍 확률은 `master_stage_configs`의
+  `cardDropRateFirstClear`/`cardDropRateFarm`으로 최초 클리어/파밍 재도전이 독립
+  관리된다. 골드/강화석과 동일하게 우편(Mailbox) 경유로 발송
+  (`battleStageService.ts`의 `pickWeightedCardTemplate()`, `cardDrop.ts`,
+  `masterDataCache.getCardDropTable()`)
+- 인벤토리 슬롯 상한(`INVENTORY_SLOT_CAP`, 기본 200) 적용 — 우편 수령(ClaimMail) 시
+  카드 첨부물이 있으면 상한 초과 여부를 검증해 초과 시 `MAILBOX.INVENTORY_FULL`
+  (7004)로 거부하고 우편은 미수령 상태로 남긴다(all-or-nothing). 스테이지 진입
+  시점의 사전 차단은 없음 — 자세한 경계는 "Inventory 슬롯 상한 구현 노트" 참고
+- 미구현: EXP의 Mailbox 경유 전환(카드 성장은 우편의 일반 전리품 모델과 안 맞아
+  의도적으로 제외 — 즉시 지급 유지)
 
 ## MongoDB 데이터 모델링 / 원자성 전략 (확정)
 
@@ -225,26 +235,42 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
 
 ## Inventory 슬롯 상한 구현 노트
 
-정책(상한 존재 여부, 차단/무조건지급 원칙, 구체적 수치 TBD)은
-`docs/design/GAME_DESIGN.md`의 "인벤토리 슬롯 정책" 절이 원본이다. 여기는 구현
-방식만 다룬다.
+정책(상한 존재 여부, 차단/무조건지급 원칙)은 `docs/design/GAME_DESIGN.md`의
+"인벤토리 슬롯 정책" 절이 원본이다. 여기는 구현 방식만 다룬다.
 
 - players 문서에 카드를 배열로 embedding하는 구조라 MongoDB 문서 16MB 제한과
   직결됨 — 슬롯 상한은 이 리스크에 대한 방어이기도 함
-- "차단"과 "결과 지급"은 서로 다른 코드 경로로 구현해야 함:
-  - **차단**: 애플리케이션 레벨 사전 검증. 진입/시도 API(스테이지 진입, 강화
-    시도 등)에서 상한 근접/초과 여부를 체크해 요청 자체를 거부
-  - **결과 지급**: 상한 검증을 거치지 않는 별도 예외 경로. 스테이지 클리어
-    보상, 강화 파괴 환급 등은 상한 상태와 무관하게 무조건 지급되어야 함
-- 구체적 수치는 GAME_DESIGN.md의 TBD를 따름 — CLAUDE.md에 수치를 직접
-  박아넣지 않는다
+- 상한 수치는 `INVENTORY_SLOT_CAP` 환경변수로 관리(기본값 200) —
+  `src/config/env.ts`의 `config.inventorySlotCap`
+- 카드가 늘어나는 유일한 경로인 스테이지 클리어 카드 드랍(6절)은 우편(Mailbox)
+  경유로 지급된다. "차단"(사전 검증)과 "결과 지급"의 경계가 여기서는 스테이지
+  진입 시점이 아니라 **우편 수령(ClaimMail) 시점**이다:
+  - **SendMail(발송)**: 상한과 무관하게 무조건 발송 — 아직 인벤토리를 건드리지
+    않으므로 체크할 대상이 없음
+  - **ClaimMail(수령)**: 카드 첨부물이 있을 때만 `현재 인벤토리 수 + 첨부 카드 수
+    > INVENTORY_SLOT_CAP`을 검증한다(`mongoMailboxRepository.ts`의 `claimMail()`
+    트랜잭션 안). 초과하면 `MAILBOX.INVENTORY_FULL`(7004)로 거부하고, 우편은
+    미수령 상태 그대로 남는다(동봉된 골드 등도 함께 거부 — all-or-nothing).
+    유저가 슬롯을 비운 뒤 다시 수령을 시도하면 되고, 우편 만료 기한(7일) 안에
+    비우지 못하면 결과적으로 카드를 잃을 수 있다 — 골드/강화석과 달리 카드는
+    상한 때문에 유실될 수 있는 유일한 보상 종류
+  - 스테이지 진입 시점의 사전 차단(진입 자체 거부)은 두지 않는다 — 드랍 여부가
+    전투 결과에 달려 있어 진입 시점엔 알 수 없고, 위 수령 시점 검증으로 이미
+    걸러지기 때문
 
 ## 마스터 데이터 로딩/리로드 전략 (확정)
 
 - 컨텐츠별 별도 컬렉션 분리: `master_card_templates`, `master_grade_configs`,
-  `master_enhancement_rules`, `master_synthesis_rules`, `master_stage_configs` 등
-  (컨텐츠 종류 증가를 전제) — `master_` 프리픽스로 런타임 쓰기 컬렉션(players, mailbox)과
-  구분한다
+  `master_enhancement_rules`, `master_synthesis_rules`, `master_stage_configs`,
+  `master_stage_card_drops` 등(컨텐츠 종류 증가를 전제) — `master_` 프리픽스로 런타임
+  쓰기 컬렉션(players, mailbox)과 구분한다
+- 이 분리 원칙은 스테이지 문서 내부 배열도 예외가 아니다: 카드 드랍 테이블은 처음에
+  `master_stage_configs` 문서 안에 배열(`cardDropTable`)로 넣었다가, "행 단위로 늘어나는
+  데이터는 운영툴 엑셀 업로드/개별 관리가 쉽도록 별도 컬렉션으로 분리한다"는 판단에 따라
+  `master_stage_card_drops`(자연키 `(stageId, templateId)`, 문서당 카드 원형 하나의
+  가중치)로 다시 분리했다. 앞으로도 "스테이지 하나에 종속되지만 개수가 늘어나는 목록"
+  형태의 데이터가 생기면 배열로 내장하지 않고 이 패턴(전용 컬렉션 + 부모 ID를 포함한
+  자연키)을 따른다
 - 서버 기동 시 전체를 메모리에 로드하는 싱글톤 캐시 구조
 - 리로드는 MongoDB Change Streams로 처리. 컬렉션마다 워처를 두지 않고 DB 레벨
   Change Stream 워처 1개로 전체 감시 → `event.ns.coll`로 컨텐츠 구분 후 해당

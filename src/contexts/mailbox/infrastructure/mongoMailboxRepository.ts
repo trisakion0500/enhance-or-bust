@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Collection, Db, MongoServerError } from "mongodb";
 import { BusinessException } from "../../../shared-kernel/businessException.js";
+import { config } from "../../../config/env.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
 import { mongoClient } from "../../../infra/mongo.js";
 import type { CardDocument, PlayerDocument } from "../../player/infrastructure/mongoPlayerRepository.js";
@@ -87,6 +88,15 @@ export class MongoMailboxRepository implements MailboxRepository {
           exp: 0,
           enhancementLevel: 0,
         }));
+
+        if (newCards.length > 0) {
+          const player = await this.playersCollection.findOne({ _id: playerId }, { session });
+          if (!player) throw new BusinessException(ERROR_MAP.COMMON.NOT_FOUND, { playerId });
+          // 인벤토리 상한 초과가 예상되면 우편은 그대로 두고(claimedAt 미변경, 지급 없음) 거부한다 —
+          // 이 우편은 계속 미수령 상태로 남아 나중에 슬롯을 비운 뒤 다시 수령을 시도할 수 있다.
+          if (player.inventory.length + newCards.length > config.inventorySlotCap)
+            throw new BusinessException(ERROR_MAP.MAILBOX.INVENTORY_FULL, { playerId, mailId, current: player.inventory.length, incoming: newCards.length });
+        }
 
         const playerUpdate = await this.playersCollection.updateOne(
           { _id: playerId },

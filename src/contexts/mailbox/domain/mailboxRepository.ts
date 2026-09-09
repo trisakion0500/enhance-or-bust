@@ -32,7 +32,8 @@ export interface MailboxRepository {
    * @param playerId 수령을 시도하는 플레이어 ID(소유자 검증에 쓰인다)
    * @returns 수령 처리된 우편(claimedAt 채워짐)
    * @throws {BusinessException} 우편이 없거나 소유자가 아니면 MAILBOX.NOT_FOUND, 이미 수령했으면
-   *   MAILBOX.ALREADY_CLAIMED, 만료됐으면 MAILBOX.EXPIRED
+   *   MAILBOX.ALREADY_CLAIMED, 만료됐으면 MAILBOX.EXPIRED, 카드 첨부물을 받으면 인벤토리 슬롯
+   *   상한을 초과하면 MAILBOX.INVENTORY_FULL(이 경우 우편은 미수령 상태 그대로 남는다)
    */
   claimMail(mailId: string, playerId: string): Promise<Mail>;
 

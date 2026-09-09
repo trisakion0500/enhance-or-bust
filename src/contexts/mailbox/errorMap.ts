@@ -9,5 +9,6 @@ export const MAILBOX_ERROR_MAP = {
   NOT_FOUND:          { code: 7001,   httpStatus: 404,    message: "요청한 리소스를 찾을 수 없습니다." },
   ALREADY_CLAIMED:    { code: 7002,   httpStatus: 409,    message: "이미 수령한 우편입니다." },
   EXPIRED:            { code: 7003,   httpStatus: 409,    message: "만료된 우편입니다." },
+  INVENTORY_FULL:     { code: 7004,   httpStatus: 409,    message: "인벤토리가 초과되어 더 이상 카드를 수령할 수 없습니다." },
   INTERNAL_ERROR:     { code: 7999,   httpStatus: 500,    message: "일시적인 서버 오류입니다. 잠시 후 다시 시도해주세요." },
 } satisfies Record<string, ErrorEntry>;

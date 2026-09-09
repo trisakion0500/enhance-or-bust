@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { Card } from "../../player/domain/card.js";
+import { config } from "../../../config/env.js";
 import { Economy } from "../../player/domain/economy.js";
 import { Inventory } from "../../player/domain/inventory.js";
 import { Mail } from "../domain/mail.js";
@@ -48,9 +49,10 @@ after(async () => {
   await redisClient.quit();
 });
 
-/** 카드 1장을 가진 테스트 플레이어를 만들고, 로그인 세션 쿠키까지 발급해 반환한다. */
-async function createTestPlayer() {
+/** 카드 `cardCount`장을 가진 테스트 플레이어를 만들고, 로그인 세션 쿠키까지 발급해 반환한다. */
+async function createTestPlayer(cardCount = 1) {
   const playerId = randomUUID();
+  const cards = Array.from({ length: cardCount }, () => new Card(randomUUID(), "N_01"));
   const player = new Player(
     playerId,
     0,
@@ -59,7 +61,7 @@ async function createTestPlayer() {
     "테스트유저",
     "test@example.com",
     undefined,
-    new Inventory([new Card(randomUUID(), "N_01")]),
+    new Inventory(cards),
     new Economy(1000, 0, 0),
     0,
   );
@@ -186,6 +188,46 @@ test("동일 sourceType+sourceId로 두 번 발송해도 우편은 1건만 생�
 
     const { body: listBody } = await listMails(cookie);
     assert.equal(listBody.mails.length, 1);
+  } finally {
+    await deleteTestPlayer(playerId);
+  }
+});
+
+test("인벤토리가 상한에 도달한 상태에서 카드 첨부 우편을 수령하면 409/7004로 거부되고 미수령 상태로 남는다", async () => {
+  const { playerId, cookie } = await createTestPlayer(config.inventorySlotCap);
+  try {
+    await sendMail(playerId, "카드 보상", { gold: 50, cardTemplateIds: ["N_01"] }, "test", randomUUID(), mailboxRepository);
+    const { body: listBody } = await listMails(cookie);
+    const mailId = listBody.mails[0].mailId;
+
+    const { res, body } = await claimMail(mailId, cookie);
+    assert.equal(res.status, 409);
+    assert.equal(body.result, 7004);
+
+    const player = await readPlayer(playerId);
+    assert.equal(player!.inventory.length, config.inventorySlotCap); // 카드 지급 안 됨
+    assert.equal(player!.economy.gold, 1000); // 골드도 함께 거부(all-or-nothing)
+
+    const { body: listAfter } = await listMails(cookie);
+    assert.equal(listAfter.mails[0].claimedAt, null); // 우편은 미수령 상태 그대로
+  } finally {
+    await deleteTestPlayer(playerId);
+  }
+});
+
+test("인벤토리가 상한 바로 아래일 때 카드 1장 수령은 상한에 딱 맞아 성공한다", async () => {
+  const { playerId, cookie } = await createTestPlayer(config.inventorySlotCap - 1);
+  try {
+    await sendMail(playerId, "카드 보상", { cardTemplateIds: ["N_01"] }, "test", randomUUID(), mailboxRepository);
+    const { body: listBody } = await listMails(cookie);
+    const mailId = listBody.mails[0].mailId;
+
+    const { res, body } = await claimMail(mailId, cookie);
+    assert.equal(res.status, 200);
+    assert.equal(body.result, 0);
+
+    const player = await readPlayer(playerId);
+    assert.equal(player!.inventory.length, config.inventorySlotCap);
   } finally {
     await deleteTestPlayer(playerId);
   }

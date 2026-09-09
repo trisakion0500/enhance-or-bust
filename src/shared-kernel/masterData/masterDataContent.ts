@@ -8,7 +8,8 @@ export type MasterDataContent =
   | "master_grade_configs"
   | "master_enhancement_rules"
   | "master_synthesis_rules"
-  | "master_stage_configs";
+  | "master_stage_configs"
+  | "master_stage_card_drops";
 
 /** {@link MasterDataContent}의 전체 목록 — 전체 로드/워처 대상 컬렉션 필터링에 쓴다. */
 export const MASTER_DATA_CONTENTS: readonly MasterDataContent[] = [
@@ -17,4 +18,5 @@ export const MASTER_DATA_CONTENTS: readonly MasterDataContent[] = [
   "master_enhancement_rules",
   "master_synthesis_rules",
   "master_stage_configs",
+  "master_stage_card_drops",
 ];

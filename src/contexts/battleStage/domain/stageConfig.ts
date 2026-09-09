@@ -29,4 +29,8 @@ export interface StageConfig {
   enhancementStoneMax: number;
   /** 이미 클리어한 스테이지를 재도전(파밍)할 때 모든 보상에 곱하는 배율(0~1) */
   farmRewardRate: number;
+  /** 최초 클리어 시 카드 드랍 확률(0~1) */
+  cardDropRateFirstClear: number;
+  /** 파밍(재도전) 클리어 시 카드 드랍 확률(0~1) — farmRewardRate 배율과 별개로 독립 관리 */
+  cardDropRateFarm: number;
 }

@@ -257,6 +257,7 @@ ID 토큰으로 로그인하거나(최초 호출 시) 신규가입한다. 인증
   ],
   "rewardGold": 500,
   "rewardEnhancementStone": 3,
+  "rewardCardTemplateId": "SSR_03",
   "expGained": [
     { "cardId": "card-1", "exp": 40, "leveledUp": true, "levelsGained": 1 }
   ],
@@ -271,6 +272,7 @@ ID 토큰으로 로그인하거나(최초 호출 시) 신규가입한다. 인증
 | `won` | 승리 여부(라운드 상한 도달 시에도 false) |
 | `rounds` | 라운드별 진행 로그 |
 | `rewardGold` / `rewardEnhancementStone` | 이번에 **우편으로 발송된** 보상(패배 시 0) — `gold`/`enhancementStone` 잔액에는 아직 반영 안 됨, 우편 수령(`POST /mailbox/:mailId/claim`) 후 반영 |
+| `rewardCardTemplateId` | 이번에 **우편으로 발송된** 드랍 카드 원형 ID(드랍 실패 또는 패배 시 `null`) — 우편 수령 시 레벨 1/EXP 0/강화 0단계로 새 카드 인스턴스 생성 |
 | `expGained` | 출전 카드별 EXP 획득 결과 — EXP는 우편 경유 없이 즉시 반영됨 |
 | `clearedStage` | 이 시도 이후 최종 `clearedStage`(최초 클리어가 아니면 변화 없음) |
 | `gold` / `enhancementStone` | 이 시도 시점 지갑 잔액(위 보상 반영 전) |
@@ -321,4 +323,6 @@ ID 토큰으로 로그인하거나(최초 호출 시) 신규가입한다. 인증
 { "result": 0, "mail": { "mailId": "mail-1", "claimedAt": "2026-09-02T03:00:00.000Z", "...": "..." } }
 ```
 
-**에러**: 9002(미인증), 7001(우편 없음/소유자 아님), 7002(이미 수령), 7003(만료됨)
+**에러**: 9002(미인증), 7001(우편 없음/소유자 아님), 7002(이미 수령), 7003(만료됨),
+7004(카드 첨부물 수령 시 인벤토리 슬롯 상한(`INVENTORY_SLOT_CAP`) 초과 — 우편은 미수령
+상태 그대로 남아 슬롯을 비운 뒤 다시 시도 가능)

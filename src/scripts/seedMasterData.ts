@@ -4,7 +4,7 @@ import type { MasterDataContent } from "../shared-kernel/masterData/masterDataCo
 import { GRADE_CONFIGS, buildCardTemplates } from "../shared-kernel/masterData/seedData.js";
 import { ENHANCEMENT_RULES } from "../contexts/enhancement/seedData.js";
 import { SYNTHESIS_RULES } from "../contexts/synthesis/seedData.js";
-import { buildStageConfigs } from "../contexts/battleStage/seedData.js";
+import { buildCardDropRules, buildStageConfigs } from "../contexts/battleStage/seedData.js";
 
 /**
  * GAME_DESIGN.md 기준 마스터 데이터를 각 컬렉션에 upsert하는 1회성 시드 스크립트.
@@ -64,10 +64,22 @@ async function main() {
 
   await Promise.all(
     buildStageConfigs().map(doc =>
-      db.collection("master_stage_configs").updateOne({ stageId: doc.stageId }, { $set: doc }, { upsert: true }),
+      db
+        .collection("master_stage_configs")
+        // cardDropTable(구 필드)이 master_stage_card_drops 컬렉션으로 분리되며 남은 이전 문서를 정리한다.
+        .updateOne({ stageId: doc.stageId }, { $set: doc, $unset: { cardDropTable: "" } }, { upsert: true }),
     ),
   );
   await bumpMasterDataVersion(db, "master_stage_configs");
+
+  await Promise.all(
+    buildCardDropRules().map(doc =>
+      db
+        .collection("master_stage_card_drops")
+        .updateOne({ stageId: doc.stageId, templateId: doc.templateId }, { $set: doc }, { upsert: true }),
+    ),
+  );
+  await bumpMasterDataVersion(db, "master_stage_card_drops");
 
   console.log("마스터 데이터 시드 완료");
   await mongoClient.close();

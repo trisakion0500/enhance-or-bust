@@ -18,7 +18,7 @@ interface MailDto {
   mailId: string;
   title: string;
   sourceType: string;
-  attachments: { gold?: number; enhancementStone?: number };
+  attachments: { gold?: number; enhancementStone?: number; cardTemplateIds?: string[] };
   createdAt: string;
   expiresAt: string;
   claimedAt: string | null;
@@ -102,7 +102,7 @@ async function readPlayer(playerId: string) {
     .collection<{
       _id: string;
       clearedStage: number;
-      inventory: { cardId: string; level: number; exp: number }[];
+      inventory: { cardId: string; templateId: string; level: number; exp: number }[];
       economy: { gold: number; enhancementStone: number };
     }>("players")
     .findOne({ _id: playerId });
@@ -143,6 +143,8 @@ test("최초 클리어 성공 시 clearedStage/EXP는 즉시 반영되고, 골�
     assert.deepEqual(body.expGained, [{ cardId, exp: 5, leveledUp: false, levelsGained: 0 }]);
     // stage1: enhancementStoneMin=1, enhancementStoneMax=2, 드랍률 50% — 드랍 안 되면 0, 되면 1~2.
     assert.ok(body.rewardEnhancementStone === 0 || (body.rewardEnhancementStone >= 1 && body.rewardEnhancementStone <= 2), JSON.stringify(body));
+    // 카드 드랍(cardDropRateFirstClear 30%) — 드랍 안 되면 null, 되면 카드 원형 ID 문자열.
+    assert.ok(body.rewardCardTemplateId === null || typeof body.rewardCardTemplateId === "string", JSON.stringify(body));
 
     const player = await readPlayer(playerId);
     assert.equal(player!.clearedStage, 1);
@@ -155,6 +157,8 @@ test("최초 클리어 성공 시 clearedStage/EXP는 즉시 반영되고, 골�
     assert.equal(mails[0].sourceType, "stage_clear");
     assert.equal(mails[0].attachments.gold, body.rewardGold);
     assert.equal(mails[0].attachments.enhancementStone, body.rewardEnhancementStone);
+    if (body.rewardCardTemplateId) assert.deepEqual(mails[0].attachments.cardTemplateIds, [body.rewardCardTemplateId]);
+    else assert.equal(mails[0].attachments.cardTemplateIds, undefined);
     assert.equal(mails[0].claimedAt, null);
     // MAIL_CONTENTS.STAGE_CLEAR.expiryMs가 실제로 적용됐는지 — 발송~만료 간격을 직접 확인.
     const expiryMs = new Date(mails[0].expiresAt).getTime() - new Date(mails[0].createdAt).getTime();
@@ -165,6 +169,14 @@ test("최초 클리어 성공 시 clearedStage/EXP는 즉시 반영되고, 골�
     const claimedPlayer = await readPlayer(playerId);
     assert.equal(claimedPlayer!.economy.gold, 1_000_000 + body.rewardGold);
     assert.equal(claimedPlayer!.economy.enhancementStone, body.rewardEnhancementStone);
+    assert.equal(claimedPlayer!.inventory.length, body.rewardCardTemplateId ? 2 : 1);
+    if (body.rewardCardTemplateId) {
+      const droppedCard = claimedPlayer!.inventory.find(c => c.cardId !== cardId);
+      assert.ok(droppedCard, JSON.stringify(claimedPlayer));
+      assert.equal(droppedCard!.templateId, body.rewardCardTemplateId);
+      assert.equal(droppedCard!.level, 1);
+      assert.equal(droppedCard!.exp, 0);
+    }
   } finally {
     await deleteTestPlayer(playerId);
   }

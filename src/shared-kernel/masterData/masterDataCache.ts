@@ -6,6 +6,7 @@ import type { GradeConfig } from "./gradeConfig.js";
 import { MASTER_DATA_CONTENTS } from "./masterDataContent.js";
 import type { MasterDataContent } from "./masterDataContent.js";
 import type { StageConfig } from "../../contexts/battleStage/domain/stageConfig.js";
+import type { CardDropEntry, CardDropRuleDoc } from "../../contexts/battleStage/domain/cardDrop.js";
 import type { SynthesisRule } from "../../contexts/synthesis/domain/synthesisRule.js";
 
 /**
@@ -32,10 +33,11 @@ class MasterDataCache {
   private enhancementRules: EnhancementRule[] = [];
   private synthesisRules: SynthesisRule[] = [];
   private stageConfigs = new Map<number, StageConfig>();
+  private cardDropRules = new Map<number, CardDropEntry[]>();
   private versions = new Map<MasterDataContent, number>();
 
   /**
-   * 5개 마스터 데이터 컬렉션 + 버전 메타를 전부 읽어 캐시를 채운다. 서버 부트스트랩에서
+   * 6개 마스터 데이터 컬렉션 + 버전 메타를 전부 읽어 캐시를 채운다. 서버 부트스트랩에서
    * 한 번 호출한다.
    * @param db 메인 앱 DB 핸들
    */
@@ -72,6 +74,17 @@ class MasterDataCache {
       case "master_stage_configs": {
         const docs = await db.collection<StageConfig>("master_stage_configs").find().toArray();
         this.stageConfigs = new Map(docs.map(doc => [doc.stageId, doc]));
+        break;
+      }
+      case "master_stage_card_drops": {
+        const docs = await db.collection<CardDropRuleDoc>("master_stage_card_drops").find().toArray();
+        const grouped = new Map<number, CardDropEntry[]>();
+        for (const doc of docs) {
+          const table = grouped.get(doc.stageId) ?? [];
+          table.push({ templateId: doc.templateId, weight: doc.weight });
+          grouped.set(doc.stageId, table);
+        }
+        this.cardDropRules = grouped;
         break;
       }
       default: {
@@ -136,6 +149,14 @@ class MasterDataCache {
    */
   getStageConfig(stageId: number): StageConfig | undefined {
     return this.stageConfigs.get(stageId);
+  }
+
+  /**
+   * @param stageId 조회할 스테이지 번호
+   * @returns 해당 스테이지의 카드 드랍 테이블(없으면 빈 배열)
+   */
+  getCardDropTable(stageId: number): CardDropEntry[] {
+    return this.cardDropRules.get(stageId) ?? [];
   }
 }
 

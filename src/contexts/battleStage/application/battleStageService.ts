@@ -8,6 +8,7 @@ import { withOptimisticRetry } from "../../../shared-kernel/optimisticPlayerWrit
 import { addExp } from "../../player/domain/progression.js";
 import { computeCombatStats } from "../domain/combatStats.js";
 import { simulateBattle } from "../domain/battleSimulator.js";
+import { pickWeightedCardTemplate } from "../domain/cardDrop.js";
 import type { RoundLog } from "../domain/battleSimulator.js";
 import type { MailboxRepository } from "../../mailbox/domain/mailboxRepository.js";
 import { sendMail } from "../../mailbox/application/mailboxService.js";
@@ -38,6 +39,8 @@ export interface ClearStageResult {
   rewardGold: number;
   /** 이번에 우편으로 발송된 강화석(드랍 실패 또는 패배 시 0) */
   rewardEnhancementStone: number;
+  /** 이번에 우편으로 발송된 드랍 카드 원형 ID(드랍 실패 또는 패배 시 null) */
+  rewardCardTemplateId: string | null;
   /** 출전 카드별 EXP 획득 결과(패배 시 빈 배열) — EXP는 우편 경유 없이 즉시 카드에 반영된다 */
   expGained: ExpGainResult[];
   /** 이 시도 이후 플레이어의 최종 clearedStage(최초 클리어가 아니면 변화 없음) */
@@ -55,7 +58,7 @@ export interface ClearStageResult {
  * @param stageId 도전할 스테이지 번호
  * @param squadCardIds 출전시킬 카드 ID 목록(1~5장, 보유 카드 중에서)
  * @param playerRepository Player 영속성 포트
- * @param mailboxRepository Mailbox 영속성 포트 — 승리 시 골드/강화석 보상을 우편으로 발송
+ * @param mailboxRepository Mailbox 영속성 포트 — 승리 시 골드/강화석/드랍 카드 보상을 우편으로 발송
  * @returns 전투 결과(승패, 라운드 로그, 보상)
  * @throws {BusinessException} 검증 실패, 아직 도전 불가능한 스테이지(STAGE_LOCKED), 카드/스테이지
  *   Not Found, 재시도 초과 시 낙관적 락 충돌(COMMON.CONFLICT), 또는 같은 플레이어의 동시
@@ -85,7 +88,11 @@ export async function clearStage(
         await sendMail(
           playerId,
           content.title,
-          { gold: result.rewardGold, enhancementStone: result.rewardEnhancementStone },
+          {
+            gold: result.rewardGold,
+            enhancementStone: result.rewardEnhancementStone,
+            ...(result.rewardCardTemplateId ? { cardTemplateIds: [result.rewardCardTemplateId] } : {}),
+          },
           content.contentType,
           sourceId,
           mailboxRepository,
@@ -136,6 +143,7 @@ function applyClearStage(player: Player, stageId: number, squadCardIds: string[]
         rounds: battle.rounds,
         rewardGold: 0,
         rewardEnhancementStone: 0,
+        rewardCardTemplateId: null,
         expGained: [],
         clearedStage: player.clearedStage,
         gold: player.economy.gold,
@@ -157,6 +165,11 @@ function applyClearStage(player: Player, stageId: number, squadCardIds: string[]
     rewardEnhancementStone = Math.round(amount * rate);
   }
 
+  const cardDropRate = isFirstClear ? stage.cardDropRateFirstClear : stage.cardDropRateFarm;
+  const cardDropTable = masterDataCache.getCardDropTable(stageId);
+  const rewardCardTemplateId =
+    cardDropTable.length > 0 && Math.random() < cardDropRate ? pickWeightedCardTemplate(cardDropTable) : null;
+
   const expPerCard = Math.round(stage.rewardExp * rate);
   const expGained = squad.map(({ card, template }) => {
     const gradeConfig = masterDataCache.getGradeConfig(template.grade);
@@ -174,6 +187,7 @@ function applyClearStage(player: Player, stageId: number, squadCardIds: string[]
       rounds: battle.rounds,
       rewardGold,
       rewardEnhancementStone,
+      rewardCardTemplateId,
       expGained,
       clearedStage: player.clearedStage,
       gold: player.economy.gold,
