@@ -15,6 +15,7 @@ export interface CombatStats {
  * (GAME_DESIGN.md 4절 "레벨 1당 공격력 +2%").
  * @param card 스탯을 계산할 카드
  * @param template 카드 원형(기본 공격력/체력)
+ * @returns 레벨/강화 성장이 반영된 실제 전투 스탯
  * @author trisakion
  */
 export function computeCombatStats(card: Card, template: CardTemplate): CombatStats {

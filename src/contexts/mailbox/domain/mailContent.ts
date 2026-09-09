@@ -18,6 +18,7 @@ export interface MailContentConfig {
   contentType: string;
 }
 
+/** 실사용 발송 트리거 레지스트리 — 새 트리거가 생기면 여기 항목을 추가한다. */
 export const MAIL_CONTENTS = {
   STAGE_CLEAR: { title: "스테이지 클리어 보상", expiryMs: 7 * 24 * 60 * 60 * 1000, contentType: "stage_clear" },
 } as const satisfies Record<string, MailContentConfig>;

@@ -7,11 +7,18 @@ import { config } from "../../../config/env.js";
 // authorization_code 플로우에서만 secret/redirectUri가 쓰인다 — id_token 플로우에선 undefined로 넘어가도 무해하다.
 const client = new OAuth2Client(config.googleClientId, config.googleClientSecret, config.googleRedirectUri);
 
-/** ID 토큰에서 얻는 구글 프로필. `sub` 외 필드는 최초 가입 시 표시용으로만 쓰인다. */
+/**
+ * ID 토큰에서 얻는 구글 프로필. `sub` 외 필드는 최초 가입 시 표시용으로만 쓰인다.
+ * @author trisakion
+ */
 export interface GoogleProfile {
+  /** 구글 고유 사용자 ID — `Player.platformUserId`로 저장되는 값 */
   sub: string;
+  /** 구글 계정 표시 이름 — 최초 가입 시 1회만 가져옴(이후 재동기화 안 함) */
   name?: string;
+  /** 구글 계정 이메일 — 표시용, 최초 가입 시 1회만 가져옴 */
   email?: string;
+  /** 구글 프로필 사진 URL — 최초 가입 시 1회만 가져옴(이후 재동기화 안 함) */
   picture?: string;
 }
 

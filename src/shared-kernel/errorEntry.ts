@@ -12,7 +12,10 @@
  * @author trisakion
  */
 export interface ErrorEntry {
+  /** 응답 `result` 필드에 실리는 도메인 결과 코드 */
   code: number;
+  /** 사용자에게 그대로 노출되는 정제된 메시지(스택트레이스 등 내부 정보 제외) */
   message: string;
+  /** 응답 HTTP 상태 코드 */
   httpStatus: number;
 }

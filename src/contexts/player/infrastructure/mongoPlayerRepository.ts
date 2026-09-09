@@ -11,29 +11,46 @@ import type { PlayerRepository } from "../domain/playerRepository.js";
  * `Card` 엔티티의 MongoDB 저장 형태 — 필드는 같지만 메서드 없는 순수 데이터 셰이프.
  * `export`한 이유: Mailbox 컨텍스트의 ClaimMail 트랜잭션(`MongoMailboxRepository`)이
  * players 컬렉션에 카드를 직접 `$push`할 때 이 형태를 그대로 재사용한다.
+ * @author trisakion
  */
 export interface CardDocument {
+  /** 카드 인스턴스 고유 ID */
   cardId: string;
+  /** 카드 원형 ID(마스터 데이터 `CardTemplate` 참조) */
   templateId: string;
+  /** 카드 레벨 */
   level: number;
+  /** 현재 레벨에서 누적된 EXP */
   exp: number;
+  /** 강화 단계(+0~15) */
   enhancementLevel: number;
 }
 
 /**
  * `Player` 애그리게잇의 MongoDB 저장 형태(`players` 컬렉션 문서 스키마). `export`한 이유는
  * {@link CardDocument}와 동일 — Mailbox의 ClaimMail 트랜잭션이 재사용한다.
+ * @author trisakion
  */
 export interface PlayerDocument {
+  /** 플레이어 ID(`Player.playerId`) */
   _id: string;
+  /** 낙관적 락 버전 */
   version: number;
+  /** 로그인 수단 식별자(예: "google") */
   platformType: string;
+  /** 로그인 플랫폼이 발급한 고유 사용자 ID */
   platformUserId: string;
+  /** 닉네임 */
   name: string;
+  /** 이메일(표시용) */
   email: string;
+  /** 프로필 사진 URL */
   picture?: string;
+  /** 보유 카드 목록 */
   inventory: CardDocument[];
+  /** 보유 재화 */
   economy: { gold: number; enhancementStone: number; diamond: number };
+  /** 클리어한 최대 스테이지 */
   clearedStage: number;
 }
 

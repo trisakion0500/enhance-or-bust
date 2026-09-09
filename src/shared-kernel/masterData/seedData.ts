@@ -25,7 +25,10 @@ const HP_MULTIPLIER = 5;
 /** 템플릿에 순환 배정할 원소(fire/water/grass) 목록. */
 const ELEMENTS: Element[] = ["fire", "water", "grass"];
 
-/** @returns 등급별 10개씩, 등급 공격력 범위에 균등분포한 샘플 카드 원형 40개 */
+/**
+ * @returns 등급별 10개씩, 등급 공격력 범위에 균등분포한 샘플 카드 원형 40개
+ * @author trisakion
+ */
 export function buildCardTemplates(): CardTemplate[] {
   const templates: CardTemplate[] = [];
   for (const grade of Object.keys(ATTACK_RANGE) as Grade[]) {

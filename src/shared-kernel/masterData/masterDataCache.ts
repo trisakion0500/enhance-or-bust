@@ -11,9 +11,12 @@ import type { SynthesisRule } from "../../contexts/synthesis/domain/synthesisRul
 /**
  * `master_data_meta` 컬렉션 문서 형태 — 컨텐츠(컬렉션)당 1개, 폴링 폴백이 이 DB 버전과
  * 캐시가 적재해둔 버전을 비교해 어긋나면 강제 리로드한다.
+ * @author trisakion
  */
 export interface MasterDataMetaDocument {
+  /** 대상 마스터 데이터 컨텐츠(컬렉션 이름) */
   content: MasterDataContent;
+  /** 쓰기 시 `$inc`로 증가하는 버전 — 캐시의 메모리 버전과 비교해 어긋남을 감지하는 용도 */
   version: number;
 }
 

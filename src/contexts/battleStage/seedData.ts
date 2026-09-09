@@ -10,7 +10,10 @@ const MONSTER_GROWTH_RATE = 1.15;
 /** 스테이지마다 순환 배정할 몬스터 원소. */
 const ELEMENTS: Element[] = ["fire", "water", "grass"];
 
-/** @returns 100개 스테이지의 몬스터 스탯(지수 증가)과 보상(선형/확률, 임시값) */
+/**
+ * @returns 100개 스테이지의 몬스터 스탯(지수 증가)과 보상(선형/확률, 임시값)
+ * @author trisakion
+ */
 export function buildStageConfigs(): StageConfig[] {
   const stages: StageConfig[] = [];
   for (let stageId = 1; stageId <= 100; stageId++) {

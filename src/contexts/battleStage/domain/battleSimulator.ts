@@ -57,6 +57,7 @@ export interface BattleResult {
  * 얻는 재미 대비 상태 관리 비용이 커서 지금은 스쿼드 총 체력 하나로 단순화한다.
  * @param squad 출전 카드 목록(1장 이상)
  * @param monster 대상 스테이지의 몬스터 스탯
+ * @returns 승패와 라운드별 진행 로그
  * @author trisakion
  */
 export function simulateBattle(squad: SquadMember[], monster: Monster): BattleResult {
