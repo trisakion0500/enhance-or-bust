@@ -16,10 +16,13 @@
 - DB: MongoDB
 - 캐시: Redis
 - 프론트엔드: 바닐라 JavaScript
+- 아키텍처: DDD (도메인 주도 설계, 7개 바운디드 컨텍스트)
 
 ## 문서
 
 - 상세 기획서: [`docs/design/GAME_DESIGN.md`](./docs/design/GAME_DESIGN.md)
+- 기술 스택 상세: [`docs/architecture/TECH_STACK.md`](./docs/architecture/TECH_STACK.md)
+- API 문서: [`docs/api/API.md`](./docs/api/API.md)
 
 ## 실행 방법
 
@@ -33,6 +36,12 @@ Redis, 구글 OAuth 클라이언트 정보 등).
 | `npm test` | E2E 테스트 실행 (로컬 Mongo/Redis에 실제로 붙어서 검증) |
 | `npm run build` | TypeScript 컴파일 (`dist/`) |
 | `npm start` | 빌드된 결과물 실행 (프로덕션용) |
+
+## API
+
+강화/합성/전투-스테이지/우편은 세션 인증(`sessionToken` 쿠키)이 필요하다. 확률 판정과
+전투 결과는 전부 서버가 직접 계산하며 클라이언트 입력값을 신뢰하지 않는다. 엔드포인트
+전체 목록, 요청/응답 예시, 에러 코드는 [`docs/api/API.md`](./docs/api/API.md) 참고.
 
 ## 현재 상태
 
@@ -50,5 +59,6 @@ Redis, 구글 OAuth 클라이언트 정보 등).
 - [x] 스테이지 클리어 보상(골드/강화석)의 Mailbox 경유 전환(EXP/clearedStage는 즉시 지급 유지)
 - [x] 만료 우편 정리 배치 잡(node-cron, 매월 1일 00시 실행, 인스턴스 중복 실행 방지)
 - [x] Redis 분산 락(강화/합성/전투-스테이지, 플레이어 단위 짧은 TTL, fail-fast)
+- [x] 프론트엔드: 구글 로그인 페이지(`public/index.html`, GIS/Authorization Code Flow 둘 다 대응)
 - [ ] 인벤토리 슬롯 상한
 - [ ] 스테이지 클리어 확률적 카드 드랍
