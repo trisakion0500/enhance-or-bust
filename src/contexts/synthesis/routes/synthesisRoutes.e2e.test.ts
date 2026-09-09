@@ -163,8 +163,11 @@ test("동일 소재 카드를 중복 지정하면 검증 실패로 거부된다"
 });
 
 test("소재 카드 2장을 동시에 두 승급 요청에 겹쳐 쓰면 하나만 성공하고 나머지는 카드 유실 없이 거부된다", async () => {
-  // 같은 소재 카드 1장(materialCardIds[0])을 두 요청 모두에 포함시켜 동시에 쏜다. 낙관적 락 덕에
-  // 둘 다 성공(=카드가 두 번 소모)하는 일은 없어야 하고, DB에 남는 카드 수는 항상 정합적이어야 한다.
+  // 같은 소재 카드 1장(materialCardIds[0])을 두 요청 모두에 포함시켜 동시에 쏜다. Redis 락이
+  // 쓰기를 직렬화하므로 둘 다 성공(=카드가 두 번 소모)하는 일은 없어야 하고, DB에 남는 카드
+  // 수는 항상 정합적이어야 한다. 진 쪽은 락을 못 잡아 즉시 거부(1003)될 수도, 락을 잡았지만
+  // 이긴 쪽이 이미 커밋한 뒤라 소재 카드가 사라져 거부(4001)될 수도 있다 — 타이밍에 따라
+  // 둘 다 가능해서 둘 다 허용한다(둘 다 "이중 처리는 없었다"는 같은 사실을 보장).
   const { playerId, materialCardIds, cookie } = await createTestPlayer(["N_01", "N_01", "N_01", "N_01", "N_01"]);
   try {
     const [resA, resB] = await Promise.all([
@@ -174,9 +177,9 @@ test("소재 카드 2장을 동시에 두 승급 요청에 겹쳐 쓰면 하나�
     const [bodyA, bodyB] = await Promise.all([resA.json(), resB.json()]);
 
     const okCount = [bodyA, bodyB].filter(b => b.result === 0).length;
-    const conflictOrNotFound = [bodyA, bodyB].filter(b => [1002, 4001].includes(b.result)).length;
+    const rejected = [bodyA, bodyB].filter(b => [1002, 1003, 4001].includes(b.result)).length;
     assert.equal(okCount, 1, `겹치는 소재를 쓴 동시 요청 중 하나만 처리돼야 함: ${JSON.stringify([bodyA, bodyB])}`);
-    assert.equal(conflictOrNotFound, 1);
+    assert.equal(rejected, 1);
   } finally {
     await deleteTestPlayer(playerId);
   }

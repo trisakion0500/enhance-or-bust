@@ -3,16 +3,19 @@ import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
 import type { Player } from "../../player/domain/player.js";
 import type { PlayerRepository } from "../../player/domain/playerRepository.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
-
-/** 낙관적 락 충돌 시 재조회 후 재시도할 최대 횟수. Redis 분산 락은 아직 없어(CLAUDE.md 미구현 목록) 애플리케이션 레벨 재시도로 흡수한다. */
-const MAX_OPTIMISTIC_LOCK_RETRIES = 5;
+import { withOptimisticRetry } from "../../../shared-kernel/optimisticPlayerWrite.js";
 
 /** 강화 한 번 시도 결과. */
 export interface EnhanceResult {
+  /** 이번 시도의 강화 성공 여부 */
   success: boolean;
+  /** 카드가 파괴됐는지(+11~15 구간 실패 시에만 10% 확률로 발생) */
   destroyed: boolean;
+  /** 시도 후 카드의 강화 단계(파괴됐으면 시도 직전 단계 그대로) */
   enhancementLevel: number;
+  /** 시도 후 남은 골드 */
   gold: number;
+  /** 시도 후 남은 강화석 */
   enhancementStone: number;
 }
 
@@ -24,24 +27,12 @@ export interface EnhanceResult {
  * @param playerRepository Player 영속성 포트
  * @returns 강화 결과(성공/파괴 여부, 결과 강화 단계, 남은 재화)
  * @throws {BusinessException} 플레이어/카드/마스터데이터 Not Found, 최대 강화 단계 도달, 재화 부족,
- *   또는 재시도 초과 시 낙관적 락 충돌(COMMON.CONFLICT)
+ *   재시도 초과 시 낙관적 락 충돌(COMMON.CONFLICT), 또는 같은 플레이어의 동시 요청으로
+ *   Redis 락을 못 잡으면 COMMON.LOCKED(연타 방지)
  * @author trisakion
  */
 export async function enhanceCard(playerId: string, cardId: string, playerRepository: PlayerRepository): Promise<EnhanceResult> {
-  for (let attempt = 0; attempt < MAX_OPTIMISTIC_LOCK_RETRIES; attempt++) {
-    const player = await playerRepository.findById(playerId);
-    if (!player) throw new BusinessException(ERROR_MAP.COMMON.NOT_FOUND, { playerId });
-
-    const result = applyEnhanceAttempt(player, cardId);
-    try {
-      await playerRepository.save(player);
-      return result;
-    } catch (err) {
-      if (!(err instanceof BusinessException) || err.entry !== ERROR_MAP.COMMON.CONFLICT) throw err;
-    }
-  }
-
-  throw new BusinessException(ERROR_MAP.COMMON.CONFLICT, { playerId, cardId });
+  return withOptimisticRetry(playerId, playerRepository, player => applyEnhanceAttempt(player, cardId));
 }
 
 /**

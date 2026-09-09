@@ -49,6 +49,6 @@ Redis, 구글 OAuth 클라이언트 정보 등).
 - [x] Mailbox 도메인(SendMail 멱등 발송, ClaimMail 트랜잭션 수령) API + E2E 테스트
 - [x] 스테이지 클리어 보상(골드/강화석)의 Mailbox 경유 전환(EXP/clearedStage는 즉시 지급 유지)
 - [x] 만료 우편 정리 배치 잡(node-cron, 매월 1일 00시 실행, 인스턴스 중복 실행 방지)
-- [ ] Redis 분산 락
+- [x] Redis 분산 락(강화/합성/전투-스테이지, 플레이어 단위 짧은 TTL, fail-fast)
 - [ ] 인벤토리 슬롯 상한
 - [ ] 스테이지 클리어 확률적 카드 드랍

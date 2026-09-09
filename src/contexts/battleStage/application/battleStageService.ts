@@ -4,6 +4,7 @@ import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
 import type { Player } from "../../player/domain/player.js";
 import type { PlayerRepository } from "../../player/domain/playerRepository.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
+import { withOptimisticRetry } from "../../../shared-kernel/optimisticPlayerWrite.js";
 import { addExp } from "../../player/domain/progression.js";
 import { computeCombatStats } from "../domain/combatStats.js";
 import { simulateBattle } from "../domain/battleSimulator.js";
@@ -11,9 +12,6 @@ import type { RoundLog } from "../domain/battleSimulator.js";
 import type { MailboxRepository } from "../../mailbox/domain/mailboxRepository.js";
 import { sendMail } from "../../mailbox/application/mailboxService.js";
 import { MAIL_CONTENTS } from "../../mailbox/domain/mailContent.js";
-
-/** 낙관적 락 충돌 시 재조회 후 재시도할 최대 횟수(강화/합성 API와 동일한 정책). */
-const MAX_OPTIMISTIC_LOCK_RETRIES = 5;
 
 /** 출전 스쿼드 최대 장수 — 초기 표준값(TBD). */
 const SQUAD_MAX_SIZE = 5;
@@ -60,7 +58,8 @@ export interface ClearStageResult {
  * @param mailboxRepository Mailbox 영속성 포트 — 승리 시 골드/강화석 보상을 우편으로 발송
  * @returns 전투 결과(승패, 라운드 로그, 보상)
  * @throws {BusinessException} 검증 실패, 아직 도전 불가능한 스테이지(STAGE_LOCKED), 카드/스테이지
- *   Not Found, 또는 재시도 초과 시 낙관적 락 충돌(COMMON.CONFLICT)
+ *   Not Found, 재시도 초과 시 낙관적 락 충돌(COMMON.CONFLICT), 또는 같은 플레이어의 동시
+ *   요청으로 Redis 락을 못 잡으면 COMMON.LOCKED(연타 방지)
  * @author trisakion
  */
 export async function clearStage(
@@ -74,16 +73,14 @@ export async function clearStage(
   // 처리가 재시도로 인한 중복 발송을 막아주려면 시도마다 새 값이면 안 된다.
   const sourceId = randomUUID();
 
-  for (let attempt = 0; attempt < MAX_OPTIMISTIC_LOCK_RETRIES; attempt++) {
-    const player = await playerRepository.findById(playerId);
-    if (!player) throw new BusinessException(ERROR_MAP.COMMON.NOT_FOUND, { playerId });
-
-    const { result, mutated } = applyClearStage(player, stageId, squadCardIds);
-    if (!mutated) return result;
-
-    try {
-      await playerRepository.save(player);
-      if (result.won) {
+  const { result } = await withOptimisticRetry(
+    playerId,
+    playerRepository,
+    player => applyClearStage(player, stageId, squadCardIds),
+    {
+      shouldSave: ({ mutated }) => mutated, // 패배(상태 변경 없음)는 저장 자체를 생략
+      onSaved: async ({ result }) => {
+        if (!result.won) return;
         const content = MAIL_CONTENTS.STAGE_CLEAR;
         await sendMail(
           playerId,
@@ -94,14 +91,10 @@ export async function clearStage(
           mailboxRepository,
           content.expiryMs,
         );
-      }
-      return result;
-    } catch (err) {
-      if (!(err instanceof BusinessException) || err.entry !== ERROR_MAP.COMMON.CONFLICT) throw err;
-    }
-  }
-
-  throw new BusinessException(ERROR_MAP.COMMON.CONFLICT, { playerId, stageId });
+      },
+    },
+  );
+  return result;
 }
 
 /**

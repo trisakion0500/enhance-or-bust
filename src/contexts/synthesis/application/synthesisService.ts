@@ -5,10 +5,8 @@ import { Card } from "../../player/domain/card.js";
 import type { Player } from "../../player/domain/player.js";
 import type { PlayerRepository } from "../../player/domain/playerRepository.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
+import { withOptimisticRetry } from "../../../shared-kernel/optimisticPlayerWrite.js";
 import type { GradeUpgradeSynthesisRule, EnhanceMaterialSynthesisRule } from "../domain/synthesisRule.js";
-
-/** 낙관적 락 충돌 시 재조회 후 재시도할 최대 횟수(강화 API와 동일한 정책, enhancementService.ts 참고). */
-const MAX_OPTIMISTIC_LOCK_RETRIES = 5;
 
 /** 등급 승급 합성 결과. 실패 시 소재 1장만 소모되고 나머지는 인벤토리에 그대로 남는다(GAME_DESIGN.md 3절). */
 export interface GradeUpgradeResult {
@@ -31,7 +29,8 @@ export interface EnhanceMaterialResult {
  * @param playerRepository Player 영속성 포트
  * @returns 승급 결과(성공 시 결과 카드 ID/원형 포함)
  * @throws {BusinessException} 검증 실패, 카드/마스터데이터 Not Found, 승급 가능한 상위 등급 없음,
- *   또는 재시도 초과 시 낙관적 락 충돌(COMMON.CONFLICT)
+ *   재시도 초과 시 낙관적 락 충돌(COMMON.CONFLICT), 또는 같은 플레이어의 동시 요청으로
+ *   Redis 락을 못 잡으면 COMMON.LOCKED(연타 방지)
  * @author trisakion
  */
 export async function synthesizeGradeUpgrade(
@@ -51,7 +50,8 @@ export async function synthesizeGradeUpgrade(
  * @param playerRepository Player 영속성 포트
  * @returns 결과 강화 단계와 남은 골드
  * @throws {BusinessException} 검증 실패, 카드/마스터데이터 Not Found, 이미 최대 강화 단계,
- *   재화 부족, 또는 재시도 초과 시 낙관적 락 충돌(COMMON.CONFLICT)
+ *   재화 부족, 재시도 초과 시 낙관적 락 충돌(COMMON.CONFLICT), 또는 같은 플레이어의 동시
+ *   요청으로 Redis 락을 못 잡으면 COMMON.LOCKED(연타 방지)
  * @author trisakion
  */
 export async function synthesizeEnhanceMaterial(
@@ -61,24 +61,6 @@ export async function synthesizeEnhanceMaterial(
   playerRepository: PlayerRepository,
 ): Promise<EnhanceMaterialResult> {
   return withOptimisticRetry(playerId, playerRepository, player => applyEnhanceMaterial(player, targetCardId, materialCardIds));
-}
-
-/** 낙관적 락 재조회·재시도 루프 — 두 합성 경로가 공통으로 쓴다(enhancementService.ts의 enhanceCard와 동일 패턴). */
-async function withOptimisticRetry<T>(playerId: string, playerRepository: PlayerRepository, apply: (player: Player) => T): Promise<T> {
-  for (let attempt = 0; attempt < MAX_OPTIMISTIC_LOCK_RETRIES; attempt++) {
-    const player = await playerRepository.findById(playerId);
-    if (!player) throw new BusinessException(ERROR_MAP.COMMON.NOT_FOUND, { playerId });
-
-    const result = apply(player);
-    try {
-      await playerRepository.save(player);
-      return result;
-    } catch (err) {
-      if (!(err instanceof BusinessException) || err.entry !== ERROR_MAP.COMMON.CONFLICT) throw err;
-    }
-  }
-
-  throw new BusinessException(ERROR_MAP.COMMON.CONFLICT, { playerId });
 }
 
 /** 소재 카드 ID 목록을 조회해 카드 엔티티 배열로 반환한다. 중복 ID나 미보유 카드는 검증 실패로 처리한다. */

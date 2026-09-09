@@ -141,12 +141,14 @@ test("세션 쿠키 없이 요청하면 401로 거부된다", async () => {
   }
 });
 
-test("동시 강화 요청은 손실 없이 순차 실행과 동일한 결과로 수렴한다(낙관적 락 재시도, TOCTOU 방지)", async () => {
-  // N등급 카드(+0~5, 100% 성공)라 결과가 확률에 안 흔들린다 — 동시 요청 8개를 던지면
-  // 카드가 최대 강화 단계(+5)에 도달할 때까지만 성공하고(딱 5번), 나머지는 최대 단계 도달
-  // (3002) 또는 낙관적 락 재시도 초과(1002) 중 하나로 끝나야 한다. 어느 요청이 어느 결과를
-  // 받든, "몇 번 성공했는지 · 최종 강화 단계 · 차감된 재화"는 순차 실행했을 때와 같아야
-  // 한다 — 이게 달라지면 동시 요청 중 일부가 유실되거나 이중 반영됐다는 뜻이다.
+test("동시 강화 요청은 Redis 락으로 직렬화되고, 잡지 못한 요청은 즉시 거부된다(연타 방지) — 성공한 만큼만 정확히 반영된다", async () => {
+  // N등급 카드(+0~5, 100% 성공)라 결과가 확률에 안 흔들린다 — 동시 요청 8개를 던지면 락을
+  // 잡은 요청만 순서대로 처리되고(성공, 최대 5번), 락을 못 잡은 요청은 즉시 1003(LOCKED)으로
+  // 거부된다. 락 대기 예산 안에 여러 요청이 순서대로 락을 잡을 수도 있어(타이밍에 따라 다름)
+  // 성공 횟수 자체는 고정값으로 단언하지 않되, 락을 잡고도 실패하는 경우는 이미 상한(+5)에
+  // 도달한 뒤였을 때(3002)뿐이어야 한다 — 쓰기가 락으로 직렬화되므로 낙관적 락 재시도 초과
+  // (1002)는 더 이상 나오면 안 된다. 최종적으로 "성공 횟수 · 강화 단계 · 차감된 재화"가
+  // 서로 정확히 들어맞아야 유실/이중 반영이 없다는 뜻이다.
   const CONCURRENT_REQUESTS = 8;
   const { playerId, cardId, cookie } = await createTestPlayer(0);
   try {
@@ -158,14 +160,15 @@ test("동시 강화 요청은 손실 없이 순차 실행과 동일한 결과로
 
     const successes = responses.filter(body => body.success === true);
     const failures = responses.filter(body => body.success !== true);
-    assert.equal(successes.length, 5, `성공 횟수는 강화 상한(+5)만큼만 나와야 함: ${JSON.stringify(responses)}`);
-    for (const body of failures) assert.ok([1002, 3002].includes(body.result), `예상 못한 에러 코드: ${JSON.stringify(body)}`);
+    assert.ok(successes.length >= 1 && successes.length <= 5, `성공 횟수가 범위를 벗어남: ${JSON.stringify(responses)}`);
+    for (const body of failures) assert.ok([1003, 3002].includes(body.result), `예상 못한 에러 코드: ${JSON.stringify(body)}`);
 
     const player = await readPlayer(playerId);
     const card = player!.inventory.find(c => c.cardId === cardId)!;
-    assert.equal(card.enhancementLevel, 5);
-    assert.equal(player!.economy.gold, 1_000_000 - 100 * (1 + 2 + 3 + 4 + 5));
-    assert.equal(player!.economy.enhancementStone, 1_000_000 - 5);
+    assert.equal(card.enhancementLevel, successes.length);
+    const totalGoldCost = (100 * (successes.length * (successes.length + 1))) / 2;
+    assert.equal(player!.economy.gold, 1_000_000 - totalGoldCost);
+    assert.equal(player!.economy.enhancementStone, 1_000_000 - successes.length);
   } finally {
     await deleteTestPlayer(playerId);
   }
