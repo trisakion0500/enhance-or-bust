@@ -20,6 +20,7 @@ interface MailDocument {
   createdAt: Date;
   expiresAt: Date;
   claimedAt: Date | null;
+  deletedAt: Date | null;
 }
 
 /**
@@ -60,7 +61,7 @@ export class MongoMailboxRepository implements MailboxRepository {
 
   async findByPlayer(playerId: string): Promise<Mail[]> {
     const docs = await this.mailboxCollection
-      .find({ playerId, expiresAt: { $gt: new Date() } })
+      .find({ playerId, expiresAt: { $gt: new Date() }, deletedAt: null })
       .sort({ createdAt: -1 })
       .toArray();
     return docs.map(MongoMailboxRepository.toDomain);
@@ -124,6 +125,16 @@ export class MongoMailboxRepository implements MailboxRepository {
     }
   }
 
+  async deleteMail(mailId: string, playerId: string): Promise<void> {
+    const mailDoc = await this.mailboxCollection.findOne({ _id: mailId });
+    if (!mailDoc || mailDoc.playerId !== playerId)
+      throw new BusinessException(ERROR_MAP.MAILBOX.NOT_FOUND, { mailId, playerId });
+    if (!mailDoc.claimedAt)
+      throw new BusinessException(ERROR_MAP.MAILBOX.NOT_CLAIMED, { mailId });
+
+    await this.mailboxCollection.updateOne({ _id: mailId }, { $set: { deletedAt: new Date() } });
+  }
+
   async deleteExpiredBefore(cutoff: Date): Promise<number> {
     const result = await this.mailboxCollection.deleteMany({ expiresAt: { $lt: cutoff } });
     return result.deletedCount;
@@ -134,7 +145,7 @@ export class MongoMailboxRepository implements MailboxRepository {
    * @returns 매핑된 도메인 엔티티
    */
   private static toDomain(doc: MailDocument): Mail {
-    return new Mail(doc._id, doc.playerId, doc.title, doc.attachments, doc.sourceType, doc.sourceId, doc.createdAt, doc.expiresAt, doc.claimedAt);
+    return new Mail(doc._id, doc.playerId, doc.title, doc.attachments, doc.sourceType, doc.sourceId, doc.createdAt, doc.expiresAt, doc.claimedAt, doc.deletedAt);
   }
 
   /**
@@ -152,6 +163,7 @@ export class MongoMailboxRepository implements MailboxRepository {
       createdAt: mail.createdAt,
       expiresAt: mail.expiresAt,
       claimedAt: mail.claimedAt,
+      deletedAt: mail.deletedAt,
     };
   }
 }

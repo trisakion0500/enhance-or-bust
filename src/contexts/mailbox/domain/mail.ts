@@ -37,6 +37,8 @@ export class Mail {
    * @param createdAt 발송 시각
    * @param expiresAt 만료 시각(발송 시각 + 컨텐츠별 만료 시간) — 이후로는 목록/수령 모두 차단
    * @param claimedAt 수령 시각, 아직 수령 전이면 null
+   * @param deletedAt 삭제(숨김) 시각, 아직 삭제 전이면 null — 실제 삭제가 아니라 목록/조회에서
+   *   제외하는 플래그일 뿐이다(수령한 우편만 삭제 가능, mailboxService.ts 참고)
    */
   constructor(
     public readonly mailId: string,
@@ -48,5 +50,6 @@ export class Mail {
     public readonly createdAt: Date,
     public readonly expiresAt: Date,
     public claimedAt: Date | null = null,
+    public deletedAt: Date | null = null,
   ) {}
 }

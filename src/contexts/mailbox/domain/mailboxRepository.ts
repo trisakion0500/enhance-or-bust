@@ -22,7 +22,7 @@ export interface MailboxRepository {
 
   /**
    * @param playerId 조회할 플레이어 ID
-   * @returns 해당 플레이어의 만료되지 않은 우편 목록(최신순)
+   * @returns 해당 플레이어의 만료되지 않고 삭제되지 않은 우편 목록(최신순)
    */
   findByPlayer(playerId: string): Promise<Mail[]>;
 
@@ -36,6 +36,16 @@ export interface MailboxRepository {
    *   상한을 초과하면 MAILBOX.INVENTORY_FULL(이 경우 우편은 미수령 상태 그대로 남는다)
    */
   claimMail(mailId: string, playerId: string): Promise<Mail>;
+
+  /**
+   * 우편을 목록/조회에서 안 보이게 삭제(숨김) 플래그를 켠다 — 실제 문서 삭제가 아니라 `deletedAt`
+   * 설정. 수령 전 우편은 첨부물을 잃을 수 있어 삭제를 막는다.
+   * @param mailId 삭제할 우편 ID
+   * @param playerId 삭제를 시도하는 플레이어 ID(소유자 검증에 쓰인다)
+   * @throws {BusinessException} 우편이 없거나 소유자가 아니면 MAILBOX.NOT_FOUND, 아직 수령 전이면
+   *   MAILBOX.NOT_CLAIMED
+   */
+  deleteMail(mailId: string, playerId: string): Promise<void>;
 
   /** (sourceType, sourceId) 유니크 인덱스와 playerId 조회용 인덱스를 생성한다. 이미 있으면 무해한 멱등 연산. */
   ensureIndexes(): Promise<void>;

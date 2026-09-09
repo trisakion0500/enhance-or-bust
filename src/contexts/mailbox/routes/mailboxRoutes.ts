@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { claimMail, listMails } from "../application/mailboxService.js";
+import { claimMail, deleteMail, listMails } from "../application/mailboxService.js";
 import { asyncHandler } from "../../../shared-kernel/errorHandler.js";
 import { requireAuth } from "../../../shared-kernel/sessionAuth.js";
 import type { MailboxRepository } from "../domain/mailboxRepository.js";
@@ -24,6 +24,11 @@ export function createMailboxRoutes(mailboxRepository: MailboxRepository): Route
   router.post("/mailbox/:mailId/claim", asyncHandler(async (req, res) => {
     const mail = await claimMail(req.playerId, req.params.mailId, mailboxRepository);
     res.json({ result: 0, mail });
+  }));
+
+  router.delete("/mailbox/:mailId", asyncHandler(async (req, res) => {
+    await deleteMail(req.playerId, req.params.mailId, mailboxRepository);
+    res.json({ result: 0 });
   }));
 
   return router;

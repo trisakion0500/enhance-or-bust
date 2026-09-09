@@ -64,3 +64,16 @@ export async function listMails(playerId: string, mailboxRepository: MailboxRepo
 export async function claimMail(playerId: string, mailId: string, mailboxRepository: MailboxRepository): Promise<Mail> {
   return mailboxRepository.claimMail(mailId, playerId);
 }
+
+/**
+ * 우편을 목록에서 삭제(숨김)한다. 수령 전 우편은 첨부물을 잃을 수 있어 삭제를 막는다.
+ * @param playerId 삭제를 시도하는 플레이어
+ * @param mailId 삭제할 우편 ID
+ * @param mailboxRepository Mailbox 영속성 포트
+ * @throws {BusinessException} 우편이 없거나 소유자가 아니면 MAILBOX.NOT_FOUND, 아직 수령 전이면
+ *   MAILBOX.NOT_CLAIMED
+ * @author trisakion
+ */
+export async function deleteMail(playerId: string, mailId: string, mailboxRepository: MailboxRepository): Promise<void> {
+  await mailboxRepository.deleteMail(mailId, playerId);
+}

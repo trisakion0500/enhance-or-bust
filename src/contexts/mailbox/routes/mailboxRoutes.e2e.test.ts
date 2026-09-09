@@ -99,6 +99,11 @@ async function claimMail(mailId: string, cookie: string) {
   return { res, body: await res.json() };
 }
 
+async function deleteMailReq(mailId: string, cookie: string) {
+  const res = await fetch(`${baseUrl}/mailbox/${mailId}`, { method: "DELETE", headers: { Cookie: cookie } });
+  return { res, body: await res.json() };
+}
+
 test("발송된 우편이 목록에 나타나고, 수령하면 골드/강화석/카드가 지급된다", async () => {
   const { playerId, cookie } = await createTestPlayer();
   try {
@@ -228,6 +233,43 @@ test("인벤토리가 상한 바로 아래일 때 카드 1장 수령은 상한�
 
     const player = await readPlayer(playerId);
     assert.equal(player!.inventory.length, config.inventorySlotCap);
+  } finally {
+    await deleteTestPlayer(playerId);
+  }
+});
+
+test("수령한 우편을 삭제하면 목록에서 사라진다", async () => {
+  const { playerId, cookie } = await createTestPlayer();
+  try {
+    await sendMail(playerId, "테스트 우편", { gold: 10 }, "test", randomUUID(), mailboxRepository);
+    const { body: listBody } = await listMails(cookie);
+    const mailId = listBody.mails[0].mailId;
+
+    await claimMail(mailId, cookie);
+    const { res, body } = await deleteMailReq(mailId, cookie);
+    assert.equal(res.status, 200);
+    assert.equal(body.result, 0);
+
+    const { body: listAfter } = await listMails(cookie);
+    assert.equal(listAfter.mails.length, 0);
+  } finally {
+    await deleteTestPlayer(playerId);
+  }
+});
+
+test("미수령 우편을 삭제하려 하면 409/7005로 거부된다", async () => {
+  const { playerId, cookie } = await createTestPlayer();
+  try {
+    await sendMail(playerId, "테스트 우편", { gold: 10 }, "test", randomUUID(), mailboxRepository);
+    const { body: listBody } = await listMails(cookie);
+    const mailId = listBody.mails[0].mailId;
+
+    const { res, body } = await deleteMailReq(mailId, cookie);
+    assert.equal(res.status, 409);
+    assert.equal(body.result, 7005);
+
+    const { body: listAfter } = await listMails(cookie);
+    assert.equal(listAfter.mails.length, 1); // 여전히 목록에 남아있음
   } finally {
     await deleteTestPlayer(playerId);
   }
