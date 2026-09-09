@@ -32,6 +32,11 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   강화/합성 연타)
 - 랭킹/리더보드(Sorted Set)는 현재 기획 범위 밖 — 랭킹 컨텐츠 추가 시 확장,
   지금 구현 대상 아님
+- 모든 Redis 키는 `shared-kernel/redisKeys.ts`의 빌더 함수(`redisSessionKey()`/
+  `redisLockKey()`)로만
+  만든다 — 호출부마다 `config.redisKeyPrefix`를 직접 붙이면 새 키 추가 시 프리픽스를
+  빠뜨리는 실수가 나올 수 있어 한 곳으로 모음. 새 Redis 용도가 추가되면 이 파일에 빌더
+  함수를 먼저 추가하고 재사용한다
 
 ## 로깅 설정 (확정)
 
@@ -181,7 +186,7 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   명시적으로 도는 정리다. cutoff는 실행 시각(`now`)에서 개월 수를 빼지 않고 "이번 달
   1일 00:00:00.000"을 기준점으로 고정한 뒤 개월 수만 빼서 계산 — 크론이 지연 발동해도
   cutoff가 실행 시각에 흔들리지 않게 함. 인스턴스 다중화 대비 중복 실행 방지는 Redis 분산락 대신
-  `batch_runs` 컬렉션에 `{jobName}:{period}`를 `_id`로 유니크 삽입하는 방식(멱등
+  `system_batch_runs` 컬렉션에 `{jobName}:{period}`를 `_id`로 유니크 삽입하는 방식(멱등
   발송과 동일 원리) — 서버 종료 시 `mailboxCleanupTask.stop()`으로 크론도 함께
   정지)까지 구현됨. Redis 분산락(강화/합성/전투-스테이지 대상, 우편(Mailbox)의
   `claimMail()`은 대상 아님 — `$inc` 원자 증가만 써서 애초에 재시도 루프 자체가 없어
@@ -284,7 +289,10 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
 - 컨텐츠별 별도 컬렉션 분리: `master_card_templates`, `master_grade_configs`,
   `master_enhancement_rules`, `master_synthesis_rules`, `master_stage_configs`,
   `master_stage_card_drops` 등(컨텐츠 종류 증가를 전제) — `master_` 프리픽스로 런타임
-  쓰기 컬렉션(players, mailbox)과 구분한다
+  쓰기 컬렉션(players, mailbox)과 구분한다. 게임 콘텐츠도 플레이어 데이터도 아닌 서버
+  내부 운영 상태(Change Stream resume token, 배치 중복실행 방지 마커 등)는 `system_`
+  프리픽스로 별도 구분한다(`system_change_stream_state`, `system_batch_runs`) — 세
+  카테고리(콘텐츠/플레이어/시스템)를 프리픽스만 보고 바로 구분할 수 있게 하기 위함
 - 이 분리 원칙은 스테이지 문서 내부 배열도 예외가 아니다: 카드 드랍 테이블은 처음에
   `master_stage_configs` 문서 안에 배열(`cardDropTable`)로 넣었다가, "행 단위로 늘어나는
   데이터는 운영툴 엑셀 업로드/개별 관리가 쉽도록 별도 컬렉션으로 분리한다"는 판단에 따라
@@ -299,7 +307,7 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
 - 각 컨텐츠(컬렉션) 문서는 자체 `version` 필드를 독립적으로 가짐. 여러 컨텐츠의
   버전을 하나의 합성 버전 문자열로 합치지 않음 (결합도만 높아지고 실익 없음)
   - DB 버전 저장 위치는 별도 `master_data_meta` 컬렉션(`{content, version}` 1문서씩,
-    쓰기 시 `$inc`). resume token은 `change_stream_state` 컬렉션(단일 문서)에 저장
+    쓰기 시 `$inc`). resume token은 `system_change_stream_state` 컬렉션(단일 문서)에 저장
 - 안전망: Change Stream은 at-most-once push이며 콜백 처리 오류나 connection 끊김
   시 이벤트를 놓칠 수 있음
   - 콜백은 try/catch로 감싸서 이벤트 하나의 처리 실패가 스트림 전체를 죽이지 않게 함

@@ -28,7 +28,7 @@ after(async () => {
 /** 테스트가 만든 우편/실행 마커를 지운다. */
 async function cleanup(playerId: string, period: string) {
   await db.collection("mailbox").deleteMany({ playerId });
-  await db.collection<{ _id: string }>("batch_runs").deleteMany({ _id: { $eq: `mailbox_cleanup:${period}` } });
+  await db.collection<{ _id: string }>("system_batch_runs").deleteMany({ _id: { $eq: `mailbox_cleanup:${period}` } });
 }
 
 test("retentionMonths보다 오래 전에 만료된 우편은 수령 여부와 무관하게 삭제된다", async () => {
@@ -61,7 +61,7 @@ test("같은 실행 주기는 두 번째 인스턴스가 실행권을 선점하�
     assert.equal(await tryClaimBatchRun(db, "mailbox_cleanup", period), true);
     assert.equal(await tryClaimBatchRun(db, "mailbox_cleanup", period), false);
   } finally {
-    await db.collection<{ _id: string }>("batch_runs").deleteMany({ _id: { $eq: `mailbox_cleanup:${period}` } });
+    await db.collection<{ _id: string }>("system_batch_runs").deleteMany({ _id: { $eq: `mailbox_cleanup:${period}` } });
   }
 });
 

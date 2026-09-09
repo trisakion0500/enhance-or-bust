@@ -7,7 +7,7 @@ import { logger } from "../../infra/logger.js";
 import type { MasterDataMetaDocument } from "./masterDataCache.js";
 import { masterDataCache } from "./masterDataCache.js";
 
-/** `change_stream_state` 컬렉션 문서 — 마스터 데이터 워처의 resume token을 단일 문서로 보관한다. */
+/** `system_change_stream_state` 컬렉션 문서 — 마스터 데이터 워처의 resume token을 단일 문서로 보관한다. */
 interface ChangeStreamStateDocument {
   _id: "masterData";
   resumeToken: unknown;
@@ -25,13 +25,13 @@ let retryDelayMs = 0;
  *
  * 스케일아웃 시에도 인스턴스별 락 없이 각자 독립 실행한다 — Change Stream은 oplog를 각
  * 커넥션이 독립적으로 tailing하는 방식이라(경쟁 소비자 큐 아님) 인스턴스 N개가 같은
- * 이벤트를 전부 각자 받는다. `change_stream_state`의 resumeToken을 여러 인스턴스가 동시에
+ * 이벤트를 전부 각자 받는다. `system_change_stream_state`의 resumeToken을 여러 인스턴스가 동시에
  * 덮어써 경합이 나도, `reload()`가 매번 컬렉션 전체를 재조회하므로 무해하다.
  * @param db 메인 앱 DB 핸들
  * @author trisakion
  */
 export async function startMasterDataWatch(db: Db): Promise<void> {
-  const stateCollection = db.collection<ChangeStreamStateDocument>("change_stream_state");
+  const stateCollection = db.collection<ChangeStreamStateDocument>("system_change_stream_state");
   const state = await stateCollection.findOne({ _id: "masterData" });
   const pipeline = [{ $match: { "ns.coll": { $in: [...MASTER_DATA_CONTENTS] } } }];
 

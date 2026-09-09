@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { config } from "../config/env.js";
 import { redisClient } from "../infra/redis.js";
 import { BusinessException } from "./businessException.js";
 import { ERROR_MAP } from "./errorMap.js";
+import { redisLockKey } from "./redisKeys.js";
 
 /** 락 유지 시간 — 락 안에서 도는 낙관적 재시도 루프(최대 5회) 전체를 여유 있게 커버한다. */
 const LOCK_TTL_MS = 5000;
@@ -39,7 +39,7 @@ function sleep(ms: number): Promise<void> {
  * @author trisakion
  */
 export async function withPlayerLock<T>(playerId: string, fn: () => Promise<T>): Promise<T> {
-  const key = `${config.redisKeyPrefix}lock:player:${playerId}`;
+  const key = redisLockKey(playerId);
   const token = randomUUID();
   let acquired = false;
 

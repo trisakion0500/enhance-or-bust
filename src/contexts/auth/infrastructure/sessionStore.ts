@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { config } from "../../../config/env.js";
 import { redisClient } from "../../../infra/redis.js";
-
-const SESSION_KEY_PREFIX = config.redisKeyPrefix + "session:";
+import { redisSessionKey } from "../../../shared-kernel/redisKeys.js";
 
 /**
  * 세션 토큰을 발급해 Redis에 `playerId`와 함께 TTL로 저장한다(CLAUDE.md에 확정된 "세션/인증
@@ -14,7 +13,7 @@ const SESSION_KEY_PREFIX = config.redisKeyPrefix + "session:";
  */
 export async function createSession(playerId: string): Promise<string> {
   const token = randomUUID();
-  await redisClient.set(SESSION_KEY_PREFIX + token, playerId, { EX: config.sessionTtlSec });
+  await redisClient.set(redisSessionKey(token), playerId, { EX: config.sessionTtlSec });
   return token;
 }
 
@@ -24,6 +23,6 @@ export async function createSession(playerId: string): Promise<string> {
  * @returns 해당 세션의 playerId, 없거나 만료됐으면 undefined
  */
 export async function resolveSession(token: string): Promise<string | undefined> {
-  const playerId = await redisClient.get(SESSION_KEY_PREFIX + token);
+  const playerId = await redisClient.get(redisSessionKey(token));
   return playerId ?? undefined;
 }
