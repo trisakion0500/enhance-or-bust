@@ -25,4 +25,8 @@ export const config = {
   /** authorization_code 플로우 전용 — 구글 콘솔에 등록한 redirect URI와 정확히 일치해야 함. */
   googleRedirectUri: process.env.GOOGLE_REDIRECT_URI,
   sessionTtlSec: Number(process.env.SESSION_TTL_SEC ?? 7 * 24 * 60 * 60),
+  /** 만료 우편 정리 배치 스케줄(cron 표현식). 기본값: 매월 1일 00시. */
+  mailboxCleanupCron: process.env.MAILBOX_CLEANUP_CRON ?? "0 0 1 * *",
+  /** 만료된 지 이 개월 수보다 오래된 우편만 정리 배치 삭제 대상(수령 여부 무관). */
+  mailboxCleanupRetentionMonths: Number(process.env.MAILBOX_CLEANUP_RETENTION_MONTHS ?? 3),
 };

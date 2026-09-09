@@ -38,4 +38,13 @@ export interface MailboxRepository {
 
   /** (sourceType, sourceId) 유니크 인덱스와 playerId 조회용 인덱스를 생성한다. 이미 있으면 무해한 멱등 연산. */
   ensureIndexes(): Promise<void>;
+
+  /**
+   * 만료 시각이 cutoff 이전인 우편을 수령 여부와 무관하게 전부 삭제한다(만료 우편 정리 배치 전용
+   * — CLAUDE.md "우편 자동삭제 금지"는 TTL 인덱스로 즉시/암묵적 삭제하지 않는다는 뜻이지, 이렇게
+   * 명시적 배치가 오래된 만료건을 정리하는 것까지 막지는 않는다).
+   * @param cutoff 이 시각 이전에 만료된 우편만 삭제 대상
+   * @returns 삭제된 우편 수
+   */
+  deleteExpiredBefore(cutoff: Date): Promise<number>;
 }

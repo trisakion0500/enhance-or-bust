@@ -114,6 +114,11 @@ export class MongoMailboxRepository implements MailboxRepository {
     }
   }
 
+  async deleteExpiredBefore(cutoff: Date): Promise<number> {
+    const result = await this.mailboxCollection.deleteMany({ expiresAt: { $lt: cutoff } });
+    return result.deletedCount;
+  }
+
   /**
    * @param doc DB에서 읽은 원본 문서
    * @returns 매핑된 도메인 엔티티
