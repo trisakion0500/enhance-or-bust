@@ -1,4 +1,4 @@
-import { apiPost } from "./api.js";
+import { apiPost, escapeHtml } from "./api.js";
 
 /**
  * 전투 탭 — 스테이지 번호 + 출전 스쿼드(최대 5장)를 골라 `POST /battle-stage/:id/clear`를
@@ -13,7 +13,7 @@ export function renderBattle(state, refreshPlayer) {
   const nextStage = clearedStage + 1;
 
   const checkboxes = inventory
-    .map(c => `<label><input type="checkbox" name="squad" value="${c.cardId}"> ${c.templateId}(Lv${c.level}, ${c.grade})</label>`)
+    .map(c => `<label><input type="checkbox" name="squad" value="${escapeHtml(c.cardId)}"> ${escapeHtml(c.templateId)}(Lv${c.level}, ${escapeHtml(c.grade)})</label>`)
     .join("<br>");
 
   panel.innerHTML = `

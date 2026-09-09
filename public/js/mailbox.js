@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from "./api.js";
+import { apiGet, apiPost, escapeHtml } from "./api.js";
 
 /**
  * 우편함 탭 — `GET /mailbox` 목록을 렌더하고, 각 미수령 우편에 수령 버튼을 붙인다. 수령 성공 시
@@ -21,9 +21,9 @@ export async function renderMailbox(_state, refreshPlayer) {
     .map(
       mail => `
     <div class="mail">
-      <p>${mail.title} — ${mail.claimedAt ? "수령 완료" : "미수령"}</p>
-      <p>${JSON.stringify(mail.attachments)}</p>
-      ${mail.claimedAt ? "" : `<button type="button" class="claimButton" data-mail-id="${mail.mailId}">수령</button>`}
+      <p>${escapeHtml(mail.title)} — ${mail.claimedAt ? "수령 완료" : "미수령"}</p>
+      <p>${escapeHtml(JSON.stringify(mail.attachments))}</p>
+      ${mail.claimedAt ? "" : `<button type="button" class="claimButton" data-mail-id="${escapeHtml(mail.mailId)}">수령</button>`}
       <p class="claimMessage"></p>
     </div>
   `,

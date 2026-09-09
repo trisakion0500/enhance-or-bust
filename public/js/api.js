@@ -39,3 +39,16 @@ export function apiGet(path) {
 export function apiPost(path, body) {
   return request(path, { method: "POST", body: body !== undefined ? JSON.stringify(body) : undefined });
 }
+
+/**
+ * HTML/속성 컨텍스트에 안전하게 넣기 위해 &,<,>,",'를 이스케이프한다.
+ * @param {unknown} value 임의의 값(문자열이 아니면 String()으로 변환 후 처리)
+ * @returns {string} 이스케이프된 문자열
+ * @author trisakion
+ */
+export function escapeHtml(value) {
+  return String(value).replace(
+    /[&<>"']/g,
+    ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch],
+  );
+}
