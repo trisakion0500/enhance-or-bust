@@ -29,6 +29,6 @@ export const config = {
   mailboxCleanupCron: process.env.MAILBOX_CLEANUP_CRON ?? "0 0 1 * *",
   /** 만료된 지 이 개월 수보다 오래된 우편만 정리 배치 삭제 대상(수령 여부 무관). */
   mailboxCleanupRetentionMonths: Number(process.env.MAILBOX_CLEANUP_RETENTION_MONTHS ?? 3),
-  /** 인벤토리 슬롯 상한(장 수). 차단 로직은 아직 미구현(현재 스코프엔 카드가 늘어나는 액션이 없음). */
+  /** 인벤토리 슬롯 상한(장 수). 우편 수령(ClaimMail) 시점에 카드 첨부물 검증(초과 시 거부, 자세한 경계는 CLAUDE.md "Inventory 슬롯 상한 구현 노트" 참고). */
   inventorySlotCap: Number(process.env.INVENTORY_SLOT_CAP ?? 200),
 };
