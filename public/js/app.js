@@ -1,4 +1,4 @@
-import { apiGet } from "./api.js";
+import { apiGet, apiPost } from "./api.js";
 import { renderInventory } from "./inventory.js";
 import { renderBattle } from "./battle.js";
 import { renderMailbox } from "./mailbox.js";
@@ -33,6 +33,12 @@ async function refreshPlayer() {
   renderInventory(state);
   renderBattle(state, refreshPlayer);
   await renderMailbox(state, refreshPlayer);
+}
+
+/** 로그아웃 버튼 클릭 시 서버 세션을 지우고 로그인 화면으로 되돌아간다. */
+async function onLogout() {
+  await apiPost("/auth/logout");
+  location.reload();
 }
 
 /** 탭 버튼 클릭 시 해당 `.tabPanel`만 보이도록 토글하는 리스너를 등록한다. */
@@ -78,6 +84,7 @@ async function initLogin() {
 async function enterGame() {
   await refreshPlayer();
   showScreen(true);
+  document.getElementById("logoutButton").addEventListener("click", onLogout);
 }
 
 /** 페이지 진입점 — 로그인 여부를 확인해 게임 화면 또는 로그인 화면으로 분기한다. */

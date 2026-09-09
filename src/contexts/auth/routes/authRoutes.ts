@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Response } from "express";
 import { Router } from "express";
 import { loginWithGoogleAuthCode, loginWithGoogleIdToken } from "../application/authService.js";
+import { deleteSession } from "../infrastructure/sessionStore.js";
 import { BusinessException } from "../../../shared-kernel/businessException.js";
 import { readCookie } from "../../../shared-kernel/cookies.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
@@ -22,7 +23,8 @@ const isSecureCookie = process.env.NODE_ENV === "production";
 /**
  * 인증 라우터. 프론트가 로그인 UI 초기화에 쓸 설정 조회(`GET /auth/config`)와, `config.googleAuthFlow`에
  * 따라 Google Identity Services(`POST /auth/google`) 또는 Authorization Code Flow
- * (`GET /auth/google/login` + `GET /auth/google/callback`) 중 하나의 로그인 경로를 제공한다.
+ * (`GET /auth/google/login` + `GET /auth/google/callback`) 중 하나의 로그인 경로, 그리고
+ * `POST /auth/logout`(세션 무효화 + 쿠키 삭제)을 제공한다.
  * @param playerRepository Player 영속성 포트(DI)
  * @returns 등록된 Express Router
  * @author trisakion
@@ -43,6 +45,15 @@ export function createAuthRoutes(playerRepository: PlayerRepository): Router {
       secure: isSecureCookie,
     });
   }
+
+  // 세션 쿠키가 없거나 이미 만료된 토큰이어도 그냥 성공으로 처리한다(로그아웃은 멱등해야 함 —
+  // 두 번 눌러도, 이미 만료된 뒤에 눌러도 에러가 아니라 "로그아웃된 상태"로 수렴).
+  router.post("/auth/logout", asyncHandler(async (req, res) => {
+    const token = readCookie(req.headers.cookie, SESSION_COOKIE_NAME);
+    if (token) await deleteSession(token);
+    res.clearCookie(SESSION_COOKIE_NAME, { httpOnly: true, sameSite: "lax", secure: isSecureCookie });
+    res.json({ result: 0 });
+  }));
 
   if (config.googleAuthFlow === "authorization_code") {
     router.get("/auth/google/login", (_req, res) => {

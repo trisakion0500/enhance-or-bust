@@ -26,3 +26,12 @@ export async function resolveSession(token: string): Promise<string | undefined>
   const playerId = await redisClient.get(redisSessionKey(token));
   return playerId ?? undefined;
 }
+
+/**
+ * 세션 토큰을 무효화한다(로그아웃). 존재하지 않는 토큰이어도 그냥 무해하게 넘어간다(멱등).
+ * @param token 세션 토큰
+ * @author trisakion
+ */
+export async function deleteSession(token: string): Promise<void> {
+  await redisClient.del(redisSessionKey(token));
+}

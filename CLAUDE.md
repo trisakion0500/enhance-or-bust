@@ -122,6 +122,10 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   그대로). JWT처럼 자체 서명된 토큰이 아니라, Redis에서 지우면 즉시 무효화할 수 있다
 - 세션 토큰은 httpOnly 쿠키(`sessionToken`)로 내려준다. 프론트(정적 파일)와 API를 같은
   오리진에서 같이 서빙하므로 CORS 설정이 필요 없다
+- 로그아웃은 `POST /auth/logout`(`authRoutes.ts`) — 쿠키의 세션 토큰으로 Redis 세션을
+  지우고(`sessionStore.ts`의 `deleteSession()`) 쿠키도 함께 삭제한다. `requireAuth`를
+  붙이지 않고 쿠키가 없거나 이미 만료된 토큰이어도 그냥 성공 처리한다 — 로그아웃은 "로그인
+  안 된 상태로 만들기"가 목적이라 이미 그 상태여도 실패로 볼 이유가 없는 멱등 동작
 - 로그인 이후 요청을 세션으로 인증하는 미들웨어 `requireAuth`(`src/shared-kernel/sessionAuth.ts`)가
   `sessionToken` 쿠키를 Redis 세션과 대조해 `req.playerId`를 세팅한다. 전역 `app.use`가 아니라
   보호가 필요한 라우터에 개별적으로 붙이는 방식 — 강화 라우터(`enhancementRoutes.ts`)가 첫
