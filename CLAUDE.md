@@ -95,8 +95,8 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   | `auth_logs` | `login` | platformType | 구현됨 |
   | `auth_logs` | `logout` | (없음 — 세션 종료만) | 구현됨 |
   | `enhancement_logs` | `attempt` | cardId, success, destroyed, enhancementLevel(결과) | 구현됨 |
-  | `synthesis_logs` | `gradeUpgrade` | materialCardIds, success, resultCardId?, resultTemplateId? | 계획 |
-  | `synthesis_logs` | `enhanceMaterial` | targetCardId, materialCardIds, enhancementLevel(결과) | 계획 |
+  | `synthesis_logs` | `gradeUpgrade` | materialCardIds, success, resultCardId?, resultTemplateId? | 구현됨 |
+  | `synthesis_logs` | `enhanceMaterial` | targetCardId, materialCardIds, enhancementLevel(결과) | 구현됨 |
   | `battle_stage_logs` | `clear` | stageId, clearedStage(결과), rewardGold, rewardEnhancementStone, rewardCardTemplateId, mailSourceId — 승리(=저장 발생) 시에만 | 계획 |
   | `mailbox_logs` | `claim` | mailId, attachments(지급된 첨부) | 계획 |
   | `mailbox_logs` | `delete` | mailId | 계획 |
@@ -288,17 +288,19 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   프론트가 체크박스 단계에서부터 등급/원형 불일치나 장수 초과 체크를 되돌리고, 선택할 때마다
   남은 장수/성공률/비용 힌트를 갱신하며, 조건이 정확히 맞을 때만 합성 시도 버튼을 보여준다.
   최종 검증은 여전히 서버가 한다(서버 권위 원칙)
-- 감사 로그/DAU 중 `auth_logs`(로그인/가입/로그아웃), `enhancement_logs`(강화 시도), 그리고
-  `daily_active_players`(DAU) 구현 — 정책 전체(대상 액션 목록)는 "감사 로그 / DAU 정책"
-  절 참고. `writeAuditLog()`는 `authService.ts`의 `loginOrRegister()`(로그인/가입, 동시
-  가입 레이스에서 진 요청은 자신이 만든 시작 카드가 실제로 저장되지 않았으므로 register
-  대신 login으로 정정해 기록), `authRoutes.ts`의 로그아웃 핸들러, `enhancementService.ts`의
-  `enhanceCard()`(`withOptimisticRetry`의 `onSaved` 훅에서 호출)에서 쓰인다.
-  `markDailyActive()`는 `requireAuth`(인증이 필요한 모든 라우트의 공용 진입점)에서 매
-  요청마다 호출되지만 유니크 인덱스 덕분에 실제로는 플레이어당 하루 1건만 남는다. 나머지
-  컨텍스트(Synthesis/Battle-Stage/Mailbox)의 감사 로그는 아직 코드 없음(계획만 확정) —
-  이 기능을 e2e 테스트 파일에서 실제로 타면(예: `requireAuth`를 거치는 모든 보호 라우트)
-  로그 DB 커넥션(`mongoLogClient`)이 처음 열리므로, 그 테스트 파일의 `after()` 훅에도
+- 감사 로그/DAU 중 `auth_logs`(로그인/가입/로그아웃), `enhancement_logs`(강화 시도),
+  `synthesis_logs`(등급 승급/강화 재료 합성), 그리고 `daily_active_players`(DAU) 구현
+  — 정책 전체(대상 액션 목록)는 "감사 로그 / DAU 정책" 절 참고. `writeAuditLog()`는
+  `authService.ts`의 `loginOrRegister()`(로그인/가입, 동시 가입 레이스에서 진 요청은
+  자신이 만든 시작 카드가 실제로 저장되지 않았으므로 register 대신 login으로 정정해
+  기록), `authRoutes.ts`의 로그아웃 핸들러, `enhancementService.ts`의 `enhanceCard()`,
+  `synthesisService.ts`의 `synthesizeGradeUpgrade()`/`synthesizeEnhanceMaterial()`
+  (전부 `withOptimisticRetry`의 `onSaved` 훅에서 호출)에서 쓰인다. `markDailyActive()`는
+  `requireAuth`(인증이 필요한 모든 라우트의 공용 진입점)에서 매 요청마다 호출되지만
+  유니크 인덱스 덕분에 실제로는 플레이어당 하루 1건만 남는다. 나머지 컨텍스트
+  (Battle-Stage/Mailbox)의 감사 로그는 아직 코드 없음(계획만 확정) — 이 기능을 e2e
+  테스트 파일에서 실제로 타면(예: `requireAuth`를 거치는 모든 보호 라우트) 로그 DB
+  커넥션(`mongoLogClient`)이 처음 열리므로, 그 테스트 파일의 `after()` 훅에도
   `mongoLogClient.close()`를 반드시 같이 추가해야 한다 — 안 하면 프로세스가 안 끝나
   테스트가 멈춘다(이미 있는 모든 e2e 테스트 파일에 이 훅을 추가해둠)
 

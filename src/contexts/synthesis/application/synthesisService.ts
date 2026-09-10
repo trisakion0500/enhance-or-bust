@@ -6,6 +6,7 @@ import type { Player } from "../../player/domain/player.js";
 import type { PlayerRepository } from "../../player/domain/playerRepository.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
 import { withOptimisticRetry } from "../../../shared-kernel/optimisticPlayerWrite.js";
+import { writeAuditLog } from "../../../shared-kernel/auditLog.js";
 import type { GradeUpgradeSynthesisRule, EnhanceMaterialSynthesisRule } from "../domain/synthesisRule.js";
 
 /** 등급 승급 합성 결과. 실패 시 소재 1장만 소모되고 나머지는 인벤토리에 그대로 남는다(GAME_DESIGN.md 3절). */
@@ -38,7 +39,14 @@ export async function synthesizeGradeUpgrade(
   materialCardIds: string[],
   playerRepository: PlayerRepository,
 ): Promise<GradeUpgradeResult> {
-  return withOptimisticRetry(playerId, playerRepository, player => applyGradeUpgrade(player, materialCardIds));
+  return withOptimisticRetry(playerId, playerRepository, player => applyGradeUpgrade(player, materialCardIds), {
+    onSaved: result =>
+      writeAuditLog("synthesis_logs", {
+        actorId: playerId,
+        action: "gradeUpgrade",
+        changes: { materialCardIds, success: result.success, resultCardId: result.resultCardId, resultTemplateId: result.resultTemplateId },
+      }),
+  });
 }
 
 /**
@@ -60,7 +68,14 @@ export async function synthesizeEnhanceMaterial(
   materialCardIds: string[],
   playerRepository: PlayerRepository,
 ): Promise<EnhanceMaterialResult> {
-  return withOptimisticRetry(playerId, playerRepository, player => applyEnhanceMaterial(player, targetCardId, materialCardIds));
+  return withOptimisticRetry(playerId, playerRepository, player => applyEnhanceMaterial(player, targetCardId, materialCardIds), {
+    onSaved: result =>
+      writeAuditLog("synthesis_logs", {
+        actorId: playerId,
+        action: "enhanceMaterial",
+        changes: { targetCardId, materialCardIds, enhancementLevel: result.enhancementLevel },
+      }),
+  });
 }
 
 /** 소재 카드 ID 목록을 조회해 카드 엔티티 배열로 반환한다. 중복 ID나 미보유 카드는 검증 실패로 처리한다. */
