@@ -1,6 +1,7 @@
 import { apiGet, apiPost } from "./api.js";
 import { renderInventory } from "./inventory.js";
 import { renderEnhancement } from "./enhancement.js";
+import { renderSynthesis } from "./synthesis.js";
 import { renderBattle } from "./battle.js";
 import { renderMailbox } from "./mailbox.js";
 
@@ -33,6 +34,7 @@ async function refreshPlayer() {
   renderHeader();
   renderInventory(state);
   renderEnhancement(state, refreshPlayer);
+  renderSynthesis(state, refreshPlayer);
   renderBattle(state, refreshPlayer);
   await renderMailbox(state, refreshPlayer);
 }

@@ -2,6 +2,7 @@ import { BusinessException } from "../../../shared-kernel/businessException.js";
 import { config } from "../../../config/env.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
+import type { SynthesisRule } from "../../synthesis/domain/synthesisRule.js";
 import type { PlayerRepository } from "../domain/playerRepository.js";
 
 /**
@@ -47,6 +48,8 @@ export interface PlayerSummary {
   inventory: CardSummary[];
   /** 전투 출전 스쿼드 최대 장수 — 프론트가 별도 설정 조회 없이 이 값으로 UI를 제한한다 */
   squadMaxSize: number;
+  /** 합성 규칙 전체(마스터 데이터) — 프론트가 합성 화면의 소재 장수/확률/비용 안내에 그대로 쓴다 */
+  synthesisRules: readonly SynthesisRule[];
 }
 
 /**
@@ -86,5 +89,6 @@ export async function getPlayerSummary(playerId: string, playerRepository: Playe
     clearedStage: player.clearedStage,
     inventory,
     squadMaxSize: config.squadMaxSize,
+    synthesisRules: masterDataCache.getSynthesisRules(),
   };
 }
