@@ -4,6 +4,7 @@ import type { Player } from "../../player/domain/player.js";
 import type { PlayerRepository } from "../../player/domain/playerRepository.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
 import { withOptimisticRetry } from "../../../shared-kernel/optimisticPlayerWrite.js";
+import { writeAuditLog } from "../../../shared-kernel/auditLog.js";
 
 /** 강화 한 번 시도 결과. */
 export interface EnhanceResult {
@@ -32,7 +33,14 @@ export interface EnhanceResult {
  * @author trisakion
  */
 export async function enhanceCard(playerId: string, cardId: string, playerRepository: PlayerRepository): Promise<EnhanceResult> {
-  return withOptimisticRetry(playerId, playerRepository, player => applyEnhanceAttempt(player, cardId));
+  return withOptimisticRetry(playerId, playerRepository, player => applyEnhanceAttempt(player, cardId), {
+    onSaved: result =>
+      writeAuditLog("enhancement_logs", {
+        actorId: playerId,
+        action: "attempt",
+        changes: { cardId, success: result.success, destroyed: result.destroyed, enhancementLevel: result.enhancementLevel },
+      }),
+  });
 }
 
 /**
