@@ -10,6 +10,7 @@ import type { PlayerRepository } from "../../player/domain/playerRepository.js";
 import type { GoogleProfile } from "../infrastructure/googleAuth.js";
 import { exchangeGoogleAuthCode, verifyGoogleIdToken } from "../infrastructure/googleAuth.js";
 import { createSession } from "../infrastructure/sessionStore.js";
+import { writeAuditLog } from "../../../shared-kernel/auditLog.js";
 
 /** 신규 플레이어에게 지급하는 초기 골드. */
 const INITIAL_GOLD = 1000;
@@ -44,8 +45,12 @@ async function loginOrRegister(platformType: string, profile: GoogleProfile, pla
   const { sub: platformUserId, name, email, picture } = profile;
 
   const existing = await playerRepository.findByPlatform(platformType, platformUserId);
-  if (existing) return createSession(existing.playerId);
+  if (existing) {
+    await writeAuditLog("auth_logs", { actorId: existing.playerId, action: "login", changes: { platformType } });
+    return createSession(existing.playerId);
+  }
 
+  const starterCard = pickStarterCard();
   const player = new Player(
     randomUUID(),
     0,
@@ -54,7 +59,7 @@ async function loginOrRegister(platformType: string, profile: GoogleProfile, pla
     name ?? "",
     email ?? "",
     picture,
-    new Inventory([pickStarterCard()]),
+    new Inventory([starterCard]),
     new Economy(INITIAL_GOLD),
   );
   await playerRepository.create(player);
@@ -62,6 +67,20 @@ async function loginOrRegister(platformType: string, profile: GoogleProfile, pla
   // create()가 동시 최초 로그인 레이스로 조용히 무시됐을 수 있다 — 이 경우 위에서 만든 player.playerId는
   // 실제로 저장되지 않았으므로, 실제 저장된(먼저 이긴 쪽의) playerId를 다시 조회해 세션을 발급해야 한다.
   const persisted = await playerRepository.findByPlatform(platformType, platformUserId);
+  // 이 요청이 실제로 생성에 성공했는지(playerId가 자신의 것인지)로 register/login을 구분한다 —
+  // 레이스에서 졌다면(다른 요청이 먼저 만들었다면) 자신이 만든 starterCard/골드는 실제로 저장된
+  // 적이 없으므로, 그 값으로 "register" 로그를 남기면 사실과 다른 내용이 된다.
+  const won = persisted!.playerId === player.playerId;
+  await writeAuditLog(
+    "auth_logs",
+    won
+      ? {
+          actorId: persisted!.playerId,
+          action: "register",
+          changes: { platformType, starterCardTemplateId: starterCard.templateId, initialGold: INITIAL_GOLD },
+        }
+      : { actorId: persisted!.playerId, action: "login", changes: { platformType } },
+  );
   return createSession(persisted!.playerId);
 }
 

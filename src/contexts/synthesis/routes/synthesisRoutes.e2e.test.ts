@@ -7,6 +7,7 @@ import { Economy } from "../../player/domain/economy.js";
 import { Inventory } from "../../player/domain/inventory.js";
 import { Player } from "../../player/domain/player.js";
 import { connectMongo, mongoClient } from "../../../infra/mongo.js";
+import { connectMongoLog, mongoLogClient } from "../../../infra/mongoLog.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
 import { MongoPlayerRepository } from "../../player/infrastructure/mongoPlayerRepository.js";
 import { MongoMailboxRepository } from "../../mailbox/infrastructure/mongoMailboxRepository.js";
@@ -26,6 +27,7 @@ let httpServer: import("node:http").Server;
 
 before(async () => {
   const db = await connectMongo();
+  await connectMongoLog();
   await connectRedis();
   await masterDataCache.loadAll(db);
 
@@ -39,6 +41,7 @@ before(async () => {
 after(async () => {
   await new Promise(resolve => httpServer.close(resolve));
   await mongoClient.close();
+  await mongoLogClient.close();
   await redisClient.quit();
 });
 

@@ -17,7 +17,7 @@
 
 | 항목 | 선택 |
 |---|---|
-| MongoDB | 영구 저장소 |
+| MongoDB | 영구 저장소(앱 DB) + 감사 로그/DAU 전용 물리 분리 DB(`enhance_or_bust_log`) |
 | Redis | 캐시/조회 최적화 |
 
 ## 프론트엔드

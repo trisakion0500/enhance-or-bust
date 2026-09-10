@@ -6,7 +6,7 @@
 import cron from "node-cron";
 import { config } from "./config/env.js";
 import { connectMongo, mongoClient } from "./infra/mongo.js";
-import { connectMongoLog, mongoLogClient } from "./infra/mongoLog.js";
+import { connectMongoLog, ensureLogIndexes, mongoLogClient } from "./infra/mongoLog.js";
 import { logger } from "./infra/logger.js";
 import { masterDataCache } from "./shared-kernel/masterData/masterDataCache.js";
 import {
@@ -23,6 +23,7 @@ import { createServer } from "./server.js";
 
 const db = await connectMongo();
 const logDb = await connectMongoLog();
+await ensureLogIndexes(logDb);
 await connectRedis();
 logger.info(`connected to mongo db "${db.databaseName}", log db "${logDb.databaseName}", and redis`);
 

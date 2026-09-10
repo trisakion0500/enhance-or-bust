@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { Response } from "express";
 import { Router } from "express";
 import { loginWithGoogleAuthCode, loginWithGoogleIdToken } from "../application/authService.js";
-import { deleteSession } from "../infrastructure/sessionStore.js";
+import { deleteSession, resolveSession } from "../infrastructure/sessionStore.js";
+import { writeAuditLog } from "../../../shared-kernel/auditLog.js";
 import { BusinessException } from "../../../shared-kernel/businessException.js";
 import { readCookie } from "../../../shared-kernel/cookies.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
@@ -50,7 +51,11 @@ export function createAuthRoutes(playerRepository: PlayerRepository): Router {
   // 두 번 눌러도, 이미 만료된 뒤에 눌러도 에러가 아니라 "로그아웃된 상태"로 수렴).
   router.post("/auth/logout", asyncHandler(async (req, res) => {
     const token = readCookie(req.headers.cookie, SESSION_COOKIE_NAME);
-    if (token) await deleteSession(token);
+    if (token) {
+      const playerId = await resolveSession(token);
+      await deleteSession(token);
+      if (playerId) await writeAuditLog("auth_logs", { actorId: playerId, action: "logout", changes: {} });
+    }
     res.clearCookie(SESSION_COOKIE_NAME, { httpOnly: true, sameSite: "lax", secure: isSecureCookie });
     res.json({ result: 0 });
   }));

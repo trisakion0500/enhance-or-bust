@@ -5,6 +5,7 @@ import { readCookie } from "./cookies.js";
 import { BusinessException } from "./businessException.js";
 import { ERROR_MAP } from "./errorMap.js";
 import { asyncHandler } from "./errorHandler.js";
+import { markDailyActive } from "./dailyActive.js";
 
 /**
  * `sessionToken` 쿠키를 Redis 세션과 대조해 `req.playerId`를 세팅하는 인증 미들웨어.
@@ -20,5 +21,6 @@ export const requireAuth = asyncHandler(async (req: Request, _res: Response, nex
     throw new BusinessException(ERROR_MAP.AUTH.UNAUTHENTICATED);
 
   req.playerId = playerId;
+  void markDailyActive(playerId); // DAU 집계용 — 실패해도 요청을 막지 않으므로 await하지 않는다
   next();
 });

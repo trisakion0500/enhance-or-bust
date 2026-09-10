@@ -65,6 +65,44 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   인스턴스) suffix 없이 기존 파일명(`logs/app.log`) 그대로 쓴다 — 지금 이 프로젝트는
   단일 인스턴스 전제라 실제로는 항상 이 경로를 탄다
 
+## 감사 로그 / DAU 정책 (확정)
+
+- 목적: 상태를 바꾸는 모든 액션에 대해 "언제/누가/어떤 액션/어떤 내용이 추가·수정·삭제됐는지"를
+  남긴다. log4js 애플리케이션 로그(요청/응답 페어링)와는 별개 — 저건 운영 디버깅용, 이건
+  게임 이벤트 감사/통계용
+- 저장 위치: 로그 DB(`enhance_or_bust_log`, `infra/mongoLog.ts`)에 컨텐츠(도메인)별 컬렉션을
+  분리해서 둔다(마스터데이터 로딩 전략의 "컨텐츠별 별도 컬렉션" 원칙과 동일) —
+  `auth_logs`/`enhancement_logs`/`synthesis_logs`/`battle_stage_logs`/`mailbox_logs`
+- 공통 스키마: `{actorId, action, changes, occurredAt}`. `actorId`는 playerId, 배치/크론처럼
+  사람이 아닌 주체가 남기면 `"SYSTEM"` sentinel(`shared-kernel/auditLog.ts`의 `SYSTEM_ACTOR`).
+  `changes`는 액션마다 내용이 달라 자유 형식 객체로 둔다
+- 쓰기 시점: 메인 쓰기(players/mailbox)가 성공한 뒤에만 호출. 이 로그 기록 자체가 실패해도
+  메인 흐름을 실패시키지 않고 try/catch로 삼키며 실패만 log4js에 남긴다(개발 컨벤션 7장 —
+  로그 DB는 메인 트랜잭션과 절대 묶이지 않음, 로그 실패가 핵심 기능을 막으면 안 됨)
+- 상태 변경이 없는 시도(예: 전투 패배)는 로그도 안 남긴다 — `withOptimisticRetry`의
+  `shouldSave`가 저장 자체를 스킵하는 경우와 동일 기준
+- DAU는 감사 로그와 별개 컬렉션(`daily_active_players`)으로 집계한다 — "무엇이 바뀌었는지"가
+  아니라 "오늘 활동했는지"만 필요해 목적이 다르다. `(playerId, date)` 유니크 인덱스로 인증된
+  요청의 공용 진입점(`requireAuth`)에서 하루 1건만 삽입(SendMail과 동일한 멱등 삽입 패턴 —
+  중복 키 에러 11000은 조용히 무시)
+- 대상 액션 목록 — "상태"가 `구현됨`인 것만 실제로 `writeAuditLog()` 호출이 코드에 있다.
+  나머지는 정책만 확정, 코드는 아직 없음(각 컨텍스트에 감사 로그를 추가할 때 이 표를
+  그대로 구현 기준으로 삼는다):
+
+  | 컬렉션 | action | changes | 상태 |
+  |---|---|---|---|
+  | `auth_logs` | `register` | platformType, starterCardTemplateId, initialGold | 구현됨 |
+  | `auth_logs` | `login` | platformType | 구현됨 |
+  | `auth_logs` | `logout` | (없음 — 세션 종료만) | 구현됨 |
+  | `enhancement_logs` | `attempt` | cardId, success, destroyed, enhancementLevel(결과) | 계획 |
+  | `synthesis_logs` | `gradeUpgrade` | materialCardIds, success, resultCardId?, resultTemplateId? | 계획 |
+  | `synthesis_logs` | `enhanceMaterial` | targetCardId, materialCardIds, enhancementLevel(결과) | 계획 |
+  | `battle_stage_logs` | `clear` | stageId, clearedStage(결과), rewardGold, rewardEnhancementStone, rewardCardTemplateId, mailSourceId — 승리(=저장 발생) 시에만 | 계획 |
+  | `mailbox_logs` | `claim` | mailId, attachments(지급된 첨부) | 계획 |
+  | `mailbox_logs` | `delete` | mailId | 계획 |
+  | `mailbox_logs` | `cleanupBatch` | actorId="SYSTEM", cutoff, deletedCount | 계획 |
+  | `daily_active_players` | (감사 로그 아님, DAU 전용) | {playerId, date} 유니크 인덱스, 하루 1건 | 구현됨 |
+
 ## 바운디드 컨텍스트 (DDD)
 
 7개로 분리:
@@ -250,6 +288,19 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   프론트가 체크박스 단계에서부터 등급/원형 불일치나 장수 초과 체크를 되돌리고, 선택할 때마다
   남은 장수/성공률/비용 힌트를 갱신하며, 조건이 정확히 맞을 때만 합성 시도 버튼을 보여준다.
   최종 검증은 여전히 서버가 한다(서버 권위 원칙)
+- 감사 로그/DAU 중 `auth_logs`(로그인/가입/로그아웃)와 `daily_active_players`(DAU) 구현
+  — 정책 전체(대상 액션 목록)는 "감사 로그 / DAU 정책" 절 참고. `writeAuditLog()`는
+  `authService.ts`의 `loginOrRegister()`(로그인/가입, 동시 가입 레이스에서 진 요청은
+  자신이 만든 시작 카드가 실제로 저장되지 않았으므로 register 대신 login으로 정정해
+  기록)와 `authRoutes.ts`의 로그아웃 핸들러에서 호출된다. `markDailyActive()`는
+  `requireAuth`(인증이 필요한 모든 라우트의 공용 진입점)에서 매 요청마다 호출되지만
+  유니크 인덱스 덕분에 실제로는 플레이어당 하루 1건만 남는다. 나머지 컨텍스트
+  (Enhancement/Synthesis/Battle-Stage/Mailbox)의 감사 로그는 아직 코드 없음(계획만
+  확정) — 이 기능을 e2e 테스트 파일에서 실제로 타면(예: `requireAuth`를 거치는 모든
+  보호 라우트) 로그 DB 커넥션(`mongoLogClient`)이 처음 열리므로, 그 테스트 파일의
+  `after()` 훅에도 `mongoLogClient.close()`를 반드시 같이 추가해야 한다 — 안 하면
+  프로세스가 안 끝나 테스트가 멈춘다(이미 있는 모든 e2e 테스트 파일에 이 훅을
+  추가해둠)
 
 ## MongoDB 데이터 모델링 / 원자성 전략 (확정)
 
