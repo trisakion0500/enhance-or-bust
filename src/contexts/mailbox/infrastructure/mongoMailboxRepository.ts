@@ -126,13 +126,20 @@ export class MongoMailboxRepository implements MailboxRepository {
   }
 
   async deleteMail(mailId: string, playerId: string): Promise<void> {
+    // 검증(소유자/수령 여부)을 실제 쓰기의 필터 조건에도 그대로 실어, 조회와 쓰기 사이에 상태가
+    // 바뀌어도(TOCTOU) 조건을 벗어난 문서는 애초에 갱신되지 않게 한다.
+    const result = await this.mailboxCollection.updateOne(
+      { _id: mailId, playerId, claimedAt: { $ne: null } },
+      { $set: { deletedAt: new Date() } },
+    );
+    if (result.matchedCount > 0) return;
+
+    // 여기 도달했다는 건 조건 중 하나가 깨졌다는 뜻 — 정확한 에러 코드를 돌려주기 위해서만 재조회한다.
     const mailDoc = await this.mailboxCollection.findOne({ _id: mailId });
     if (!mailDoc || mailDoc.playerId !== playerId)
       throw new BusinessException(ERROR_MAP.MAILBOX.NOT_FOUND, { mailId, playerId });
     if (!mailDoc.claimedAt)
       throw new BusinessException(ERROR_MAP.MAILBOX.NOT_CLAIMED, { mailId });
-
-    await this.mailboxCollection.updateOne({ _id: mailId }, { $set: { deletedAt: new Date() } });
   }
 
   async deleteExpiredBefore(cutoff: Date): Promise<number> {
