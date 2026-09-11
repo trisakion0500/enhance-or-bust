@@ -4,6 +4,7 @@ import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
 import { Mail, MAIL_EXPIRY_MS } from "../domain/mail.js";
 import type { MailAttachments } from "../domain/mail.js";
 import type { MailboxRepository } from "../domain/mailboxRepository.js";
+import { writeAuditLog } from "../../../shared-kernel/auditLog.js";
 
 /**
  * 우편을 발송한다(GAME_DESIGN.md 7절 "발송 트리거" — 스테이지 클리어 보상, 강화 파괴 환급 등
@@ -39,7 +40,15 @@ export async function sendMail(
   const createdAt = new Date();
   const expiresAt = new Date(createdAt.getTime() + expiryMs);
   const mail = new Mail(randomUUID(), playerId, title, attachments, sourceType, sourceId, createdAt, expiresAt, null);
-  await mailboxRepository.insertMail(mail);
+  const inserted = await mailboxRepository.insertMail(mail);
+  // 재시도로 인한 멱등 스킵(이미 발송된 건)까지 로그로 남기면 중복 기록이 되므로, 실제로
+  // 새로 삽입됐을 때만 남긴다.
+  if (inserted)
+    await writeAuditLog("mailbox_logs", {
+      actorId: playerId,
+      action: "send",
+      changes: { mailId: mail.mailId, title, attachments, sourceType, sourceId },
+    });
 }
 
 /**
@@ -62,7 +71,9 @@ export async function listMails(playerId: string, mailboxRepository: MailboxRepo
  *   초과하면 MAILBOX.INVENTORY_FULL(이 경우 우편은 미수령 상태 그대로 남는다)
  */
 export async function claimMail(playerId: string, mailId: string, mailboxRepository: MailboxRepository): Promise<Mail> {
-  return mailboxRepository.claimMail(mailId, playerId);
+  const mail = await mailboxRepository.claimMail(mailId, playerId);
+  await writeAuditLog("mailbox_logs", { actorId: playerId, action: "claim", changes: { mailId, attachments: mail.attachments } });
+  return mail;
 }
 
 /**
@@ -76,4 +87,5 @@ export async function claimMail(playerId: string, mailId: string, mailboxReposit
  */
 export async function deleteMail(playerId: string, mailId: string, mailboxRepository: MailboxRepository): Promise<void> {
   await mailboxRepository.deleteMail(mailId, playerId);
+  await writeAuditLog("mailbox_logs", { actorId: playerId, action: "delete", changes: { mailId } });
 }

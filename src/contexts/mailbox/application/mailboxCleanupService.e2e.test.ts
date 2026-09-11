@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { Mail } from "../domain/mail.js";
 import { connectMongo, mongoClient } from "../../../infra/mongo.js";
+import { connectMongoLog, mongoLogClient } from "../../../infra/mongoLog.js";
 import { MongoMailboxRepository } from "../infrastructure/mongoMailboxRepository.js";
 import { tryClaimBatchRun } from "../../../shared-kernel/batchRunGuard.js";
 import { runMailboxCleanupJob } from "./mailboxCleanupService.js";
@@ -18,11 +19,13 @@ let mailboxRepository: MongoMailboxRepository;
 
 before(async () => {
   db = await connectMongo();
+  await connectMongoLog();
   mailboxRepository = new MongoMailboxRepository(db);
 });
 
 after(async () => {
   await mongoClient.close();
+  await mongoLogClient.close();
 });
 
 /** 테스트가 만든 우편/실행 마커를 지운다. */

@@ -105,9 +105,10 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   | `synthesis_logs` | `gradeUpgrade` | materialCardIds, success, resultCardId?, resultTemplateId? | 구현됨 |
   | `synthesis_logs` | `enhanceMaterial` | targetCardId, materialCardIds, enhancementLevel(결과) | 구현됨 |
   | `battle_stage_logs` | `clear` | stageId, clearedStage(결과), rewardGold, rewardEnhancementStone, rewardCardTemplateId, mailSourceId — 승리(=저장 발생) 시에만 | 구현됨 |
-  | `mailbox_logs` | `claim` | mailId, attachments(지급된 첨부) | 계획 |
-  | `mailbox_logs` | `delete` | mailId | 계획 |
-  | `mailbox_logs` | `cleanupBatch` | actorId="SYSTEM", cutoff, deletedCount | 계획 |
+  | `mailbox_logs` | `send` | mailId, title, attachments, sourceType, sourceId — 멱등 스킵(재발송 아님)은 기록 안 함 | 구현됨 |
+  | `mailbox_logs` | `claim` | mailId, attachments(지급된 첨부) | 구현됨 |
+  | `mailbox_logs` | `delete` | mailId | 구현됨 |
+  | `mailbox_logs` | `cleanupBatch` | actorId="SYSTEM", cutoff, deletedCount(0건이면 상태 변경 없어 로그도 생략) | 구현됨 |
   | `daily_active_players` | (감사 로그 아님, DAU 전용) | {playerId, date} 유니크 인덱스, 하루 1건 | 구현됨 |
   | `battle_stage_attempts` | `attempt` | (감사 로그 아님, 통계 전용) stageId, squadCardIds, squadTemplateIds, won, clearedStage — 승패 무관 매 시도 | 구현됨 |
 
@@ -311,12 +312,21 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   덕분에 실제로는 플레이어당 하루 1건만 남는다. `battle_stage_attempts`(전투 스테이지 승률/
   카드 조합 통계)도 `clearStage()`가 `withOptimisticRetry` 결과를 받은 뒤 승패 무관 매
   호출마다 직접 기록 — `battle_stage_logs`(감사 로그, 승리 시에만)와 별개 목적/별개 컬렉션.
-  나머지 컨텍스트(Mailbox)의 감사 로그는
-  아직 코드 없음(계획만 확정) — 이 기능을 e2e 테스트 파일에서 실제로 타면(예:
-  `requireAuth`를 거치는 모든 보호 라우트) 로그 DB 커넥션(`mongoLogClient`)이 처음
-  열리므로, 그 테스트 파일의 `after()` 훅에도 `mongoLogClient.close()`를 반드시 같이
-  추가해야 한다 — 안 하면 프로세스가 안 끝나 테스트가 멈춘다(이미 있는 모든 e2e 테스트
-  파일에 이 훅을 추가해둠)
+  `mailbox_logs`(Mailbox 컨텍스트)까지 구현되어 대상 액션 전체가 완료됐다 —
+  `mailboxService.ts`의 `sendMail()`(다른 도메인 로그에도 `mailSourceId`로 같은 이벤트가
+  남지만, 각 감사 로그 컬렉션은 앞으로 자기 만료 정책으로 독립적으로 클렌징될 수 있어
+  다른 컬렉션이 먼저 지워지면 상관관계 추적이 끊긴다 — 그래서 `mailbox_logs` 자체에도
+  발송을 남겨 발송→수령→삭제 생애주기가 이 컬렉션 하나로 항상 재구성 가능하게 한다.
+  `insertMail()`이 멱등 스킵인지 실제 삽입인지를 boolean으로 반환하도록 바꿔, 재시도로 인한
+  중복 로그를 막는다)/`claimMail()`(수령한 첨부물까지 포함)/`deleteMail()`,
+  `mailboxCleanupService.ts`의 `runMailboxCleanupJob()`(배치, `SYSTEM_ACTOR`로 기록 —
+  단 `deletedCount`가 0이면 상태 변경이 없어 다른 도메인과 동일 기준으로 로그도 생략)에서
+  쓰인다. 이 기능을 e2e 테스트 파일에서 실제로 타면(예: `requireAuth`를 거치는 모든 보호
+  라우트, 또는 `runMailboxCleanupJob()`을 직접 호출하는 배치 테스트) 로그 DB 커넥션
+  (`mongoLogClient`)이 처음 열리므로, 그 테스트 파일의 `after()` 훅에도
+  `mongoLogClient.close()`를 반드시 같이 추가해야 한다 — 안 하면 프로세스가 안 끝나
+  테스트가 멈춘다(이미 있는 모든 e2e 테스트 파일에 이 훅을 추가해둠,
+  `mailboxCleanupService.e2e.test.ts` 포함)
 
 ## MongoDB 데이터 모델링 / 원자성 전략 (확정)
 

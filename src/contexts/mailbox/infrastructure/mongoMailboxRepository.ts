@@ -45,12 +45,14 @@ export class MongoMailboxRepository implements MailboxRepository {
     await this.mailboxCollection.createIndex({ playerId: 1 });
   }
 
-  async insertMail(mail: Mail): Promise<void> {
+  async insertMail(mail: Mail): Promise<boolean> {
     try {
       await this.mailboxCollection.insertOne(MongoMailboxRepository.toDocument(mail));
+      return true;
     } catch (err) {
       // (sourceType, sourceId) 유니크 인덱스 중복 — 이미 발송된 건이라 무해하게 무시한다(멱등 발송).
       if ((err as MongoServerError).code !== 11000) throw err;
+      return false;
     }
   }
 

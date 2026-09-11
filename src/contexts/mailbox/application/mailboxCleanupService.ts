@@ -2,6 +2,7 @@ import type { Db } from "mongodb";
 import { logger } from "../../../infra/logger.js";
 import { tryClaimBatchRun } from "../../../shared-kernel/batchRunGuard.js";
 import type { MailboxRepository } from "../domain/mailboxRepository.js";
+import { writeAuditLog, SYSTEM_ACTOR } from "../../../shared-kernel/auditLog.js";
 
 /** `system_batch_runs` 마커에 쓰이는 이 배치의 고유 식별자. */
 const JOB_NAME = "mailbox_cleanup";
@@ -30,4 +31,12 @@ export async function runMailboxCleanupJob(db: Db, mailboxRepository: MailboxRep
   const cutoff = new Date(now.getFullYear(), now.getMonth() - retentionMonths, 1, 0, 0, 0, 0);
   const deletedCount = await mailboxRepository.deleteExpiredBefore(cutoff);
   logger.info(`[${JOB_NAME}] ${cutoff.toISOString()} 이전 만료 우편 ${deletedCount}건 삭제 완료`);
+
+  // 삭제된 게 없으면(상태 변경 없음) 다른 도메인과 동일한 기준으로 로그도 남기지 않는다.
+  if (deletedCount > 0)
+    await writeAuditLog("mailbox_logs", {
+      actorId: SYSTEM_ACTOR,
+      action: "cleanupBatch",
+      changes: { cutoff: cutoff.toISOString(), deletedCount },
+    });
 }
