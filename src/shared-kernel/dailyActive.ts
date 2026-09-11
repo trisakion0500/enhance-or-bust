@@ -27,7 +27,7 @@ export async function markDailyActive(playerId: string): Promise<void> {
   try {
     await mongoLogClient
       .db(config.mongoAppDatabaseLog)
-      .collection("daily_active_players")
+      .collection("stats_daily_active_players")
       .insertOne({ playerId, date: todayDateString() });
   } catch (err) {
     if ((err as MongoServerError).code !== 11000) logger.error("일일 활동 기록 실패", err);

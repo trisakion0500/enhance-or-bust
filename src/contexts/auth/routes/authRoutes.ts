@@ -54,7 +54,7 @@ export function createAuthRoutes(playerRepository: PlayerRepository): Router {
     if (token) {
       const playerId = await resolveSession(token);
       await deleteSession(token);
-      if (playerId) await writeAuditLog("auth_logs", { actorId: playerId, action: "logout", changes: {} });
+      if (playerId) await writeAuditLog("log_auth", { actorId: playerId, action: "logout", changes: {} });
     }
     res.clearCookie(SESSION_COOKIE_NAME, { httpOnly: true, sameSite: "lax", secure: isSecureCookie });
     res.json({ result: 0 });

@@ -17,8 +17,8 @@ interface AuditLogEntry {
 
 /**
  * 감사 로그를 물리적으로 분리된 로그 DB(`enhance_or_bust_log`)의 컨텐츠(도메인)별 컬렉션에
- * 남긴다(CLAUDE.md "감사 로그 / DAU 정책" 절 — 컬렉션은 auth_logs/enhancement_logs/
- * synthesis_logs/battle_stage_logs/mailbox_logs로 분리, 마스터데이터 로딩 전략의 "컨텐츠별
+ * 남긴다(CLAUDE.md "감사 로그 / DAU 정책" 절 — 컬렉션은 log_auth/log_enhancement/
+ * log_synthesis/log_battle_stage/log_mailbox로 분리, 마스터데이터 로딩 전략의 "컨텐츠별
  * 별도 컬렉션" 원칙과 동일). 메인 쓰기가 성공한 뒤에만 호출해야 하며, 이 함수 자체의 실패는
  * 메인 흐름에 영향을 주지 않도록 여기서 끝까지 삼킨다(개발 컨벤션 7장 — 로그 DB는 메인
  * 트랜잭션과 절대 묶이지 않고, 로그 실패가 핵심 기능을 막으면 안 됨).

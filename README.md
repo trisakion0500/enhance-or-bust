@@ -64,8 +64,8 @@ Redis, 구글 OAuth 클라이언트 정보 등).
 - [x] 인벤토리 슬롯 상한(`INVENTORY_SLOT_CAP`, 우편 수령 시점에 카드 첨부물 검증 — 초과 시 거부하고 우편은 미수령 상태로 남김)
 - [x] 프론트엔드 핵심 루프(인벤토리/전투/우편, SPA-lite) + `GET /player/me` 조회 API
 - [x] 프론트엔드 강화/합성 화면
-- [x] 감사 로그(`auth_logs`/`enhancement_logs`/`synthesis_logs`/`battle_stage_logs`/
-      `mailbox_logs`)/DAU(`daily_active_players`)/전투 스테이지 승률 통계
-      (`battle_stage_attempts`, 승패 무관 매 시도 기록) — 로그인/가입/로그아웃/강화
+- [x] 감사 로그(`log_auth`/`log_enhancement`/`log_synthesis`/`log_battle_stage`/
+      `log_mailbox`)/DAU(`stats_daily_active_players`)/전투 스테이지 승률 통계
+      (`attempts_battle_stage`, 승패 무관 매 시도 기록) — 로그인/가입/로그아웃/강화
       시도/합성(등급 승급·강화 재료)/스테이지 클리어/우편(발송·수령·삭제·만료정리 배치)까지
       대상 액션 전체 구현 완료

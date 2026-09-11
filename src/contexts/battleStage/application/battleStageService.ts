@@ -99,7 +99,7 @@ export async function clearStage(
           mailboxRepository,
           content.expiryMs,
         );
-        await writeAuditLog("battle_stage_logs", {
+        await writeAuditLog("log_battle_stage", {
           actorId: playerId,
           action: "clear",
           changes: {
@@ -116,7 +116,7 @@ export async function clearStage(
   );
 
   // 감사 로그(승리 시에만)와 별개로, 스테이지별 승률/카드 조합 통계는 승패 무관 매 시도마다 남긴다.
-  await writeAuditLog("battle_stage_attempts", {
+  await writeAuditLog("attempts_battle_stage", {
     actorId: playerId,
     action: "attempt",
     changes: { stageId, squadCardIds, squadTemplateIds: result.squadTemplateIds, won: result.won, clearedStage: result.clearedStage },

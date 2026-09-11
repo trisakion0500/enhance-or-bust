@@ -34,7 +34,7 @@ export async function runMailboxCleanupJob(db: Db, mailboxRepository: MailboxRep
 
   // 삭제된 게 없으면(상태 변경 없음) 다른 도메인과 동일한 기준으로 로그도 남기지 않는다.
   if (deletedCount > 0)
-    await writeAuditLog("mailbox_logs", {
+    await writeAuditLog("log_mailbox", {
       actorId: SYSTEM_ACTOR,
       action: "cleanupBatch",
       changes: { cutoff: cutoff.toISOString(), deletedCount },

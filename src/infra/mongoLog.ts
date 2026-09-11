@@ -24,18 +24,19 @@ export async function connectMongoLog() {
 /**
  * 로그 DB 컬렉션의 인덱스를 보장한다(`playerRepository.ensureIndexes()`와 동일 패턴, 서버
  * 기동 시 1회 호출). 감사 로그 컬렉션이 하나씩 추가될 때마다 여기에도 함께 추가한다 —
- * 지금은 `auth_logs`만 구현됨(CLAUDE.md "감사 로그 / DAU 정책" 절 참고).
+ * 감사 로그는 `log_`, 통계 전용 컬렉션은 `attempts_`/`stats_` 접두사로 구분한다(CLAUDE.md
+ * "감사 로그 / DAU 정책" 절 참고).
  * @param logDb 연결된 로그 DB 핸들
  * @author trisakion
  */
 export async function ensureLogIndexes(logDb: Db): Promise<void> {
-  await logDb.collection("auth_logs").createIndex({ actorId: 1, occurredAt: -1 });
-  await logDb.collection("enhancement_logs").createIndex({ actorId: 1, occurredAt: -1 });
-  await logDb.collection("synthesis_logs").createIndex({ actorId: 1, occurredAt: -1 });
-  await logDb.collection("battle_stage_logs").createIndex({ actorId: 1, occurredAt: -1 });
+  await logDb.collection("log_auth").createIndex({ actorId: 1, occurredAt: -1 });
+  await logDb.collection("log_enhancement").createIndex({ actorId: 1, occurredAt: -1 });
+  await logDb.collection("log_synthesis").createIndex({ actorId: 1, occurredAt: -1 });
+  await logDb.collection("log_battle_stage").createIndex({ actorId: 1, occurredAt: -1 });
   // 스테이지 승률/카드 조합 통계용(감사 로그 아님) — 승패 무관 매 시도 기록.
-  await logDb.collection("battle_stage_attempts").createIndex({ actorId: 1, occurredAt: -1 });
-  await logDb.collection("mailbox_logs").createIndex({ actorId: 1, occurredAt: -1 });
+  await logDb.collection("attempts_battle_stage").createIndex({ actorId: 1, occurredAt: -1 });
+  await logDb.collection("log_mailbox").createIndex({ actorId: 1, occurredAt: -1 });
   // DAU 집계용 — 플레이어당 하루 1건만 남도록 강제(dailyActive.ts의 멱등 삽입이 기대는 제약).
-  await logDb.collection("daily_active_players").createIndex({ playerId: 1, date: 1 }, { unique: true });
+  await logDb.collection("stats_daily_active_players").createIndex({ playerId: 1, date: 1 }, { unique: true });
 }

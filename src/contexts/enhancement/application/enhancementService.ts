@@ -35,7 +35,7 @@ export interface EnhanceResult {
 export async function enhanceCard(playerId: string, cardId: string, playerRepository: PlayerRepository): Promise<EnhanceResult> {
   return withOptimisticRetry(playerId, playerRepository, player => applyEnhanceAttempt(player, cardId), {
     onSaved: result =>
-      writeAuditLog("enhancement_logs", {
+      writeAuditLog("log_enhancement", {
         actorId: playerId,
         action: "attempt",
         changes: { cardId, success: result.success, destroyed: result.destroyed, enhancementLevel: result.enhancementLevel },

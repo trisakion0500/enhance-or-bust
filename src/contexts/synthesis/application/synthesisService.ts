@@ -41,7 +41,7 @@ export async function synthesizeGradeUpgrade(
 ): Promise<GradeUpgradeResult> {
   return withOptimisticRetry(playerId, playerRepository, player => applyGradeUpgrade(player, materialCardIds), {
     onSaved: result =>
-      writeAuditLog("synthesis_logs", {
+      writeAuditLog("log_synthesis", {
         actorId: playerId,
         action: "gradeUpgrade",
         changes: { materialCardIds, success: result.success, resultCardId: result.resultCardId, resultTemplateId: result.resultTemplateId },
@@ -70,7 +70,7 @@ export async function synthesizeEnhanceMaterial(
 ): Promise<EnhanceMaterialResult> {
   return withOptimisticRetry(playerId, playerRepository, player => applyEnhanceMaterial(player, targetCardId, materialCardIds), {
     onSaved: result =>
-      writeAuditLog("synthesis_logs", {
+      writeAuditLog("log_synthesis", {
         actorId: playerId,
         action: "enhanceMaterial",
         changes: { targetCardId, materialCardIds, enhancementLevel: result.enhancementLevel },

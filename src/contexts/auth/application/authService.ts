@@ -46,7 +46,7 @@ async function loginOrRegister(platformType: string, profile: GoogleProfile, pla
 
   const existing = await playerRepository.findByPlatform(platformType, platformUserId);
   if (existing) {
-    await writeAuditLog("auth_logs", { actorId: existing.playerId, action: "login", changes: { platformType } });
+    await writeAuditLog("log_auth", { actorId: existing.playerId, action: "login", changes: { platformType } });
     return createSession(existing.playerId);
   }
 
@@ -72,7 +72,7 @@ async function loginOrRegister(platformType: string, profile: GoogleProfile, pla
   // 적이 없으므로, 그 값으로 "register" 로그를 남기면 사실과 다른 내용이 된다.
   const won = persisted!.playerId === player.playerId;
   await writeAuditLog(
-    "auth_logs",
+    "log_auth",
     won
       ? {
           actorId: persisted!.playerId,

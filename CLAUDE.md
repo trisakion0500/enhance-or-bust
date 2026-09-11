@@ -72,7 +72,7 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   게임 이벤트 감사/통계용
 - 저장 위치: 로그 DB(`enhance_or_bust_log`, `infra/mongoLog.ts`)에 컨텐츠(도메인)별 컬렉션을
   분리해서 둔다(마스터데이터 로딩 전략의 "컨텐츠별 별도 컬렉션" 원칙과 동일) —
-  `auth_logs`/`enhancement_logs`/`synthesis_logs`/`battle_stage_logs`/`mailbox_logs`
+  `log_auth`/`log_enhancement`/`log_synthesis`/`log_battle_stage`/`log_mailbox`
 - 공통 스키마: `{actorId, action, changes, occurredAt}`. `actorId`는 playerId, 배치/크론처럼
   사람이 아닌 주체가 남기면 `"SYSTEM"` sentinel(`shared-kernel/auditLog.ts`의 `SYSTEM_ACTOR`).
   `changes`는 액션마다 내용이 달라 자유 형식 객체로 둔다
@@ -83,13 +83,13 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   `shouldSave`가 저장 자체를 스킵하는 경우와 동일 기준. 단, 이 기준은 "상태를 바꾼 행위의
   감사 추적"이라는 감사 로그 목적에만 해당하고, 통계 목적 컬렉션(DAU/전투 시도)에는 적용되지
   않는다 — 아래 두 항목 참고
-- DAU는 감사 로그와 별개 컬렉션(`daily_active_players`)으로 집계한다 — "무엇이 바뀌었는지"가
+- DAU는 감사 로그와 별개 컬렉션(`stats_daily_active_players`)으로 집계한다 — "무엇이 바뀌었는지"가
   아니라 "오늘 활동했는지"만 필요해 목적이 다르다. `(playerId, date)` 유니크 인덱스로 인증된
   요청의 공용 진입점(`requireAuth`)에서 하루 1건만 삽입(SendMail과 동일한 멱등 삽입 패턴 —
   중복 키 에러 11000은 조용히 무시)
-- 전투 스테이지 승률/카드 조합 통계도 감사 로그와 별개 컬렉션(`battle_stage_attempts`)으로
+- 전투 스테이지 승률/카드 조합 통계도 감사 로그와 별개 컬렉션(`attempts_battle_stage`)으로
   집계한다 — "스테이지별 승률이 얼마인가"는 승리(감사 로그 대상)뿐 아니라 패배까지 포함해야
-  계산 가능해, `battle_stage_logs`(승리 시에만 기록)와는 목적이 다르다. `clearStage()`가
+  계산 가능해, `log_battle_stage`(승리 시에만 기록)와는 목적이 다르다. `clearStage()`가
   `withOptimisticRetry` 밖에서(승패 무관, 매 호출 1건) 직접 기록하며, 출전 스쿼드의 카드
   원형 ID(`squadTemplateIds`)까지 남겨 어떤 카드 조합으로 이겼는지/졌는지 분석할 수 있게 한다
 - 대상 액션 목록 — "상태"가 `구현됨`인 것만 실제로 `writeAuditLog()` 호출이 코드에 있다.
@@ -98,19 +98,19 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
 
   | 컬렉션 | action | changes | 상태 |
   |---|---|---|---|
-  | `auth_logs` | `register` | platformType, starterCardTemplateId, initialGold | 구현됨 |
-  | `auth_logs` | `login` | platformType | 구현됨 |
-  | `auth_logs` | `logout` | (없음 — 세션 종료만) | 구현됨 |
-  | `enhancement_logs` | `attempt` | cardId, success, destroyed, enhancementLevel(결과) | 구현됨 |
-  | `synthesis_logs` | `gradeUpgrade` | materialCardIds, success, resultCardId?, resultTemplateId? | 구현됨 |
-  | `synthesis_logs` | `enhanceMaterial` | targetCardId, materialCardIds, enhancementLevel(결과) | 구현됨 |
-  | `battle_stage_logs` | `clear` | stageId, clearedStage(결과), rewardGold, rewardEnhancementStone, rewardCardTemplateId, mailSourceId — 승리(=저장 발생) 시에만 | 구현됨 |
-  | `mailbox_logs` | `send` | mailId, title, attachments, sourceType, sourceId — 멱등 스킵(재발송 아님)은 기록 안 함 | 구현됨 |
-  | `mailbox_logs` | `claim` | mailId, attachments(지급된 첨부) | 구현됨 |
-  | `mailbox_logs` | `delete` | mailId | 구현됨 |
-  | `mailbox_logs` | `cleanupBatch` | actorId="SYSTEM", cutoff, deletedCount(0건이면 상태 변경 없어 로그도 생략) | 구현됨 |
-  | `daily_active_players` | (감사 로그 아님, DAU 전용) | {playerId, date} 유니크 인덱스, 하루 1건 | 구현됨 |
-  | `battle_stage_attempts` | `attempt` | (감사 로그 아님, 통계 전용) stageId, squadCardIds, squadTemplateIds, won, clearedStage — 승패 무관 매 시도 | 구현됨 |
+  | `log_auth` | `register` | platformType, starterCardTemplateId, initialGold | 구현됨 |
+  | `log_auth` | `login` | platformType | 구현됨 |
+  | `log_auth` | `logout` | (없음 — 세션 종료만) | 구현됨 |
+  | `log_enhancement` | `attempt` | cardId, success, destroyed, enhancementLevel(결과) | 구현됨 |
+  | `log_synthesis` | `gradeUpgrade` | materialCardIds, success, resultCardId?, resultTemplateId? | 구현됨 |
+  | `log_synthesis` | `enhanceMaterial` | targetCardId, materialCardIds, enhancementLevel(결과) | 구현됨 |
+  | `log_battle_stage` | `clear` | stageId, clearedStage(결과), rewardGold, rewardEnhancementStone, rewardCardTemplateId, mailSourceId — 승리(=저장 발생) 시에만 | 구현됨 |
+  | `log_mailbox` | `send` | mailId, title, attachments, sourceType, sourceId — 멱등 스킵(재발송 아님)은 기록 안 함 | 구현됨 |
+  | `log_mailbox` | `claim` | mailId, attachments(지급된 첨부) | 구현됨 |
+  | `log_mailbox` | `delete` | mailId | 구현됨 |
+  | `log_mailbox` | `cleanupBatch` | actorId="SYSTEM", cutoff, deletedCount(0건이면 상태 변경 없어 로그도 생략) | 구현됨 |
+  | `stats_daily_active_players` | (감사 로그 아님, DAU 전용) | {playerId, date} 유니크 인덱스, 하루 1건 | 구현됨 |
+  | `attempts_battle_stage` | `attempt` | (감사 로그 아님, 통계 전용) stageId, squadCardIds, squadTemplateIds, won, clearedStage — 승패 무관 매 시도 | 구현됨 |
 
 ## 바운디드 컨텍스트 (DDD)
 
@@ -297,9 +297,9 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   프론트가 체크박스 단계에서부터 등급/원형 불일치나 장수 초과 체크를 되돌리고, 선택할 때마다
   남은 장수/성공률/비용 힌트를 갱신하며, 조건이 정확히 맞을 때만 합성 시도 버튼을 보여준다.
   최종 검증은 여전히 서버가 한다(서버 권위 원칙)
-- 감사 로그/DAU 중 `auth_logs`(로그인/가입/로그아웃), `enhancement_logs`(강화 시도),
-  `synthesis_logs`(등급 승급/강화 재료 합성), `battle_stage_logs`(스테이지 클리어),
-  그리고 `daily_active_players`(DAU) 구현 — 정책 전체(대상 액션 목록)는 "감사 로그 /
+- 감사 로그/DAU 중 `log_auth`(로그인/가입/로그아웃), `log_enhancement`(강화 시도),
+  `log_synthesis`(등급 승급/강화 재료 합성), `log_battle_stage`(스테이지 클리어),
+  그리고 `stats_daily_active_players`(DAU) 구현 — 정책 전체(대상 액션 목록)는 "감사 로그 /
   DAU 정책" 절 참고. `writeAuditLog()`는 `authService.ts`의 `loginOrRegister()`(로그인/
   가입, 동시 가입 레이스에서 진 요청은 자신이 만든 시작 카드가 실제로 저장되지 않았으므로
   register 대신 login으로 정정해 기록), `authRoutes.ts`의 로그아웃 핸들러,
@@ -309,13 +309,13 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   `shouldSave`가 승리(=`mutated`)일 때만 `onSaved`를 부르는 구조라 패배 시엔 별도 분기
   없이도 로그가 구조적으로 안 남는다)에서 쓰인다. `markDailyActive()`는 `requireAuth`
   (인증이 필요한 모든 라우트의 공용 진입점)에서 매 요청마다 호출되지만 유니크 인덱스
-  덕분에 실제로는 플레이어당 하루 1건만 남는다. `battle_stage_attempts`(전투 스테이지 승률/
+  덕분에 실제로는 플레이어당 하루 1건만 남는다. `attempts_battle_stage`(전투 스테이지 승률/
   카드 조합 통계)도 `clearStage()`가 `withOptimisticRetry` 결과를 받은 뒤 승패 무관 매
-  호출마다 직접 기록 — `battle_stage_logs`(감사 로그, 승리 시에만)와 별개 목적/별개 컬렉션.
-  `mailbox_logs`(Mailbox 컨텍스트)까지 구현되어 대상 액션 전체가 완료됐다 —
+  호출마다 직접 기록 — `log_battle_stage`(감사 로그, 승리 시에만)와 별개 목적/별개 컬렉션.
+  `log_mailbox`(Mailbox 컨텍스트)까지 구현되어 대상 액션 전체가 완료됐다 —
   `mailboxService.ts`의 `sendMail()`(다른 도메인 로그에도 `mailSourceId`로 같은 이벤트가
   남지만, 각 감사 로그 컬렉션은 앞으로 자기 만료 정책으로 독립적으로 클렌징될 수 있어
-  다른 컬렉션이 먼저 지워지면 상관관계 추적이 끊긴다 — 그래서 `mailbox_logs` 자체에도
+  다른 컬렉션이 먼저 지워지면 상관관계 추적이 끊긴다 — 그래서 `log_mailbox` 자체에도
   발송을 남겨 발송→수령→삭제 생애주기가 이 컬렉션 하나로 항상 재구성 가능하게 한다.
   `insertMail()`이 멱등 스킵인지 실제 삽입인지를 boolean으로 반환하도록 바꿔, 재시도로 인한
   중복 로그를 막는다)/`claimMail()`(수령한 첨부물까지 포함)/`deleteMail()`,
