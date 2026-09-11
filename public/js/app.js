@@ -8,10 +8,11 @@ import { renderMailbox } from "./mailbox.js";
 /** 앱 전역 공유 상태 — 각 탭 렌더 함수가 이 하나를 읽는다. */
 const state = { player: null };
 
-/** @param {boolean} loggedIn true면 게임 화면을, false면 로그인 화면을 보여준다 */
-function showScreen(loggedIn) {
-  document.getElementById("loginScreen").hidden = loggedIn;
-  document.getElementById("gameScreen").hidden = !loggedIn;
+/** @param {"login"|"register"|"game"} mode 보여줄 화면 */
+function showScreen(mode) {
+  document.getElementById("loginScreen").hidden = mode !== "login";
+  document.getElementById("registerScreen").hidden = mode !== "register";
+  document.getElementById("gameScreen").hidden = mode !== "game";
 }
 
 /** `state.player`의 재화/닉네임/clearedStage를 헤더 DOM에 반영한다. */
@@ -66,8 +67,42 @@ async function onGoogleLogin(response) {
     credentials: "include",
     body: JSON.stringify({ credential: response.credential }),
   });
-  if (res.ok) await enterGame();
-  else document.getElementById("loginResult").textContent = `${res.status} ${JSON.stringify(await res.json())}`;
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    document.getElementById("loginResult").textContent = `${res.status} ${JSON.stringify(body)}`;
+    return;
+  }
+  if (body.pendingRegistration) showRegisterForm(body.defaultName);
+  else await enterGame();
+}
+
+/**
+ * 닉네임 입력 화면을 보여준다 — 입력값은 플랫폼이 제공한 기본 닉네임으로 미리 채워둔다.
+ * @param {string} [defaultName] 플랫폼 기본 닉네임(없으면 빈 값)
+ */
+function showRegisterForm(defaultName) {
+  document.getElementById("registerNickname").value = defaultName ?? "";
+  document.getElementById("registerResult").textContent = "";
+  showScreen("register");
+}
+
+/**
+ * 닉네임 입력 폼 제출 — `POST /auth/register/complete`로 가입을 완료하고 게임 화면으로 들어간다.
+ * @param {SubmitEvent} event
+ */
+async function onRegisterSubmit(event) {
+  event.preventDefault();
+  const input = document.getElementById("registerNickname");
+  const button = event.target.querySelector("button[type=submit]");
+  button.disabled = true;
+  try {
+    await apiPost("/auth/register/complete", { name: input.value });
+    history.replaceState(null, "", location.pathname);
+    await enterGame();
+  } catch (err) {
+    document.getElementById("registerResult").textContent = err.message;
+    button.disabled = false;
+  }
 }
 
 /** `GOOGLE_AUTH_FLOW` 설정에 따라 GIS 버튼 또는 Authorization Code Flow 링크를, 그리고 페이스북
@@ -101,19 +136,34 @@ async function initLogin() {
 /** 로그인 성공 직후 플레이어 상태를 받아와 게임 화면으로 전환한다. */
 async function enterGame() {
   await refreshPlayer();
-  showScreen(true);
+  showScreen("game");
   document.getElementById("logoutButton").addEventListener("click", onLogout);
 }
 
-/** 페이지 진입점 — 로그인 여부를 확인해 게임 화면 또는 로그인 화면으로 분기한다. */
+/** 페이지 진입점 — 가입 보류/로그인 여부를 확인해 닉네임 입력/게임/로그인 화면으로 분기한다. */
 async function init() {
   initTabs();
+  document.getElementById("registerForm").addEventListener("submit", onRegisterSubmit);
+
+  // 신규 가입자는 OAuth 콜백(authRoutes.ts의 handleOAuthCallback)이 세션 대신 가입 보류
+  // 쿠키를 발급하고 이 쿼리 파라미터와 함께 여기로 보낸다 — 닉네임을 받아야 로그인이 완료된다.
+  if (new URLSearchParams(location.search).get("register")) {
+    history.replaceState(null, "", location.pathname);
+    try {
+      const { defaultName } = await apiGet("/auth/register/pending");
+      showRegisterForm(defaultName);
+      return;
+    } catch {
+      // 가입 보류가 만료/무효 — 로그인 화면으로 폴백
+    }
+  }
+
   try {
     // 로그인 여부 확인을 별도 엔드포인트로 두지 않고 GET /player/me 성공 여부로 겸한다 —
     // 어차피 게임 화면 진입 즉시 이 데이터가 필요하므로 호출을 하나로 합친다.
     await enterGame();
   } catch {
-    showScreen(false);
+    showScreen("login");
     await initLogin();
     // OAuth 콜백(구글 Authorization Code Flow/페이스북)이 실패하면 서버가 이 쿼리 파라미터와
     // 함께 로그인 화면으로 리다이렉트한다(authRoutes.ts의 handleOAuthCallback).

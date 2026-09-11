@@ -10,6 +10,11 @@ import type { PlayerRepository } from "../../player/domain/playerRepository.js";
 import { verifyGoogleIdToken } from "../infrastructure/googleAuth.js";
 import type { SocialAuthProvider } from "../infrastructure/socialAuthProvider.js";
 import { createSession } from "../infrastructure/sessionStore.js";
+import {
+  createPendingRegistration,
+  deletePendingRegistration,
+  resolvePendingRegistration,
+} from "../infrastructure/pendingRegistrationStore.js";
 import { writeAuditLog } from "../../../shared-kernel/auditLog.js";
 
 /** 신규 플레이어에게 지급하는 초기 골드. */
@@ -17,6 +22,18 @@ const INITIAL_GOLD = 1000;
 
 /** 최저 등급(GAME_DESIGN.md 1절 등급 순서 N < R < SR < SSR 중 최하위) — 신규 가입 시 이 등급에서 카드 1장을 랜덤으로 뽑아 지급한다. */
 const STARTER_CARD_GRADE = "N";
+
+/** 닉네임 최대 길이. */
+const NICKNAME_MAX_LENGTH = 20;
+
+/**
+ * 소셜 로그인 시도 결과 — 기존 플레이어면 바로 세션이 발급되고("login"), 처음 보는
+ * 사용자면 Player를 아직 만들지 않고 닉네임 입력을 기다린다("pending", CLAUDE.md
+ * "인증 전략" 참고).
+ */
+export type LoginResult =
+  | { status: "login"; sessionToken: string }
+  | { status: "pending"; token: string; defaultName: string };
 
 /**
  * 신규 가입 시 지급할 시작 카드를 최저 등급 원형 중에서 균등 확률로 하나 뽑는다(등급 내
@@ -32,50 +49,76 @@ function pickStarterCard(): Card {
 }
 
 /**
- * 검증된 소셜 프로필로 로그인하고, 처음 로그인하는 사용자면 신규 Player를 생성한다. `playerId`는
- * 프로바이더 값(`sub` 등)과 무관한 내부 식별자(`randomUUID()`)로 새로 발급한다 — 나중에 구글 외
- * 다른 로그인 수단이 추가되거나, 여러 수단을 한 플레이어에 연결하는 기능이 생겨도 `playerId` 체계를
- * 안 건드리기 위함. 어느 플로우든 프로바이더 프로필 검증까지 끝낸 뒤 이 함수로 합류한다.
+ * 검증된 소셜 프로필로 로그인을 시도한다. 기존 플레이어면 바로 세션을 발급하고, 처음 보는
+ * 사용자면 Player를 아직 만들지 않고 프로필을 Redis에 보류해둔 뒤 닉네임 입력을 기다린다
+ * (`completeRegistration()`이 실제 생성을 담당) — CLAUDE.md "인증 전략" 참고. 어느 플로우든
+ * 프로바이더 프로필 검증까지 끝낸 뒤 이 함수로 합류한다.
  * @param platformType 로그인 수단 식별자(예: "google", "facebook")
  * @param profile 검증된 소셜 프로필 — 프로바이더마다 원본 필드명은 달라도(구글 `sub`/페이스북 `id`
  *   등) 각 infrastructure 모듈이 이 공통 형태로 미리 변환해 넘긴다(별도 공유 타입 없이 구조적
  *   타이핑으로 충분해 새 타입을 만들지 않음)
  * @param playerRepository Player 영속성 포트
- * @returns 발급된 세션 토큰
+ * @returns 로그인 결과({@link LoginResult})
  */
 async function loginOrRegister(
   platformType: string,
   profile: { sub: string; name?: string; email?: string; picture?: string },
   playerRepository: PlayerRepository,
-): Promise<string> {
+): Promise<LoginResult> {
   const { sub: platformUserId, name, email, picture } = profile;
 
   const existing = await playerRepository.findByPlatform(platformType, platformUserId);
   if (existing) {
     await writeAuditLog("log_auth", { actorId: existing.playerId, action: "login", changes: { platformType } });
-    return createSession(existing.playerId);
+    return { status: "login", sessionToken: await createSession(existing.playerId) };
   }
 
+  const defaultName = name ?? "";
+  const token = await createPendingRegistration({ platformType, platformUserId, name: defaultName, email: email ?? "", picture });
+  return { status: "pending", token, defaultName };
+}
+
+/**
+ * 닉네임 입력으로 가입을 완료한다 — 보류돼 있던 소셜 프로필을 Redis에서 꺼내 그제서야 Player를
+ * 생성한다(최저 등급 원형 중 랜덤 1장, 초기 골드는 `loginOrRegister()`와 동일).
+ * @param token `loginOrRegister()`가 발급한 가입 보류 토큰
+ * @param nickname 사용자가 입력한 닉네임(플랫폼 기본값을 그대로 받아도 됨)
+ * @param playerRepository Player 영속성 포트
+ * @returns 발급된 세션 토큰
+ * @throws {BusinessException} 토큰이 없거나 만료됐으면 AUTH.REGISTRATION_EXPIRED, 닉네임이
+ *   비어있거나 너무 길면 AUTH.VALIDATION_FAILED
+ * @author trisakion
+ */
+export async function completeRegistration(token: string, nickname: string, playerRepository: PlayerRepository): Promise<string> {
+  const pending = await resolvePendingRegistration(token);
+  if (!pending) throw new BusinessException(ERROR_MAP.AUTH.REGISTRATION_EXPIRED, { token });
+
+  const trimmedName = nickname.trim();
+  if (!trimmedName || trimmedName.length > NICKNAME_MAX_LENGTH)
+    throw new BusinessException(ERROR_MAP.AUTH.VALIDATION_FAILED, { nickname });
+
+  const { platformType, platformUserId, email, picture } = pending;
   const starterCard = pickStarterCard();
   const player = new Player(
     randomUUID(),
     0,
     platformType,
     platformUserId,
-    name ?? "",
-    email ?? "",
+    trimmedName,
+    email,
     picture,
     new Inventory([starterCard]),
     new Economy(INITIAL_GOLD),
   );
   await playerRepository.create(player);
+  await deletePendingRegistration(token);
 
   // create()가 동시 최초 로그인 레이스로 조용히 무시됐을 수 있다 — 이 경우 위에서 만든 player.playerId는
   // 실제로 저장되지 않았으므로, 실제 저장된(먼저 이긴 쪽의) playerId를 다시 조회해 세션을 발급해야 한다.
   const persisted = await playerRepository.findByPlatform(platformType, platformUserId);
   // 이 요청이 실제로 생성에 성공했는지(playerId가 자신의 것인지)로 register/login을 구분한다 —
-  // 레이스에서 졌다면(다른 요청이 먼저 만들었다면) 자신이 만든 starterCard/골드는 실제로 저장된
-  // 적이 없으므로, 그 값으로 "register" 로그를 남기면 사실과 다른 내용이 된다.
+  // 레이스에서 졌다면(다른 요청이 먼저 만들었다면) 자신이 만든 starterCard/골드/닉네임은 실제로
+  // 저장된 적이 없으므로, 그 값으로 "register" 로그를 남기면 사실과 다른 내용이 된다.
   const won = persisted!.playerId === player.playerId;
   await writeAuditLog(
     "log_auth",
@@ -83,7 +126,7 @@ async function loginOrRegister(
       ? {
           actorId: persisted!.playerId,
           action: "register",
-          changes: { platformType, starterCardTemplateId: starterCard.templateId, initialGold: INITIAL_GOLD },
+          changes: { platformType, starterCardTemplateId: starterCard.templateId, initialGold: INITIAL_GOLD, name: trimmedName },
         }
       : { actorId: persisted!.playerId, action: "login", changes: { platformType } },
   );
@@ -91,13 +134,14 @@ async function loginOrRegister(
 }
 
 /**
- * Google Identity Services 방식 로그인 — 프론트가 이미 발급받은 ID 토큰을 검증해 로그인/가입한다.
+ * Google Identity Services 방식 로그인 — 프론트가 이미 발급받은 ID 토큰을 검증해 로그인을
+ * 시도한다(신규 사용자면 닉네임 입력을 기다리는 보류 상태로 돌아감 — {@link LoginResult}).
  * @param idToken 프론트에서 받은 구글 ID 토큰(credential)
  * @param playerRepository Player 영속성 포트
- * @returns 발급된 세션 토큰
+ * @returns 로그인 결과
  * @author trisakion
  */
-export async function loginWithGoogleIdToken(idToken: string, playerRepository: PlayerRepository): Promise<string> {
+export async function loginWithGoogleIdToken(idToken: string, playerRepository: PlayerRepository): Promise<LoginResult> {
   const profile = await verifyGoogleIdToken(idToken);
   return loginOrRegister("google", profile, playerRepository);
 }
@@ -109,10 +153,10 @@ export async function loginWithGoogleIdToken(idToken: string, playerRepository: 
  * @param provider 콜백을 받은 프로바이더(구글 authorization_code, 페이스북 등)
  * @param code 콜백 쿼리로 받은 authorization code
  * @param playerRepository Player 영속성 포트
- * @returns 발급된 세션 토큰
+ * @returns 로그인 결과
  * @author trisakion
  */
-export async function loginWithSocialProvider(provider: SocialAuthProvider, code: string, playerRepository: PlayerRepository): Promise<string> {
+export async function loginWithSocialProvider(provider: SocialAuthProvider, code: string, playerRepository: PlayerRepository): Promise<LoginResult> {
   const profile = await provider.exchangeAuthCode(code);
   return loginOrRegister(provider.platformType, profile, playerRepository);
 }

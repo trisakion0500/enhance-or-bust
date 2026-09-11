@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Request, Response } from "express";
 import { Router } from "express";
-import { loginWithGoogleIdToken, loginWithSocialProvider } from "../application/authService.js";
+import { completeRegistration, loginWithGoogleIdToken, loginWithSocialProvider, type LoginResult } from "../application/authService.js";
 import { deleteSession, resolveSession } from "../infrastructure/sessionStore.js";
 import { writeAuditLog } from "../../../shared-kernel/auditLog.js";
 import { BusinessException } from "../../../shared-kernel/businessException.js";
@@ -14,12 +14,19 @@ import type { PlayerRepository } from "../../player/domain/playerRepository.js";
 import { googleAuthCodeProvider } from "../infrastructure/googleAuth.js";
 import { facebookAuthProvider } from "../infrastructure/facebookAuth.js";
 import type { SocialAuthProvider } from "../infrastructure/socialAuthProvider.js";
+import { resolvePendingRegistration } from "../infrastructure/pendingRegistrationStore.js";
 
 /** 세션 토큰을 담는 쿠키 이름. */
 export const SESSION_COOKIE_NAME = "sessionToken";
 
 /** Authorization Code Flow CSRF 방지용 state를 담는 임시 쿠키 이름. */
 const OAUTH_STATE_COOKIE_NAME = "oauthState";
+
+/** 신규 가입 보류 토큰을 담는 임시 쿠키 이름 — 닉네임 입력을 기다리는 동안만 쓰인다. */
+const PENDING_REGISTRATION_COOKIE_NAME = "pendingRegistrationToken";
+
+/** 가입 보류 쿠키 유효 시간(ms) — `pendingRegistrationStore.ts`의 Redis TTL(10분)과 맞춘다. */
+const PENDING_REGISTRATION_COOKIE_MAX_AGE = 10 * 60 * 1000;
 
 /** 로컬 http 개발 환경에선 secure 쿠키가 저장되지 않아 배포(HTTPS) 환경에서만 켠다. */
 const isSecureCookie = process.env.NODE_ENV === "production";
@@ -53,17 +60,26 @@ export function createAuthRoutes(playerRepository: PlayerRepository): Router {
     });
   }
 
+  function issuePendingRegistrationCookie(res: Response, token: string) {
+    res.cookie(PENDING_REGISTRATION_COOKIE_NAME, token, {
+      httpOnly: true,
+      sameSite: "lax",
+      maxAge: PENDING_REGISTRATION_COOKIE_MAX_AGE,
+      secure: isSecureCookie,
+    });
+  }
+
   /**
-   * 구글/페이스북 Authorization Code Flow 콜백 공통 처리 — state 검증, 로그인 함수 호출,
-   * 세션 쿠키 발급까지 두 프로바이더가 동일해 이 헬퍼 하나로 합친다. 브라우저 최상위 탐색(주소
-   * 이동)으로 오는 요청이라 실패 시 `errorHandler`의 날것 JSON 응답 대신 로그인 화면으로
-   * 리다이렉트한다(사용자가 JSON을 볼 이유가 없음) — 실패 원인은 여기서 직접 로깅해 디버깅
-   * 가시성을 유지한다.
+   * 구글/페이스북 Authorization Code Flow 콜백 공통 처리 — state 검증, 로그인 함수 호출까지
+   * 두 프로바이더가 동일해 이 헬퍼 하나로 합친다. 브라우저 최상위 탐색(주소 이동)으로 오는
+   * 요청이라 실패 시 `errorHandler`의 날것 JSON 응답 대신 로그인 화면으로 리다이렉트한다
+   * (사용자가 JSON을 볼 이유가 없음) — 실패 원인은 여기서 직접 로깅해 디버깅 가시성을 유지한다.
+   * 신규 가입자는 세션 대신 가입 보류 쿠키를 발급하고 `/?register=1`로 보내 닉네임 입력을 받는다.
    * @param req Express 요청(콜백 쿼리 `code`/`state`)
    * @param res Express 응답
-   * @param login 검증된 code를 받아 로그인/가입 처리 후 세션 토큰을 반환하는 함수(프로바이더별 구현)
+   * @param login 검증된 code를 받아 로그인을 시도하는 함수(프로바이더별 구현)
    */
-  async function handleOAuthCallback(req: Request, res: Response, login: (code: string) => Promise<string>): Promise<void> {
+  async function handleOAuthCallback(req: Request, res: Response, login: (code: string) => Promise<LoginResult>): Promise<void> {
     const { code, state } = req.query;
     const expectedState = readCookie(req.headers.cookie, OAUTH_STATE_COOKIE_NAME);
     res.clearCookie(OAUTH_STATE_COOKIE_NAME);
@@ -75,8 +91,13 @@ export function createAuthRoutes(playerRepository: PlayerRepository): Router {
     }
 
     try {
-      const sessionToken = await login(code);
-      issueSessionCookie(res, sessionToken);
+      const result = await login(code);
+      if (result.status === "pending") {
+        issuePendingRegistrationCookie(res, result.token);
+        res.redirect("/?register=1");
+        return;
+      }
+      issueSessionCookie(res, result.sessionToken);
       res.redirect("/");
     } catch (err) {
       logger.info(`[${res.locals.requestId}] OAuth 로그인 실패, 로그인 화면으로 리다이렉트`, err instanceof BusinessException ? err.entry : err);
@@ -111,11 +132,40 @@ export function createAuthRoutes(playerRepository: PlayerRepository): Router {
       if (typeof credential !== "string" || !credential)
         throw new BusinessException(ERROR_MAP.AUTH.VALIDATION_FAILED, { body: req.body });
 
-      const sessionToken = await loginWithGoogleIdToken(credential, playerRepository);
-      issueSessionCookie(res, sessionToken);
+      const result = await loginWithGoogleIdToken(credential, playerRepository);
+      if (result.status === "pending") {
+        issuePendingRegistrationCookie(res, result.token);
+        res.json({ result: 0, pendingRegistration: true, defaultName: result.defaultName });
+        return;
+      }
+      issueSessionCookie(res, result.sessionToken);
       res.json({ result: 0 });
     }));
   }
+
+  // 신규 가입자는 닉네임을 입력받기 전까지 Player를 만들지 않는다 — 이 두 엔드포인트가 그
+  // "가입 보류" 구간을 담당한다(CLAUDE.md "인증 전략"). 토큰은 URL이 아니라 httpOnly 쿠키로만
+  // 오간다(referrer로 새는 것을 피하기 위함) — GIS/리다이렉트 두 로그인 방식 모두 이 두
+  // 엔드포인트로 합류한다.
+  router.get("/auth/register/pending", asyncHandler(async (req, res) => {
+    const token = readCookie(req.headers.cookie, PENDING_REGISTRATION_COOKIE_NAME);
+    if (!token) throw new BusinessException(ERROR_MAP.AUTH.REGISTRATION_EXPIRED, {});
+    const pending = await resolvePendingRegistration(token);
+    if (!pending) throw new BusinessException(ERROR_MAP.AUTH.REGISTRATION_EXPIRED, {});
+    res.json({ result: 0, defaultName: pending.name });
+  }));
+
+  router.post("/auth/register/complete", asyncHandler(async (req, res) => {
+    const token = readCookie(req.headers.cookie, PENDING_REGISTRATION_COOKIE_NAME);
+    const { name } = req.body ?? {};
+    if (!token) throw new BusinessException(ERROR_MAP.AUTH.REGISTRATION_EXPIRED, {});
+    if (typeof name !== "string") throw new BusinessException(ERROR_MAP.AUTH.VALIDATION_FAILED, { body: req.body });
+
+    const sessionToken = await completeRegistration(token, name, playerRepository);
+    res.clearCookie(PENDING_REGISTRATION_COOKIE_NAME);
+    issueSessionCookie(res, sessionToken);
+    res.json({ result: 0 });
+  }));
 
   // CSRF state 쿠키는 프로바이더마다 따로 두지 않고 공용 oauthState 쿠키를 재사용한다 — 한
   // 브라우저에서 동시에 두 플로우를 진행할 일이 없어 네임스페이스 분리가 불필요하다.

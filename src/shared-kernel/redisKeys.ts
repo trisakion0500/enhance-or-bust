@@ -19,3 +19,13 @@ export function redisSessionKey(token: string): string {
 export function redisLockKey(playerId: string): string {
   return `${config.redisKeyPrefix}lock:player:${playerId}`;
 }
+
+/**
+ * 닉네임 입력 전까지 보류 중인 신규 가입 정보를 저장하는 Redis 키를 만든다.
+ * @param token 가입 보류 토큰
+ * @returns Redis 키
+ * @author trisakion
+ */
+export function redisPendingRegistrationKey(token: string): string {
+  return `${config.redisKeyPrefix}pendingRegistration:${token}`;
+}

@@ -98,7 +98,7 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
 
   | 컬렉션 | action | changes | 상태 |
   |---|---|---|---|
-  | `log_auth` | `register` | platformType, starterCardTemplateId, initialGold | 구현됨 |
+  | `log_auth` | `register` | platformType, starterCardTemplateId, initialGold, name(입력한 닉네임) | 구현됨 |
   | `log_auth` | `login` | platformType | 구현됨 |
   | `log_auth` | `logout` | (없음 — 세션 종료만) | 구현됨 |
   | `log_enhancement` | `attempt` | cardId, success, destroyed, enhancementLevel(결과) | 구현됨 |
@@ -191,17 +191,29 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
     충돌 확률상 무해)하고, MySQL `AUTO_INCREMENT`처럼 단일 진실 공급원이 필요 없어
     서비스 서버를 N대로 늘려도 영향 없다. MongoDB가 1대(레플리카셋 포함)인 한 프라이머리가
     하나뿐이라 unique 인덱스가 동시 요청 순서를 항상 일관되게 판정한다
-- 최초 로그인 시 신규 Player를 생성(최저 등급 원형 중 랜덤 1장으로 시작 카드 지급,
-  초기 골드 1000, `clearedStage=0`, 소셜 프로필의 `name`/`email`/`picture` 포함) —
-  `authService.ts`의 `pickStarterCard()`, 최저 등급은 `masterDataCache.getCardTemplatesByGrade()`로
-  조회(등급 순서 N < R < SR < SSR 중 N 고정, 원형 간 가중치 없이 균등 확률). 이름/프로필 사진은 최초 가입 시 1회만
-  가져오고 이후 프로바이더와 재동기화하지 않는다 — 닉네임/프로필 사진을 게임 내에서 바꾸는
-  기능이 나중에 추가될 수 있는데, 프로바이더 쪽과 계속 동기화하면 게임 내 변경을 도로
-  덮어쓰게 되기 때문. `PlayerRepository.create()`는 삽입 전용(update 아님)이며, 동시 최초 로그인
-  레이스로 unique 인덱스 중복 에러(11000)가 나면 조용히 무시한다 — 이때 자신이 만든
-  `playerId`가 실제로 저장됐다는 보장이 없으므로, 호출부(`authService.ts`의
-  `loginOrRegister()`)는 그 뒤 반드시 `findByPlatform`으로 실제 저장된 `playerId`를
-  다시 조회해 세션을 발급한다
+- 최초 로그인(신규 사용자)은 소셜 인증만으로 바로 Player를 만들지 않고, 닉네임을 입력받은
+  뒤에야 가입을 완료한다(디폴트 닉네임은 플랫폼이 제공한 닉네임) — `loginOrRegister()`는
+  기존 플레이어면 즉시 로그인(세션 발급)하지만, 처음 보는 `(platformType, platformUserId)`면
+  Player를 만드는 대신 소셜 프로필(`platformType`/`platformUserId`/`name`/`email`/`picture`)을
+  `pendingRegistrationStore.ts`를 통해 Redis에 10분 TTL로 보류하고 가입 보류 토큰만 반환한다
+  (`authService.ts`의 `LoginResult` 유니온 — `{status:"login", sessionToken}` 또는
+  `{status:"pending", token, defaultName}`). 이 토큰은 URL이 아니라 httpOnly 쿠키
+  (`pendingRegistrationToken`)로만 오간다(리퍼러로 새는 것을 피하기 위함) — GIS(`POST
+  /auth/google` 응답의 `pendingRegistration`/`defaultName` 필드)와 리다이렉트 플로우(구글
+  authorization_code/페이스북 콜백이 `/?register=1`로 리다이렉트) 둘 다 이 쿠키를 거쳐
+  같은 두 엔드포인트로 합류한다: `GET /auth/register/pending`(쿠키의 토큰으로 보류된
+  기본 닉네임 조회, 프론트가 입력 폼을 이 값으로 미리 채움)과 `POST
+  /auth/register/complete`(닉네임을 받아 그제서야 `completeRegistration()`이 최저 등급
+  원형 중 랜덤 1장 시작 카드 + 초기 골드 1000으로 Player를 실제 생성하고 세션을 발급).
+  가입 보류 상태에서 닉네임 입력 전에 이탈해도 데이터 손실이 없다 — 아직 아무것도 저장되지
+  않았으므로 그냥 Redis TTL로 조용히 사라지고, 다시 로그인하면 같은 보류 흐름이 반복될 뿐이다.
+  이름/프로필 사진은 이렇게 가입 시점에만 가져오고 이후 프로바이더와 재동기화하지 않는다 —
+  닉네임/프로필 사진을 게임 내에서 바꾸는 기능이 나중에 추가될 수 있는데, 프로바이더 쪽과
+  계속 동기화하면 게임 내 변경을 도로 덮어쓰게 되기 때문. `PlayerRepository.create()`는
+  삽입 전용(update 아님)이며, 동시 가입 완료 레이스로 unique 인덱스 중복 에러(11000)가 나면
+  조용히 무시한다 — 이때 자신이 만든 `playerId`가 실제로 저장됐다는 보장이 없으므로, 호출부
+  (`authService.ts`의 `completeRegistration()`)는 그 뒤 반드시 `findByPlatform`으로 실제
+  저장된 `playerId`를 다시 조회해 세션을 발급한다
 - 세션은 랜덤 opaque 토큰을 발급해 Redis에 `session:<token> → playerId` 형태로
   TTL(기본 7일, `SESSION_TTL_SEC`)과 함께 저장한다(Redis 용도 절의 "세션/인증 토큰 관리"
   그대로). JWT처럼 자체 서명된 토큰이 아니라, Redis에서 지우면 즉시 무효화할 수 있다
@@ -364,6 +376,14 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   대신 `/?loginError=1`로 리다이렉트해 로그인 화면에 안내 메시지를 보여준다
   (`authRoutes.ts`의 `handleOAuthCallback()`). 구글/페이스북 모두 로그인 자체는 e2e 테스트
   대상 밖(실제 프로바이더 서버 연동 필요, mock 안 씀)
+- 회원가입 시 닉네임 입력 흐름 추가(디폴트는 플랫폼 제공 닉네임) — 자세한 이유와 메커니즘은
+  "인증 전략" 절 참고. 신규 사용자는 닉네임 제출 전까지 Player가 생성되지 않고 Redis에
+  가입 보류 상태로만 남는다(`pendingRegistrationStore.ts`, 신규). `authService.ts`의
+  `loginOrRegister()`는 신규/기존 여부에 따라 `LoginResult`(`"pending"`/`"login"`)를 반환하도록
+  변경했고, 실제 Player 생성은 새 `completeRegistration()`이 담당한다. 라우트는
+  `GET /auth/register/pending`/`POST /auth/register/complete` 2개 신규(GIS/리다이렉트 두
+  로그인 방식이 전부 이 둘로 합류). 프론트는 `index.html`에 `registerScreen`(닉네임 입력 폼)
+  섹션을 추가하고, `app.js`의 `showScreen()`을 로그인/닉네임입력/게임 3단 모드로 확장했다
 
 ## MongoDB 데이터 모델링 / 원자성 전략 (확정)
 
