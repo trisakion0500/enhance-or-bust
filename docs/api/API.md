@@ -2,7 +2,7 @@
 
 ## 개요
 
-- **Base URL**: 로컬 개발 기준 `http://localhost:3000` (포트는 `.env`의 `PORT`)
+- **Base URL**: 로컬 개발 기준 `http://localhost:3999` (포트는 `.env`의 `PORT`)
 - **인증**: 로그인(`/auth/*`) 성공 시 `sessionToken` httpOnly 쿠키가 발급된다. 이후 보호된
   엔드포인트는 이 쿠키만으로 인증하며 별도 헤더가 필요 없다(같은 오리진에서 정적 프론트와
   API를 같이 서빙하므로 CORS 설정도 없다).
@@ -107,6 +107,15 @@
 | 9002 | 401 | 로그인이 필요합니다. (세션 쿠키 없음/만료 — 모든 보호된 엔드포인트에 공통) |
 | 9003 | 401 | 페이스북 로그인 검증에 실패했습니다. |
 | 9999 | 500 | 일시적인 서버 오류입니다. 잠시 후 다시 시도해주세요. |
+
+### GM (10000번대) — gm_platform 연동 전용
+
+| 코드 | HTTP | 메시지 |
+|---|---|---|
+| 10000 | 400 | 요청 값이 올바르지 않습니다. |
+| 10001 | 401 | 인증에 실패했습니다. |
+| 10002 | 404 | 요청한 플레이어를 찾을 수 없습니다. |
+| 10999 | 500 | 일시적인 서버 오류입니다. 잠시 후 다시 시도해주세요. |
 
 ---
 
@@ -407,3 +416,67 @@ token/프로필과 교환해 로그인/가입을 완료한 뒤 세션 쿠키를 
 ```
 
 **에러**: 9002(미인증), 1001(세션은 유효한데 플레이어 문서가 없는 이례적 상황)
+
+---
+
+## GM
+
+gm_platform(별도 사내 운영툴 프로젝트)이 GM 운영자 대신 호출하는 엔드포인트. 세션 쿠키가
+아니라 `X-API-Key` 헤더(`GM_PLATFORM_API_KEY` env와 대조, `timingSafeEqual`로 비교)로
+인증한다. gm_platform의 apiExecution 관례에 맞춰 조회 엔드포인트도 전부 `POST`다. 응답은
+gm_platform의 외부 API 규약(`{ result, message, data: [...] }`, `data`는 항상 배열)을
+따른다 — gm_platform 쪽에서 이 엔드포인트를 KEY_VALUE/GRID로 등록해 결과를 보여준다.
+
+### `POST /gm/get-player`
+
+`playerId`로 플레이어 한 명을 조회하거나, `playerId`를 생략하면 전체 플레이어를 조회한다
+(최대 200명, 무제한 스캔 방지). 재화(`economy.gold`/`economy.enhancementStone`/
+`economy.diamond`)는 gm_platform 그리드가 1차원으로 렌더링할 수 있도록 점(`.`) 표기로
+평탄화되어 있다. **X-API-Key 필요.**
+
+**요청 body**
+```json
+{ "playerId": "player-1" }
+```
+
+**응답**
+```json
+{
+  "result": 0,
+  "message": "OK",
+  "data": [
+    {
+      "playerId": "player-1", "name": "닉네임", "platformType": "google", "platformUserId": "116...",
+      "economy.gold": 1000, "economy.enhancementStone": 3, "economy.diamond": 0,
+      "clearedStage": 5, "cardCount": 4
+    }
+  ]
+}
+```
+
+**에러**: 10000(playerId가 문자열이 아님), 10002(playerId 지정 조회인데 없음)
+
+### `POST /gm/get-player-cards`
+
+`playerId`로 보유 카드 목록을 조회한다. 각 카드는 `GET /player/me`의 인벤토리와 동일하게
+마스터 데이터(카드 원형)와 조인해 등급/공격력/체력/속성까지 포함한다. `playerId`는
+**필수**다(`get-player`와 달리 전체 조회 모드가 없음). **X-API-Key 필요.**
+
+**요청 body**
+```json
+{ "playerId": "player-1" }
+```
+
+**응답**
+```json
+{
+  "result": 0,
+  "message": "OK",
+  "data": [
+    { "cardId": "card-1", "templateId": "N_01", "grade": "N", "baseAttack": 15, "baseHp": 100,
+      "element": "fire", "level": 3, "exp": 40, "enhancementLevel": 0 }
+  ]
+}
+```
+
+**에러**: 10000(playerId 누락/문자열 아님), 10002(플레이어 없음)

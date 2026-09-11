@@ -384,6 +384,26 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   `GET /auth/register/pending`/`POST /auth/register/complete` 2개 신규(GIS/리다이렉트 두
   로그인 방식이 전부 이 둘로 합류). 프론트는 `index.html`에 `registerScreen`(닉네임 입력 폼)
   섹션을 추가하고, `app.js`의 `showScreen()`을 로그인/닉네임입력/게임 3단 모드로 확장했다
+- 별도 사내 운영툴 프로젝트인 `gm_platform`과의 연동 추가 — GM 운영자가 gm_platform 화면에서
+  이 서버의 플레이어 데이터를 조회할 수 있게 하는 전용 컨텍스트(`src/contexts/gm/`)다.
+  **`gm_platform`의 소스는 이 프로젝트 작업 범위에서 절대 건드리지 않는다** — 읽기(레퍼런스
+  확인)나 그 서버의 살아있는 REST API 호출(데이터 등록/조회)만 허용되고, 파일 수정은 전부
+  이 레포(`enhanceOrBust`) 안에서만 이루어진다. 인증은 세션 쿠키가 아니라 `X-API-Key`
+  헤더(`GM_PLATFORM_API_KEY` env, `gmApiKeyAuth.ts`가 `timingSafeEqual`로 비교 —
+  gm_platform의 `test_game_server`/`rag_server` 쪽 미들웨어와 동일 패턴)로 하며, 라우트별로
+  개별 적용한다(`router.use()`로 걸지 않는 이유: 이 라우터가 프리픽스 없이 `app.use()`로
+  마운트되는 구조상, 다른 컨텍스트 라우터의 `router.use(requireAuth)`가 경로 매칭과 무관하게
+  먼저 걸려버리는 문제가 있었음 — 그래서 `gmRoutes`를 다른 라우터보다 먼저 마운트하고,
+  `gmApiKeyAuth`도 라우트별로 붙인다, `server.ts`/`gmRoutes.ts` 주석 참고). gm_platform의
+  apiExecution은 등록된 API를 항상 `POST {api_base_url}{endpoint}`로 호출하므로 조회
+  엔드포인트도 GET이 아니라 POST다. 응답도 gm_platform의 외부 API 규약(`{ result, message,
+  data: [...] }`, `data`는 항상 배열 — KEY_VALUE는 `data[0]`, GRID는 `data` 전체를 행
+  목록으로 사용)을 따른다. 에러 코드는 새 대역 10000번대(`GM`)를 씀. 두 엔드포인트 구현됨:
+  `POST /gm/get-player`(`playerId` 있으면 단건, 없으면 전체 조회 — 최대 200명, 재화는
+  gm_platform 그리드가 1차원으로 그릴 수 있도록 `economy.gold`처럼 점 표기로 평탄화해
+  응답), `POST /gm/get-player-cards`(`playerId` **필수**, 보유 카드를 `GET /player/me`와
+  동일하게 마스터 데이터 조인 포함해 조회). 재화 지급/차감·카드 지급 API는 한때 구현했다가
+  삭제했다(gm_platform 쪽엔 하드삭제가 없어 `status=0`으로 중지 처리).
 
 ## MongoDB 데이터 모델링 / 원자성 전략 (확정)
 

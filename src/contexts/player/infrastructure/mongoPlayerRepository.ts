@@ -111,6 +111,15 @@ export class MongoPlayerRepository implements PlayerRepository {
   }
 
   /**
+   * @param limit 최대 반환 개수
+   * @returns 플레이어 목록(정렬 순서 보장 없음)
+   */
+  async findAll(limit: number): Promise<Player[]> {
+    const docs = await this.collection.find({}).limit(limit).toArray();
+    return docs.map(MongoPlayerRepository.toDomain);
+  }
+
+  /**
    * @param player 삽입할 신규 플레이어
    */
   async create(player: Player): Promise<void> {

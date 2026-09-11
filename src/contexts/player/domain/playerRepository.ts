@@ -35,4 +35,12 @@ export interface PlayerRepository {
    * @param player 삽입할 신규 플레이어(보통 version=0)
    */
   create(player: Player): Promise<void>;
+
+  /**
+   * 전체 플레이어를 조회한다 — gm_platform 연동(GM 운영자가 playerId 없이 전체 조회하는 경우)
+   * 전용이라, 일반 게임 플레이 경로에서는 쓰지 않는다.
+   * @param limit 최대 반환 개수(무제한 전체 스캔 방지)
+   * @returns 플레이어 목록(정렬 순서 보장 없음)
+   */
+  findAll(limit: number): Promise<Player[]>;
 }

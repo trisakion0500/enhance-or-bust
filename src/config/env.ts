@@ -37,4 +37,6 @@ export const config = {
   inventorySlotCap: Number(process.env.INVENTORY_SLOT_CAP ?? 200),
   /** 전투 출전 스쿼드 최대 장수. */
   squadMaxSize: Number(process.env.SQUAD_MAX_SIZE ?? 5),
+  /** gm_platform이 이 프로젝트(api_base_url)를 호출할 때 실어 보내는 X-API-Key와 대조할 값. 미설정 시(로컬 개발용) 검증을 건너뛴다. */
+  gmPlatformApiKey: process.env.GM_PLATFORM_API_KEY,
 };

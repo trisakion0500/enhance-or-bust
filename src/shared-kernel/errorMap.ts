@@ -3,6 +3,7 @@ import { BATTLE_STAGE_ERROR_MAP } from "../contexts/battleStage/errorMap.js";
 import { COMMON_ERROR_MAP } from "./errorMapCommon.js";
 import { ECONOMY_ERROR_MAP } from "../contexts/player/errorMap/economy.js";
 import { ENHANCEMENT_ERROR_MAP } from "../contexts/enhancement/errorMap.js";
+import { GM_ERROR_MAP } from "../contexts/gm/errorMap.js";
 import { INVENTORY_ERROR_MAP } from "../contexts/player/errorMap/inventory.js";
 import { MAILBOX_ERROR_MAP } from "../contexts/mailbox/errorMap.js";
 import { PROGRESSION_ERROR_MAP } from "../contexts/player/errorMap/progression.js";
@@ -23,4 +24,5 @@ export const ERROR_MAP = {
   MAILBOX: MAILBOX_ERROR_MAP,
   BATTLE_STAGE: BATTLE_STAGE_ERROR_MAP,
   AUTH: AUTH_ERROR_MAP,
+  GM: GM_ERROR_MAP,
 };
