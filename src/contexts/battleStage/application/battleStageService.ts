@@ -14,6 +14,7 @@ import type { MailboxRepository } from "../../mailbox/domain/mailboxRepository.j
 import { sendMail } from "../../mailbox/application/mailboxService.js";
 import { MAIL_CONTENTS } from "../../mailbox/domain/mailContent.js";
 import { config } from "../../../config/env.js";
+import { writeAuditLog } from "../../../shared-kernel/auditLog.js";
 
 /** 출전 카드 1장이 이번 전투로 얻은 EXP 결과. */
 export interface ExpGainResult {
@@ -43,6 +44,8 @@ export interface ClearStageResult {
   expGained: ExpGainResult[];
   /** 이 시도 이후 플레이어의 최종 clearedStage(최초 클리어가 아니면 변화 없음) */
   clearedStage: number;
+  /** 출전 스쿼드의 카드 원형 ID 목록(squadCardIds와 같은 순서) — 승패 무관 통계용 */
+  squadTemplateIds: string[];
   /** 이 시도 시점 플레이어의 지갑 잔액 — rewardGold는 우편 수령 전이라 아직 반영 안 됨 */
   gold: number;
   /** 이 시도 시점 플레이어의 지갑 잔액 — rewardEnhancementStone은 우편 수령 전이라 아직 반영 안 됨 */
@@ -96,9 +99,29 @@ export async function clearStage(
           mailboxRepository,
           content.expiryMs,
         );
+        await writeAuditLog("battle_stage_logs", {
+          actorId: playerId,
+          action: "clear",
+          changes: {
+            stageId,
+            clearedStage: result.clearedStage,
+            rewardGold: result.rewardGold,
+            rewardEnhancementStone: result.rewardEnhancementStone,
+            rewardCardTemplateId: result.rewardCardTemplateId,
+            mailSourceId: sourceId,
+          },
+        });
       },
     },
   );
+
+  // 감사 로그(승리 시에만)와 별개로, 스테이지별 승률/카드 조합 통계는 승패 무관 매 시도마다 남긴다.
+  await writeAuditLog("battle_stage_attempts", {
+    actorId: playerId,
+    action: "attempt",
+    changes: { stageId, squadCardIds, squadTemplateIds: result.squadTemplateIds, won: result.won, clearedStage: result.clearedStage },
+  });
+
   return result;
 }
 
@@ -133,6 +156,8 @@ function applyClearStage(player: Player, stageId: number, squadCardIds: string[]
     { hp: stage.monsterHp, attack: stage.monsterAttack, defense: stage.monsterDefense, element: stage.monsterElement },
   );
 
+  const squadTemplateIds = squad.map(member => member.template.templateId);
+
   if (!battle.won) {
     return {
       mutated: false,
@@ -146,6 +171,7 @@ function applyClearStage(player: Player, stageId: number, squadCardIds: string[]
         clearedStage: player.clearedStage,
         gold: player.economy.gold,
         enhancementStone: player.economy.enhancementStone,
+        squadTemplateIds,
       },
     };
   }
@@ -190,6 +216,7 @@ function applyClearStage(player: Player, stageId: number, squadCardIds: string[]
       clearedStage: player.clearedStage,
       gold: player.economy.gold,
       enhancementStone: player.economy.enhancementStone,
+      squadTemplateIds,
     },
   };
 }
