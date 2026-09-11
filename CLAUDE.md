@@ -53,6 +53,11 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   폴백하고 에러 로그를 남김 — 로거 자체가 죽지 않게 함
 - 환경별 설정 파일 분리(`log4js.${NODE_ENV}.json` 등)는 아직 하지 않음 —
   필요해지면 그때 도입
+- `file`/`errFile`(`dateFile` appender) 둘 다 `numBackups: 30`(약 한 달치 보관)을 명시한다 —
+  이 값을 지정하지 않으면 내부적으로 쓰는 streamroller가 `numBackups`를 **1로 기본
+  적용**해 매일 자정 회전 때마다 어제 것보다 오래된 파일을 자동 `unlink`한다(문서화되지
+  않은 기본값이라 스캐폴딩 때 놓쳤었고, 실사용 중 "어제 것까지만 남고 그 이전은 사라진다"로
+  드러나 발견함). 보관 기간을 바꾸려면 이 값만 조정
 - 클러스터(다중 인스턴스) 구동 대비 — 파일 계열 appender(`file`/`dateFile`)의
   `filename`에 인스턴스 식별자 suffix를 붙인다(`logger.ts`의 `withInstanceSuffix()`).
   여러 인스턴스가 같은 로그 파일에 동시에 쓰면 줄이 섞이거나 파일이 깨질 수 있어서다.
@@ -415,7 +420,27 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   `POST /gm/get-stage-card-drops` — 전부 요청 파라미터 없이 컬렉션 전체를 반환한다. **1차는
   조회만 지원하고 수정/삭제는 아직 없다** — 플레이어 개인 재화와 달리 마스터데이터는 잘못
   저장되면 게임 전체 밸런스에 영향을 줘서, 저장 기능은 컬렉션별 값 검증(확률 0~1, 음수 불가
-  등) 설계를 먼저 한 뒤 별도로 추가하기로 함.
+  등) 설계를 먼저 한 뒤 별도로 추가하기로 함. 이어서 유저고유번호(playerId)별 감사 로그
+  조회도 추가했다 — 감사 로그 5종(`log_auth`/`log_enhancement`/`log_synthesis`/
+  `log_battle_stage`/`log_mailbox`, "감사 로그 / DAU 정책" 절 참고)을 컬렉션당 엔드포인트로
+  분리한 것도 시드데이터와 동일한 이유(컬렉션마다 `changes` 필드 모양이 달라 그리드 컬럼
+  스키마가 API 하나로 안 맞음): `POST /gm/get-auth-logs`, `/gm/get-enhancement-logs`,
+  `/gm/get-synthesis-logs`, `/gm/get-battle-stage-logs`, `/gm/get-mailbox-logs`. `playerId`는
+  **필수**이며, 조회 전에 `playerRepository.findById()`로 플레이어 존재를 먼저 확인해
+  `GM.NOT_FOUND`로 구분한다 — playerId 오타를 "로그가 원래 없음"으로 착각하지 않도록 하기
+  위함. `fromDate`/`toDate`(ISO 8601, 둘 다 선택)로 기간을 좁힐 수 있고, 지정하지 않으면
+  `occurredAt` 내림차순 최대 200건(`GM_LOG_LIST_LIMIT`, 플레이어 전체 조회 200명 제한과
+  동일 원칙 — 무제한 컬렉션 스캔 방지). `mongoLogClient`(로그 DB, `infra/mongoLog.ts`)는
+  부트스트랩에서 이미 연결되어 있어 `auditLog.ts`의 `writeAuditLog()`와 동일하게 별도 DI 없이
+  직접 import해서 쓴다. `changes` 필드는 같은 컬렉션 안에서도 액션마다(예: log_synthesis의
+  gradeUpgrade/enhanceMaterial) 모양이 달라 gm_platform 그리드가 원본 객체를 `[object
+  Object]`로 렌더링하는 문제가 있었다 — `getPlayerForGm()`의 `economy.gold` 평탄화와 같은
+  원리로 `gmService.ts`의 `flattenChanges()`가 중첩 객체를 점(`.`) 표기 키(`changes.cardId`,
+  `changes.attachments.gold`처럼 필요하면 재귀적으로)로 풀어서 반환하도록 고쳤다 — 필드
+  종류가 컬렉션/액션마다 달라 수동 나열 대신 재귀 함수로 일반화(배열은 그리드 셀에 콤마
+  목록으로 표시돼도 무방해 더 내려가지 않음). gm_platform 쪽 응답 컬럼도 기존 `changes`
+  컬럼은 `status=0`으로 비활성화하고(하드삭제 없는 gm_platform 관례), 컬렉션별 실제
+  `changes.*` 필드에 맞는 컬럼을 새로 등록했다.
 
 ## MongoDB 데이터 모델링 / 원자성 전략 (확정)
 

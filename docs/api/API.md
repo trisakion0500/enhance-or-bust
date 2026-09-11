@@ -106,6 +106,7 @@
 | 9001 | 401 | 구글 로그인 검증에 실패했습니다. |
 | 9002 | 401 | 로그인이 필요합니다. (세션 쿠키 없음/만료 — 모든 보호된 엔드포인트에 공통) |
 | 9003 | 401 | 페이스북 로그인 검증에 실패했습니다. |
+| 9004 | 401 | 가입 세션이 만료되었습니다. 처음부터 다시 로그인해주세요. (가입 보류 쿠키/Redis TTL 10분 만료 또는 누락) |
 | 9999 | 500 | 일시적인 서버 오류입니다. 잠시 후 다시 시도해주세요. |
 
 ### GM (10000번대) — gm_platform 연동 전용
@@ -142,14 +143,21 @@
 ### `POST /auth/google`
 
 `GOOGLE_AUTH_FLOW=id_token`(기본값)일 때만 등록된다. Google Identity Services가 발급한
-ID 토큰으로 로그인하거나(최초 호출 시) 신규가입한다. 인증 불필요.
+ID 토큰으로 로그인하거나(기존 사용자) 신규가입 절차를 시작한다(처음 보는 사용자). 인증
+불필요.
 
 **요청 body**
 ```json
 { "credential": "<구글이 발급한 ID 토큰(JWT)>" }
 ```
 
-**응답**: `{ "result": 0 }` + `Set-Cookie: sessionToken=...` (httpOnly, 7일)
+**응답(기존 사용자, 로그인)**: `{ "result": 0 }` + `Set-Cookie: sessionToken=...` (httpOnly, 7일)
+
+**응답(신규 사용자, 가입 보류)**: 이 시점엔 Player가 아직 생성되지 않는다 —
+`{ "result": 0, "pendingRegistration": true, "defaultName": "플랫폼이 제공한 기본 닉네임" }`
++ `Set-Cookie: pendingRegistrationToken=...` (httpOnly, 10분). 프론트는 이 응답을 받으면
+닉네임 입력 화면으로 전환하고 `POST /auth/register/complete`를 호출해 가입을 완료해야
+한다.
 
 **에러**: 9000(credential 누락), 9001(토큰 검증 실패)
 
@@ -161,12 +169,16 @@ ID 토큰으로 로그인하거나(최초 호출 시) 신규가입한다. 인증
 ### `GET /auth/google/callback`
 
 위와 동일 조건에서만 등록. 구글이 `code`/`state`와 함께 리다이렉트해오면 `state`를
-검증하고, `code`를 토큰과 교환해 로그인/가입을 완료한 뒤 세션 쿠키를 발급하고 `/`로
-302 리다이렉트한다. 인증 불필요(이 요청 자체가 로그인 완료 시점).
+검증하고, `code`를 토큰과 교환해 로그인/가입 절차를 진행한다. 인증 불필요(이 요청 자체가
+로그인 완료 시점).
 
-**실패 시**: JSON 에러 대신 `/?loginError=1`로 302 리다이렉트한다(`state` 불일치,
-토큰 교환/검증 실패 등 사유 무관 — 실패 원인은 서버 로그에만 남긴다). 프론트는 이
-쿼리 파라미터를 보고 로그인 화면에 실패 메시지를 표시한다.
+- **기존 사용자**: 세션 쿠키를 발급하고 `/`로 302 리다이렉트한다.
+- **신규 사용자**: `POST /auth/google`과 동일하게 이 시점엔 Player를 만들지 않고, 가입
+  보류 쿠키(`pendingRegistrationToken`)를 발급한 뒤 `/?register=1`로 302 리다이렉트한다
+  — 프론트는 이 쿼리 파라미터를 보고 닉네임 입력 화면을 띄운다.
+- **실패 시**: JSON 에러 대신 `/?loginError=1`로 302 리다이렉트한다(`state` 불일치,
+  토큰 교환/검증 실패 등 사유 무관 — 실패 원인은 서버 로그에만 남긴다). 프론트는 이
+  쿼리 파라미터를 보고 로그인 화면에 실패 메시지를 표시한다.
 
 ### `GET /auth/facebook/login`
 
@@ -177,10 +189,43 @@ Authorization Code Flow 하나만 지원). CSRF 방지용 `state`를 구글과 �
 ### `GET /auth/facebook/callback`
 
 페이스북이 `code`/`state`와 함께 리다이렉트해오면 `state`를 검증하고, `code`를 access
-token/프로필과 교환해 로그인/가입을 완료한 뒤 세션 쿠키를 발급하고 `/`로 302
-리다이렉트한다. 인증 불필요(이 요청 자체가 로그인 완료 시점).
+token/프로필과 교환해 로그인/가입 절차를 진행한다. 인증 불필요(이 요청 자체가 로그인
+완료 시점).
 
-**실패 시**: 구글 콜백과 동일하게 `/?loginError=1`로 302 리다이렉트한다.
+- **기존 사용자**: 세션 쿠키를 발급하고 `/`로 302 리다이렉트한다.
+- **신규 사용자**: 구글 authorization_code와 동일하게 가입 보류 쿠키를 발급하고
+  `/?register=1`로 302 리다이렉트한다.
+- **실패 시**: 구글 콜백과 동일하게 `/?loginError=1`로 302 리다이렉트한다.
+
+### `GET /auth/register/pending`
+
+가입 보류 중인 사용자가 닉네임 입력 화면에 기본값을 채우기 위해 호출한다.
+`pendingRegistrationToken` 쿠키(URL이 아니라 쿠키로만 오간다 — 리퍼러로 새는 것을 피하기
+위함)로 Redis(TTL 10분)에서 보류된 소셜 프로필을 조회한다. 인증 불필요(세션이 아니라
+가입 보류 쿠키로 식별).
+
+**응답**
+```json
+{ "result": 0, "defaultName": "플랫폼이 제공한 기본 닉네임" }
+```
+
+**에러**: 9004(쿠키 없음/Redis TTL 만료)
+
+### `POST /auth/register/complete`
+
+닉네임을 받아 그제서야 Player를 실제로 생성한다(최저 등급 원형 중 랜덤 1장 시작 카드 +
+초기 골드 1000) — 이 호출 전까지는 아무 것도 저장되지 않는다. 인증 불필요(가입 보류
+쿠키로 식별).
+
+**요청 body**
+```json
+{ "name": "닉네임" }
+```
+
+**응답**: `{ "result": 0 }` + `Set-Cookie: sessionToken=...` (httpOnly, 7일), 가입 보류
+쿠키는 삭제된다.
+
+**에러**: 9000(name이 문자열이 아님), 9004(쿠키 없음/Redis TTL 만료)
 
 ### `POST /auth/logout`
 
@@ -426,6 +471,8 @@ gm_platform(별도 사내 운영툴 프로젝트)이 GM 운영자 대신 호출�
 인증한다. gm_platform의 apiExecution 관례에 맞춰 조회 엔드포인트도 전부 `POST`다. 응답은
 gm_platform의 외부 API 규약(`{ result, message, data: [...] }`, `data`는 항상 배열)을
 따른다 — gm_platform 쪽에서 이 엔드포인트를 KEY_VALUE/GRID로 등록해 결과를 보여준다.
+`X-API-Key` 헤더가 없거나 값이 일치하지 않으면 이유를 구분하지 않고 전부 10001로
+응답한다(모든 GM 엔드포인트 공통).
 
 ### `POST /gm/get-player`
 
@@ -511,3 +558,44 @@ gm_platform의 외부 API 규약(`{ result, message, data: [...] }`, `data`는 �
 ```
 
 **에러**: 없음(파라미터가 없어 검증 실패 경로 자체가 없음)
+
+### 유저고유번호(playerId)별 감사 로그 조회
+
+감사 로그 5종(`log_auth`/`log_enhancement`/`log_synthesis`/`log_battle_stage`/
+`log_mailbox`, "감사 로그 / DAU 정책" 절 참고)을 컬렉션당 엔드포인트 하나씩 `playerId`로
+필터해 조회한다. `playerId`는 **필수**다(오타로 조회 대상이 잘못돼도 "로그 없음"과
+"플레이어 없음"을 구분하도록, 로그 조회 전에 플레이어 존재를 먼저 확인한다). `fromDate`/
+`toDate`(ISO 8601 문자열, 둘 다 선택)로 기간을 좁힐 수 있다 — 둘 다 없으면 최근
+`occurredAt` 순 최대 200건. 원본 `changes`는 컬렉션/액션마다(예: log_synthesis의
+gradeUpgrade/enhanceMaterial) 필드가 달라, gm_platform 그리드가 1차원으로 그릴 수 있도록
+`get-player`의 `economy.gold`와 동일한 방식으로 `changes.cardId`처럼 점(`.`) 표기 키로
+재귀 평탄화해 반환한다(중첩 객체만 재귀 — 배열은 그대로 둔다). 해당 컬렉션에서 실행된
+액션에 없는 필드는 응답에서 빠진다(행마다 키 구성이 다를 수 있음). **모두 X-API-Key 필요.**
+
+| 엔드포인트 | 대상 컬렉션 | `changes.*` 필드(액션별) |
+|---|---|---|
+| `POST /gm/get-auth-logs` | `log_auth` | `platformType`(register/login), `starterCardTemplateId`/`initialGold`/`name`(register만) |
+| `POST /gm/get-enhancement-logs` | `log_enhancement` | `cardId`, `success`, `destroyed`, `enhancementLevel` |
+| `POST /gm/get-synthesis-logs` | `log_synthesis` | `materialCardIds`, `success`, `resultCardId`/`resultTemplateId`(gradeUpgrade만), `targetCardId`/`enhancementLevel`(enhanceMaterial만) |
+| `POST /gm/get-battle-stage-logs` | `log_battle_stage` | `stageId`, `clearedStage`, `rewardGold`, `rewardEnhancementStone`, `rewardCardTemplateId`, `mailSourceId` |
+| `POST /gm/get-mailbox-logs` | `log_mailbox` | `mailId`, `title`/`sourceType`/`sourceId`(send만), `attachments.gold`/`attachments.enhancementStone`/`attachments.diamond`/`attachments.cardTemplateIds`(send/claim만), `cutoff`/`deletedCount`(cleanupBatch만) |
+
+**요청 body**
+```json
+{ "playerId": "player-1", "fromDate": "2026-09-01T00:00:00Z", "toDate": "2026-09-30T23:59:59Z" }
+```
+(`fromDate`/`toDate`는 생략 가능)
+
+**응답 예시** (`POST /gm/get-enhancement-logs`)
+```json
+{
+  "result": 0,
+  "message": "OK",
+  "data": [
+    { "actorId": "player-1", "action": "attempt", "occurredAt": "2026-09-11T09:12:34.000Z",
+      "changes.cardId": "card-1", "changes.success": true, "changes.destroyed": false, "changes.enhancementLevel": 6 }
+  ]
+}
+```
+
+**에러**: 10000(playerId 누락/문자열 아님, fromDate/toDate가 문자열이 아니거나 날짜로 파싱 불가), 10002(플레이어 없음)

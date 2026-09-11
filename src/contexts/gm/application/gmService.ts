@@ -1,5 +1,7 @@
 import { BusinessException } from "../../../shared-kernel/businessException.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
+import { config } from "../../../config/env.js";
+import { mongoLogClient } from "../../../infra/mongoLog.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
 import type { CardTemplate } from "../../../shared-kernel/masterData/cardTemplate.js";
 import type { GradeConfig } from "../../../shared-kernel/masterData/gradeConfig.js";
@@ -160,4 +162,116 @@ export function getStageConfigsForGm(): StageConfig[] {
  */
 export function getStageCardDropsForGm(): CardDropRuleDoc[] {
   return masterDataCache.getAllCardDropRules();
+}
+
+/** gm_platform이 조회할 때 컬렉션 하나에서 한 번에 반환할 최대 로그 건수 — 무제한 스캔 방지. */
+const GM_LOG_LIST_LIMIT = 200;
+
+/**
+ * GM 운영자가 조회하는 감사 로그 한 건. `changes.*`는 컬렉션/액션마다 필드가 달라(예:
+ * log_synthesis의 gradeUpgrade/enhanceMaterial) 고정 필드로 선언하지 않고 인덱스 시그니처로
+ * 열어둔다 — {@link flattenChanges}가 채운 점(`.`) 표기 키가 실제 필드명이다.
+ */
+export type GmLogEntry = {
+  actorId: string;
+  action: string;
+  occurredAt: Date;
+} & Record<string, unknown>;
+
+/**
+ * 중첩 객체를 gm_platform 그리드가 1차원으로 그릴 수 있도록 점(`.`) 표기 키로 재귀
+ * 평탄화한다(`toSummary()`의 `economy.gold` 평탄화와 동일 원칙 — 여기서는 필드 종류가
+ * 컬렉션/액션마다 달라 수동 나열 대신 재귀로 일반화). 배열은 그리드 셀에 콤마 목록으로
+ * 표시돼도 무방해 더 내려가지 않고 값 그대로 둔다.
+ * @param obj 평탄화할 객체
+ * @param prefix 재귀 호출 중 누적되는 키 접두사
+ * @returns 점 표기 키로 평탄화된 객체
+ * @author trisakion
+ */
+function flattenChanges(obj: Record<string, unknown>, prefix: string): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const flatKey = `${prefix}.${key}`;
+    if (value !== null && typeof value === "object" && !Array.isArray(value) && !(value instanceof Date))
+      Object.assign(result, flattenChanges(value as Record<string, unknown>, flatKey));
+    else
+      result[flatKey] = value;
+  }
+  return result;
+}
+
+/**
+ * gm_platform이 playerId(+선택적 기간)로 조회하는 감사 로그(`log_auth` 등) — 컬렉션별 export
+ * 함수 5개가 이 헬퍼를 재사용한다. playerId 오타로 "로그가 없다"와 "플레이어가 없다"가
+ * 헷갈리지 않도록 조회 전에 플레이어 존재를 먼저 확인한다(`getPlayerCardsForGm`과 동일 원칙).
+ * @param collection 조회할 로그 컬렉션 이름
+ * @param playerId 조회할 플레이어 ID
+ * @param playerRepository Player 영속성 포트
+ * @param fromDate 조회 시작 일시(포함, ISO 8601 문자열, 선택)
+ * @param toDate 조회 종료 일시(포함, ISO 8601 문자열, 선택)
+ * @returns occurredAt 내림차순, 최대 GM_LOG_LIST_LIMIT건
+ * @throws {BusinessException} 플레이어가 없으면 GM.NOT_FOUND, 날짜 형식이 올바르지 않으면 GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+async function getAuditLogsForGm(
+  collection: string,
+  playerId: string,
+  playerRepository: PlayerRepository,
+  fromDate?: string,
+  toDate?: string,
+): Promise<GmLogEntry[]> {
+  const player = await playerRepository.findById(playerId);
+  if (!player) throw new BusinessException(ERROR_MAP.GM.NOT_FOUND, { playerId });
+
+  const occurredAt: Record<string, Date> = {};
+  if (fromDate !== undefined) {
+    const from = new Date(fromDate);
+    if (Number.isNaN(from.getTime())) throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { fromDate });
+    occurredAt.$gte = from;
+  }
+  if (toDate !== undefined) {
+    const to = new Date(toDate);
+    if (Number.isNaN(to.getTime())) throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { toDate });
+    occurredAt.$lte = to;
+  }
+
+  const docs = await mongoLogClient
+    .db(config.mongoAppDatabaseLog)
+    .collection<{ actorId: string; action: string; changes: Record<string, unknown>; occurredAt: Date }>(collection)
+    .find({ actorId: playerId, ...(Object.keys(occurredAt).length ? { occurredAt } : {}) })
+    .sort({ occurredAt: -1 })
+    .limit(GM_LOG_LIST_LIMIT)
+    .toArray();
+
+  return docs.map(({ actorId, action, changes, occurredAt }) => ({
+    actorId,
+    action,
+    occurredAt,
+    ...flattenChanges(changes, "changes"),
+  }));
+}
+
+/** @returns log_auth 로그 목록 @author trisakion */
+export function getAuthLogsForGm(playerId: string, playerRepository: PlayerRepository, fromDate?: string, toDate?: string): Promise<GmLogEntry[]> {
+  return getAuditLogsForGm("log_auth", playerId, playerRepository, fromDate, toDate);
+}
+
+/** @returns log_enhancement 로그 목록 @author trisakion */
+export function getEnhancementLogsForGm(playerId: string, playerRepository: PlayerRepository, fromDate?: string, toDate?: string): Promise<GmLogEntry[]> {
+  return getAuditLogsForGm("log_enhancement", playerId, playerRepository, fromDate, toDate);
+}
+
+/** @returns log_synthesis 로그 목록 @author trisakion */
+export function getSynthesisLogsForGm(playerId: string, playerRepository: PlayerRepository, fromDate?: string, toDate?: string): Promise<GmLogEntry[]> {
+  return getAuditLogsForGm("log_synthesis", playerId, playerRepository, fromDate, toDate);
+}
+
+/** @returns log_battle_stage 로그 목록 @author trisakion */
+export function getBattleStageLogsForGm(playerId: string, playerRepository: PlayerRepository, fromDate?: string, toDate?: string): Promise<GmLogEntry[]> {
+  return getAuditLogsForGm("log_battle_stage", playerId, playerRepository, fromDate, toDate);
+}
+
+/** @returns log_mailbox 로그 목록 @author trisakion */
+export function getMailboxLogsForGm(playerId: string, playerRepository: PlayerRepository, fromDate?: string, toDate?: string): Promise<GmLogEntry[]> {
+  return getAuditLogsForGm("log_mailbox", playerId, playerRepository, fromDate, toDate);
 }

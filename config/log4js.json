@@ -4,12 +4,14 @@
     "file": {
       "type": "dateFile",
       "filename": "logs/app.log",
-      "pattern": "yyyyMMdd"
+      "pattern": "yyyyMMdd",
+      "numBackups": 30
     },
     "errFile": {
       "type": "dateFile",
       "filename": "logs/err.log",
-      "pattern": "yyyyMMdd"
+      "pattern": "yyyyMMdd",
+      "numBackups": 30
     },
     "errFileFilter": {
       "type": "logLevelFilter",

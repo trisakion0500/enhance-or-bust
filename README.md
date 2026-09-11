@@ -52,6 +52,8 @@ Redis, 구글 OAuth 클라이언트 정보 등).
 - [x] 마스터 데이터 캐시 (Change Stream/폴링 워처, 시드 스크립트)
 - [x] 구글 로그인 (Google Identity Services/Authorization Code Flow) + Redis 세션 인증
 - [x] 페이스북 로그인 (Authorization Code Flow)
+- [x] 회원가입 시 닉네임 입력 흐름(디폴트는 플랫폼 제공 닉네임) — 닉네임 제출
+      (`POST /auth/register/complete`) 전까지 Player 생성을 보류(Redis TTL 10분)
 - [x] 세션 인증 미들웨어
 - [x] 강화(Enhancement) API + E2E 테스트
 - [x] 합성(Synthesis) API(등급 승급/강화 재료) + E2E 테스트
@@ -72,4 +74,5 @@ Redis, 구글 OAuth 클라이언트 정보 등).
       대상 액션 전체 구현 완료
 - [x] gm_platform 연동(X-API-Key 인증) — 플레이어 조회/전체목록(`POST /gm/get-player`),
       보유 카드 조회(`POST /gm/get-player-cards`), 시드데이터(마스터데이터) 6종 조회(읽기
-      전용, `POST /gm/get-card-templates` 등)
+      전용, `POST /gm/get-card-templates` 등), 유저고유번호별 감사 로그 5종 조회(`POST
+      /gm/get-auth-logs` 등, 기간 필터 지원)

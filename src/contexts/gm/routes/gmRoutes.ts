@@ -5,16 +5,40 @@ import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
 import { gmApiKeyAuth } from "../../../shared-kernel/gmApiKeyAuth.js";
 import type { PlayerRepository } from "../../player/domain/playerRepository.js";
 import {
+  getAuthLogsForGm,
+  getBattleStageLogsForGm,
   getCardTemplatesForGm,
+  getEnhancementLogsForGm,
   getEnhancementRulesForGm,
   getGradeConfigsForGm,
+  getMailboxLogsForGm,
   getPlayerCardsForGm,
   getPlayerForGm,
   getStageCardDropsForGm,
   getStageConfigsForGm,
+  getSynthesisLogsForGm,
   getSynthesisRulesForGm,
   listPlayersForGm,
 } from "../application/gmService.js";
+
+/**
+ * 로그 조회 라우트 5개가 공통으로 쓰는 요청 파라미터 파싱 — playerId(필수 문자열),
+ * fromDate/toDate(선택, 문자열이면 통과시키고 실제 날짜 파싱은 서비스 단에서 검증한다).
+ * @param body 요청 바디
+ * @returns 파싱된 파라미터
+ * @throws {BusinessException} playerId가 없거나 타입이 올바르지 않으면 GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+function parseGmLogQuery(body: unknown): { playerId: string; fromDate?: string; toDate?: string } {
+  const { playerId, fromDate, toDate } = (body ?? {}) as Record<string, unknown>;
+  if (typeof playerId !== "string" || !playerId)
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { body });
+  if (fromDate !== undefined && typeof fromDate !== "string")
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { body });
+  if (toDate !== undefined && typeof toDate !== "string")
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { body });
+  return { playerId, fromDate, toDate };
+}
 
 /**
  * gm_platform 연동 전용 라우터 — 세션 쿠키가 아니라 X-API-Key(`gmApiKeyAuth`)로 인증한다.
@@ -80,6 +104,32 @@ export function createGmRoutes(playerRepository: PlayerRepository): Router {
 
   router.post("/gm/get-stage-card-drops", gmApiKeyAuth, asyncHandler(async (_req, res) => {
     res.json({ result: 0, message: "OK", data: getStageCardDropsForGm() });
+  }));
+
+  // 유저고유번호(playerId)별 감사 로그 조회 5종 — playerId 필수, fromDate/toDate 선택.
+  router.post("/gm/get-auth-logs", gmApiKeyAuth, asyncHandler(async (req, res) => {
+    const { playerId, fromDate, toDate } = parseGmLogQuery(req.body);
+    res.json({ result: 0, message: "OK", data: await getAuthLogsForGm(playerId, playerRepository, fromDate, toDate) });
+  }));
+
+  router.post("/gm/get-enhancement-logs", gmApiKeyAuth, asyncHandler(async (req, res) => {
+    const { playerId, fromDate, toDate } = parseGmLogQuery(req.body);
+    res.json({ result: 0, message: "OK", data: await getEnhancementLogsForGm(playerId, playerRepository, fromDate, toDate) });
+  }));
+
+  router.post("/gm/get-synthesis-logs", gmApiKeyAuth, asyncHandler(async (req, res) => {
+    const { playerId, fromDate, toDate } = parseGmLogQuery(req.body);
+    res.json({ result: 0, message: "OK", data: await getSynthesisLogsForGm(playerId, playerRepository, fromDate, toDate) });
+  }));
+
+  router.post("/gm/get-battle-stage-logs", gmApiKeyAuth, asyncHandler(async (req, res) => {
+    const { playerId, fromDate, toDate } = parseGmLogQuery(req.body);
+    res.json({ result: 0, message: "OK", data: await getBattleStageLogsForGm(playerId, playerRepository, fromDate, toDate) });
+  }));
+
+  router.post("/gm/get-mailbox-logs", gmApiKeyAuth, asyncHandler(async (req, res) => {
+    const { playerId, fromDate, toDate } = parseGmLogQuery(req.body);
+    res.json({ result: 0, message: "OK", data: await getMailboxLogsForGm(playerId, playerRepository, fromDate, toDate) });
   }));
 
   return router;
