@@ -26,6 +26,11 @@ export function renderBattle(state, refreshPlayer) {
   const nextStage = clearedStage + 1;
   const stageValue = lastStageId ?? nextStage;
 
+  // 다른 탭(합성 등)에서 소모/파괴돼 인벤토리에서 사라진 카드는 선택 상태에서도 지운다 —
+  // 안 지우면 유령 항목이 squadMaxSize 카운트를 계속 차지해 새 카드를 못 고르게 된다.
+  const currentCardIds = new Set(inventory.map(c => c.cardId));
+  for (const cardId of selectedCardIds) if (!currentCardIds.has(cardId)) selectedCardIds.delete(cardId);
+
   const checkboxes = inventory
     .map(c => `<label><input type="checkbox" name="squad" value="${escapeHtml(c.cardId)}" ${selectedCardIds.has(c.cardId) ? "checked" : ""}> ${escapeHtml(c.templateId)}(Lv${c.level}, ${escapeHtml(c.grade)})</label>`)
     .join("<br>");
