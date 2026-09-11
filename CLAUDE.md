@@ -403,7 +403,19 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   gm_platform 그리드가 1차원으로 그릴 수 있도록 `economy.gold`처럼 점 표기로 평탄화해
   응답), `POST /gm/get-player-cards`(`playerId` **필수**, 보유 카드를 `GET /player/me`와
   동일하게 마스터 데이터 조인 포함해 조회). 재화 지급/차감·카드 지급 API는 한때 구현했다가
-  삭제했다(gm_platform 쪽엔 하드삭제가 없어 `status=0`으로 중지 처리).
+  삭제했다(gm_platform 쪽엔 하드삭제가 없어 `status=0`으로 중지 처리). 이어서 시드데이터
+  (마스터데이터) 6개 컬렉션 조회도 추가했다 — `master_data_meta`를 매 요청 새로 조회하지
+  않고 서버가 이미 적재해둔 `masterDataCache` 싱글톤을 그대로 읽어 반환한다(DB 재조회
+  없음). 컬렉션마다 행 모양이 완전히 달라(카드 원형 vs 스테이지 설정 등) gm_platform의
+  그리드 컬럼 스키마(`api_response`)가 API 하나당 하나로 고정되는 구조와 맞지 않아, 파라미터
+  하나로 여러 모양을 분기하는 API 하나 대신 컬렉션당 엔드포인트를 따로 둔다(`get-player`/
+  `get-player-cards`와 동일한 결정 방식): `POST /gm/get-card-templates`,
+  `POST /gm/get-grade-configs`, `POST /gm/get-enhancement-rules`,
+  `POST /gm/get-synthesis-rules`, `POST /gm/get-stage-configs`,
+  `POST /gm/get-stage-card-drops` — 전부 요청 파라미터 없이 컬렉션 전체를 반환한다. **1차는
+  조회만 지원하고 수정/삭제는 아직 없다** — 플레이어 개인 재화와 달리 마스터데이터는 잘못
+  저장되면 게임 전체 밸런스에 영향을 줘서, 저장 기능은 컬렉션별 값 검증(확률 0~1, 음수 불가
+  등) 설계를 먼저 한 뒤 별도로 추가하기로 함.
 
 ## MongoDB 데이터 모델링 / 원자성 전략 (확정)
 

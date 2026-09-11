@@ -4,7 +4,17 @@ import { BusinessException } from "../../../shared-kernel/businessException.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
 import { gmApiKeyAuth } from "../../../shared-kernel/gmApiKeyAuth.js";
 import type { PlayerRepository } from "../../player/domain/playerRepository.js";
-import { getPlayerCardsForGm, getPlayerForGm, listPlayersForGm } from "../application/gmService.js";
+import {
+  getCardTemplatesForGm,
+  getEnhancementRulesForGm,
+  getGradeConfigsForGm,
+  getPlayerCardsForGm,
+  getPlayerForGm,
+  getStageCardDropsForGm,
+  getStageConfigsForGm,
+  getSynthesisRulesForGm,
+  listPlayersForGm,
+} from "../application/gmService.js";
 
 /**
  * gm_platform 연동 전용 라우터 — 세션 쿠키가 아니라 X-API-Key(`gmApiKeyAuth`)로 인증한다.
@@ -45,6 +55,31 @@ export function createGmRoutes(playerRepository: PlayerRepository): Router {
 
     const cards = await getPlayerCardsForGm(playerId, playerRepository);
     res.json({ result: 0, message: "OK", data: cards });
+  }));
+
+  // 시드데이터(마스터데이터) 6종 — 1차는 조회만, 수정/삭제는 아직 없다.
+  router.post("/gm/get-card-templates", gmApiKeyAuth, asyncHandler(async (_req, res) => {
+    res.json({ result: 0, message: "OK", data: getCardTemplatesForGm() });
+  }));
+
+  router.post("/gm/get-grade-configs", gmApiKeyAuth, asyncHandler(async (_req, res) => {
+    res.json({ result: 0, message: "OK", data: getGradeConfigsForGm() });
+  }));
+
+  router.post("/gm/get-enhancement-rules", gmApiKeyAuth, asyncHandler(async (_req, res) => {
+    res.json({ result: 0, message: "OK", data: getEnhancementRulesForGm() });
+  }));
+
+  router.post("/gm/get-synthesis-rules", gmApiKeyAuth, asyncHandler(async (_req, res) => {
+    res.json({ result: 0, message: "OK", data: getSynthesisRulesForGm() });
+  }));
+
+  router.post("/gm/get-stage-configs", gmApiKeyAuth, asyncHandler(async (_req, res) => {
+    res.json({ result: 0, message: "OK", data: getStageConfigsForGm() });
+  }));
+
+  router.post("/gm/get-stage-card-drops", gmApiKeyAuth, asyncHandler(async (_req, res) => {
+    res.json({ result: 0, message: "OK", data: getStageCardDropsForGm() });
   }));
 
   return router;

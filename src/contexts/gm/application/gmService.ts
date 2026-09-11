@@ -1,6 +1,12 @@
 import { BusinessException } from "../../../shared-kernel/businessException.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
+import type { CardTemplate } from "../../../shared-kernel/masterData/cardTemplate.js";
+import type { GradeConfig } from "../../../shared-kernel/masterData/gradeConfig.js";
+import type { EnhancementRule } from "../../enhancement/domain/enhancementRule.js";
+import type { SynthesisRule } from "../../synthesis/domain/synthesisRule.js";
+import type { StageConfig } from "../../battleStage/domain/stageConfig.js";
+import type { CardDropRuleDoc } from "../../battleStage/domain/cardDrop.js";
 import type { Player } from "../../player/domain/player.js";
 import type { PlayerRepository } from "../../player/domain/playerRepository.js";
 
@@ -103,4 +109,55 @@ export async function getPlayerCardsForGm(playerId: string, playerRepository: Pl
       enhancementLevel: card.enhancementLevel,
     };
   });
+}
+
+/**
+ * gm_platform이 조회하는 시드데이터(마스터데이터) 6종 — 컬렉션을 그대로 덤프한다.
+ * 1차는 조회만 지원하고 수정/삭제는 아직 없다(밸런스 데이터라 잘못 저장되면 파급이 커서
+ * 별도 검증 설계 후 추가 예정).
+ * @returns 전체 카드 원형 목록
+ * @author trisakion
+ */
+export function getCardTemplatesForGm(): CardTemplate[] {
+  return masterDataCache.getAllCardTemplates();
+}
+
+/**
+ * @returns 전체 등급 설정 목록
+ * @author trisakion
+ */
+export function getGradeConfigsForGm(): GradeConfig[] {
+  return masterDataCache.getAllGradeConfigs();
+}
+
+/**
+ * @returns 전체 강화 규칙 목록
+ * @author trisakion
+ */
+export function getEnhancementRulesForGm(): EnhancementRule[] {
+  return masterDataCache.getAllEnhancementRules();
+}
+
+/**
+ * @returns 전체 합성 규칙 목록
+ * @author trisakion
+ */
+export function getSynthesisRulesForGm(): readonly SynthesisRule[] {
+  return masterDataCache.getSynthesisRules();
+}
+
+/**
+ * @returns 전체 스테이지 설정 목록
+ * @author trisakion
+ */
+export function getStageConfigsForGm(): StageConfig[] {
+  return masterDataCache.getAllStageConfigs();
+}
+
+/**
+ * @returns 전체 스테이지 카드 드랍 규칙 목록
+ * @author trisakion
+ */
+export function getStageCardDropsForGm(): CardDropRuleDoc[] {
+  return masterDataCache.getAllCardDropRules();
 }

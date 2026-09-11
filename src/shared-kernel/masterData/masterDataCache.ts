@@ -158,6 +158,38 @@ class MasterDataCache {
   getCardDropTable(stageId: number): CardDropEntry[] {
     return this.cardDropRules.get(stageId) ?? [];
   }
+
+  /** @returns 전체 카드 원형 목록(GM 마스터데이터 조회용) */
+  getAllCardTemplates(): CardTemplate[] {
+    return [...this.cardTemplates.values()];
+  }
+
+  /** @returns 전체 등급 설정 목록(GM 마스터데이터 조회용) */
+  getAllGradeConfigs(): GradeConfig[] {
+    return [...this.gradeConfigs.values()];
+  }
+
+  /** @returns 전체 강화 규칙 목록(GM 마스터데이터 조회용) */
+  getAllEnhancementRules(): EnhancementRule[] {
+    return this.enhancementRules;
+  }
+
+  /** @returns 전체 스테이지 설정 목록(GM 마스터데이터 조회용) */
+  getAllStageConfigs(): StageConfig[] {
+    return [...this.stageConfigs.values()];
+  }
+
+  /**
+   * `Map<stageId, CardDropEntry[]>`로 그룹핑된 캐시를 DB 원본 문서 형태((stageId, templateId,
+   * weight) 행 단위)로 다시 평탄화한다 — GM 조회는 캐시의 조회 최적화 구조가 아니라 원본
+   * 컬렉션 행 그대로를 보여줘야 하기 때문.
+   * @returns 전체 스테이지 카드 드랍 규칙 목록(GM 마스터데이터 조회용)
+   */
+  getAllCardDropRules(): CardDropRuleDoc[] {
+    return [...this.cardDropRules.entries()].flatMap(([stageId, entries]) =>
+      entries.map(entry => ({ stageId, ...entry })),
+    );
+  }
 }
 
 /** 프로젝트 전역에서 공유하는 마스터 데이터 캐시 싱글톤. */

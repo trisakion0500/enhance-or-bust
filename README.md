@@ -71,4 +71,5 @@ Redis, 구글 OAuth 클라이언트 정보 등).
       시도/합성(등급 승급·강화 재료)/스테이지 클리어/우편(발송·수령·삭제·만료정리 배치)까지
       대상 액션 전체 구현 완료
 - [x] gm_platform 연동(X-API-Key 인증) — 플레이어 조회/전체목록(`POST /gm/get-player`),
-      보유 카드 조회(`POST /gm/get-player-cards`)
+      보유 카드 조회(`POST /gm/get-player-cards`), 시드데이터(마스터데이터) 6종 조회(읽기
+      전용, `POST /gm/get-card-templates` 등)

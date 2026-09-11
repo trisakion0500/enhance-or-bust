@@ -480,3 +480,34 @@ gm_platform의 외부 API 규약(`{ result, message, data: [...] }`, `data`는 �
 ```
 
 **에러**: 10000(playerId 누락/문자열 아님), 10002(플레이어 없음)
+
+### 시드데이터(마스터데이터) 조회
+
+`master_*` 컬렉션 6종을 컬렉션당 엔드포인트 하나씩 그대로 덤프한다. 요청 body 없음(빈
+객체 전송), 응답은 서버가 이미 적재해둔 `masterDataCache`를 그대로 읽어 반환한다(DB
+재조회 없음). **1차는 조회만 지원하고 수정/삭제는 아직 없다** — 밸런스 데이터라 잘못
+저장되면 게임 전체에 영향을 줄 수 있어 별도 검증 설계 후 추가 예정. **모두 X-API-Key
+필요.**
+
+| 엔드포인트 | 대상 컬렉션 | 응답 `data` 행 형태 |
+|---|---|---|
+| `POST /gm/get-card-templates` | `master_card_templates` | `{ templateId, grade, baseAttack, baseHp, element }` |
+| `POST /gm/get-grade-configs` | `master_grade_configs` | `{ grade, maxLevel, maxEnhancementLevel }` |
+| `POST /gm/get-enhancement-rules` | `master_enhancement_rules` | `{ minTargetEnhancementLevel, maxTargetEnhancementLevel, successRate, destroyOnFailChance, goldMultiplier, stoneCost }` |
+| `POST /gm/get-synthesis-rules` | `master_synthesis_rules` | `{ type, sourceGrade?, resultGrade?, materialCount, successRate?, goldCost? }` (`type`에 따라 필드 일부만 채워짐) |
+| `POST /gm/get-stage-configs` | `master_stage_configs` | `{ stageId, monsterHp, monsterAttack, monsterDefense, monsterElement, rewardGold, rewardExp, enhancementStoneDropRate, enhancementStoneMin, enhancementStoneMax, farmRewardRate, cardDropRateFirstClear, cardDropRateFarm }` |
+| `POST /gm/get-stage-card-drops` | `master_stage_card_drops` | `{ stageId, templateId, weight }` |
+
+**응답 예시** (`POST /gm/get-grade-configs`)
+```json
+{
+  "result": 0,
+  "message": "OK",
+  "data": [
+    { "grade": "N", "maxLevel": 20, "maxEnhancementLevel": 5 },
+    { "grade": "R", "maxLevel": 40, "maxEnhancementLevel": 10 }
+  ]
+}
+```
+
+**에러**: 없음(파라미터가 없어 검증 실패 경로 자체가 없음)
