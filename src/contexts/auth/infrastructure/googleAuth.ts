@@ -3,26 +3,12 @@ import { OAuth2Client } from "google-auth-library";
 import { BusinessException } from "../../../shared-kernel/businessException.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
 import { config } from "../../../config/env.js";
+import type { SocialAuthProvider, SocialProfile } from "./socialAuthProvider.js";
 
 // authorization_code 플로우에서만 secret/redirectUri가 쓰인다 — id_token 플로우에선 undefined로 넘어가도 무해하다.
 const client = new OAuth2Client(config.googleClientId, config.googleClientSecret, config.googleRedirectUri);
 
-/**
- * ID 토큰에서 얻는 구글 프로필. `sub` 외 필드는 최초 가입 시 표시용으로만 쓰인다.
- * @author trisakion
- */
-export interface GoogleProfile {
-  /** 구글 고유 사용자 ID — `Player.platformUserId`로 저장되는 값 */
-  sub: string;
-  /** 구글 계정 표시 이름 — 최초 가입 시 1회만 가져옴(이후 재동기화 안 함) */
-  name?: string;
-  /** 구글 계정 이메일 — 표시용, 최초 가입 시 1회만 가져옴 */
-  email?: string;
-  /** 구글 프로필 사진 URL — 최초 가입 시 1회만 가져옴(이후 재동기화 안 함) */
-  picture?: string;
-}
-
-function toProfile(payload: TokenPayload | undefined): GoogleProfile {
+function toProfile(payload: TokenPayload | undefined): SocialProfile {
   if (!payload?.sub) throw new Error("google id token payload missing sub");
   return { sub: payload.sub, name: payload.name, email: payload.email, picture: payload.picture };
 }
@@ -36,7 +22,7 @@ function toProfile(payload: TokenPayload | undefined): GoogleProfile {
  * @throws {BusinessException} 서명/audience 검증 실패 시 AUTH.INVALID_GOOGLE_TOKEN
  * @author trisakion
  */
-export async function verifyGoogleIdToken(idToken: string): Promise<GoogleProfile> {
+export async function verifyGoogleIdToken(idToken: string): Promise<SocialProfile> {
   try {
     const ticket = await client.verifyIdToken({ idToken, audience: config.googleClientId });
     return toProfile(ticket.getPayload());
@@ -67,7 +53,7 @@ export function generateGoogleAuthUrl(state: string): string {
  * @throws {BusinessException} 교환/서명 검증 실패 시 AUTH.INVALID_GOOGLE_TOKEN
  * @author trisakion
  */
-export async function exchangeGoogleAuthCode(code: string): Promise<GoogleProfile> {
+export async function exchangeGoogleAuthCode(code: string): Promise<SocialProfile> {
   try {
     const { tokens } = await client.getToken({ code, redirect_uri: config.googleRedirectUri });
     if (!tokens.id_token) throw new Error("google token response missing id_token");
@@ -77,3 +63,16 @@ export async function exchangeGoogleAuthCode(code: string): Promise<GoogleProfil
     throw new BusinessException(ERROR_MAP.AUTH.INVALID_GOOGLE_TOKEN, err);
   }
 }
+
+/**
+ * 구글 Authorization Code Flow를 `SocialAuthProvider` 인터페이스로 감싼 레지스트리 등록용
+ * 객체 — `config.googleAuthFlow`가 `authorization_code`일 때만 `authRoutes.ts`가 이 객체를
+ * 레지스트리에 등록한다. GIS(id_token) 플로우는 리다이렉트 기반이 아니라 이 인터페이스로
+ * 감쌀 수 없어 별도 분기(`verifyGoogleIdToken()`)로 남는다.
+ * @author trisakion
+ */
+export const googleAuthCodeProvider: SocialAuthProvider = {
+  platformType: "google",
+  generateAuthUrl: generateGoogleAuthUrl,
+  exchangeAuthCode: exchangeGoogleAuthCode,
+};

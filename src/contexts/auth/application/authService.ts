@@ -7,8 +7,8 @@ import { Economy } from "../../player/domain/economy.js";
 import { Inventory } from "../../player/domain/inventory.js";
 import { Player } from "../../player/domain/player.js";
 import type { PlayerRepository } from "../../player/domain/playerRepository.js";
-import type { GoogleProfile } from "../infrastructure/googleAuth.js";
-import { exchangeGoogleAuthCode, verifyGoogleIdToken } from "../infrastructure/googleAuth.js";
+import { verifyGoogleIdToken } from "../infrastructure/googleAuth.js";
+import type { SocialAuthProvider } from "../infrastructure/socialAuthProvider.js";
 import { createSession } from "../infrastructure/sessionStore.js";
 import { writeAuditLog } from "../../../shared-kernel/auditLog.js";
 
@@ -36,12 +36,18 @@ function pickStarterCard(): Card {
  * 프로바이더 값(`sub` 등)과 무관한 내부 식별자(`randomUUID()`)로 새로 발급한다 — 나중에 구글 외
  * 다른 로그인 수단이 추가되거나, 여러 수단을 한 플레이어에 연결하는 기능이 생겨도 `playerId` 체계를
  * 안 건드리기 위함. 어느 플로우든 프로바이더 프로필 검증까지 끝낸 뒤 이 함수로 합류한다.
- * @param platformType 로그인 수단 식별자(예: "google")
- * @param profile 검증된 소셜 프로필
+ * @param platformType 로그인 수단 식별자(예: "google", "facebook")
+ * @param profile 검증된 소셜 프로필 — 프로바이더마다 원본 필드명은 달라도(구글 `sub`/페이스북 `id`
+ *   등) 각 infrastructure 모듈이 이 공통 형태로 미리 변환해 넘긴다(별도 공유 타입 없이 구조적
+ *   타이핑으로 충분해 새 타입을 만들지 않음)
  * @param playerRepository Player 영속성 포트
  * @returns 발급된 세션 토큰
  */
-async function loginOrRegister(platformType: string, profile: GoogleProfile, playerRepository: PlayerRepository): Promise<string> {
+async function loginOrRegister(
+  platformType: string,
+  profile: { sub: string; name?: string; email?: string; picture?: string },
+  playerRepository: PlayerRepository,
+): Promise<string> {
   const { sub: platformUserId, name, email, picture } = profile;
 
   const existing = await playerRepository.findByPlatform(platformType, platformUserId);
@@ -97,13 +103,16 @@ export async function loginWithGoogleIdToken(idToken: string, playerRepository: 
 }
 
 /**
- * Authorization Code Flow 방식 로그인 — 구글 콜백으로 받은 code를 토큰과 교환해 로그인/가입한다.
- * @param code 구글 콜백 쿼리로 받은 authorization code
+ * Authorization Code Flow 방식 로그인 — `SocialAuthProvider` 구현체 하나로 구글/페이스북(향후
+ * 다른 프로바이더 포함) 전부를 처리한다. 프로바이더별 분기가 없어 새 프로바이더 추가 시 이
+ * 함수는 건드릴 필요가 없다.
+ * @param provider 콜백을 받은 프로바이더(구글 authorization_code, 페이스북 등)
+ * @param code 콜백 쿼리로 받은 authorization code
  * @param playerRepository Player 영속성 포트
  * @returns 발급된 세션 토큰
  * @author trisakion
  */
-export async function loginWithGoogleAuthCode(code: string, playerRepository: PlayerRepository): Promise<string> {
-  const profile = await exchangeGoogleAuthCode(code);
-  return loginOrRegister("google", profile, playerRepository);
+export async function loginWithSocialProvider(provider: SocialAuthProvider, code: string, playerRepository: PlayerRepository): Promise<string> {
+  const profile = await provider.exchangeAuthCode(code);
+  return loginOrRegister(provider.platformType, profile, playerRepository);
 }

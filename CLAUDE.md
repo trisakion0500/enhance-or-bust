@@ -137,8 +137,8 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
 
 ## 인증 전략 (확정)
 
-- 로그인/회원가입은 구글 로그인 단일 수단만 지원 — 별도 회원가입 폼/비밀번호 없음
-- 로그인 플로우는 `GOOGLE_AUTH_FLOW` 환경변수로 택일한다(둘 다 상시 지원, 활성화된
+- 로그인/회원가입은 소셜 로그인만 지원(구글/페이스북) — 별도 회원가입 폼/비밀번호 없음
+- 구글 로그인 플로우는 `GOOGLE_AUTH_FLOW` 환경변수로 택일한다(둘 다 상시 지원, 활성화된
   쪽 라우트만 등록됨). 서비스 요구사항이 아니라 학습 목적으로 둘 다 구현해둔 것 —
   운영상 어느 한쪽이 필요해서 나뉜 게 아니다
   - `id_token`(기본값, Google Identity Services): 프론트가 구글 ID 토큰(credential)을
@@ -151,13 +151,40 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
     검증해 `sub`(구글 고유 사용자 ID)를 추출하고(공통 매핑은 `toProfile()`), 이후
     로그인/가입 처리는 `authService.ts`의 `loginOrRegister()`로 합류한다. 클라이언트가
     주장하는 값이 아니라 토큰 자체를 서버가 검증 — 서버 권위 원칙
-- `Player.playerId`(`players._id`)는 구글 `sub` 같은 프로바이더 값을 그대로 쓰지 않고
-  `randomUUID()`로 발급하는 내부 전용 식별자다. 대신 `platformType`(예: "google")과
-  `platformUserId`(구글이면 `sub`) 필드를 별도로 두고, 이 둘의 조합에 MongoDB 복합
-  unique 인덱스를 건다(MySQL로 치면 `(platform_type, platform_user_id)` UK와 동일한
-  역할 — `MongoPlayerRepository.ensureIndexes()`, 서버 기동 시 1회 호출). `playerId`를
-  프로바이더 값과 분리해두는 이유: 나중에 구글 외 다른 로그인 수단이 추가되거나, 여러
-  로그인 수단을 한 플레이어에 연결하는 기능이 생겨도 `playerId` 체계 자체는 안 바뀐다
+- 페이스북 로그인은 Authorization Code Flow 하나만 지원한다(`GET /auth/facebook/login` →
+  페이스북 동의 화면 → `GET /auth/facebook/callback`, `code`+`state` CSRF 검증은 구글과
+  같은 `oauthState` 쿠키를 재사용) — 구글과 달리 `GOOGLE_AUTH_FLOW` 같은 토글이 없고 항상
+  등록된다. 페이스북엔 구글 GIS에 대응하는 서명된 ID 토큰 발급 수단이 없어(opaque access
+  token만 줌) 이중 플로우 자체가 성립하지 않는다. "검증"은 서명 확인이 아니라 그 access
+  token으로 실제 Graph API(`/me`)를 호출해봐서 성공하는지로 대신한다(`facebookAuth.ts`의
+  `exchangeFacebookAuthCode()`). 공식 Node SDK가 없어(Meta 공식 패키지는 Business/광고
+  API용이고 로그인과 무관, 커뮤니티 패키지는 유지보수 끊김) 새 의존성 추가 없이 Node 22
+  전역 `fetch`로 REST 호출 2번(코드 교환, 프로필 조회)만 직접 구현했다
+- 리다이렉트 기반 프로바이더(구글 authorization_code, 페이스북, 향후 네이버 등)는
+  `socialAuthProvider.ts`의 `SocialAuthProvider` 인터페이스(`{platformType,
+  generateAuthUrl(state), exchangeAuthCode(code)}`, 클래스 상속이 아니라 플레인 객체 —
+  이 코드베이스 전체가 클래스 계층 없이 함수 위주라 상속을 새로 들이면 이질적)로
+  다형성을 둔다. 각 프로바이더의 infra 모듈(`googleAuth.ts`의 `googleAuthCodeProvider`,
+  `facebookAuth.ts`의 `facebookAuthProvider`)이 이 인터페이스를 구현한 객체를 export하고,
+  `authRoutes.ts`는 `socialProviders` 배열(레지스트리)을 순회하며
+  `GET /auth/:platformType/login`/`GET /auth/:platformType/callback`을 한 루프에서
+  등록한다 — `authService.ts`의 `loginWithSocialProvider(provider, code, playerRepository)`도
+  프로바이더별 분기 없이 이 인터페이스 하나로 처리한다. **새 프로바이더 추가 시 손댈
+  범위는 (1) `config/env.ts`에 자격증명 3줄, (2) 새 infra 모듈(동의 URL 생성 +
+  code→프로필 교환 + provider 객체 export) 하나, (3) `authRoutes.ts`의 레지스트리 배열에
+  한 줄 추가뿐** — 라우트/`authService.ts`는 더 건드리지 않는다. 구글 GIS(id_token, POST
+  방식)만 예외로 이 레지스트리 밖에 별도 분기로 남는다(리다이렉트 기반이 아니라 인터페이스
+  자체가 안 맞음, 학습 목적 특수 케이스). 프로필도 원본 필드명이 달라도(`sub`/`id`,
+  `picture` 중첩 객체 등) 각 infra 모듈이 `SocialProfile`(`{sub, name?, email?,
+  picture?}`) 공통 형태로 변환해 반환한다
+- `Player.playerId`(`players._id`)는 구글 `sub`/페이스북 `id` 같은 프로바이더 값을 그대로
+  쓰지 않고 `randomUUID()`로 발급하는 내부 전용 식별자다. 대신 `platformType`(예: "google",
+  "facebook")과 `platformUserId`(프로바이더별 고유 ID) 필드를 별도로 두고, 이 둘의 조합에
+  MongoDB 복합 unique 인덱스를 건다(MySQL로 치면 `(platform_type, platform_user_id)` UK와
+  동일한 역할 — `MongoPlayerRepository.ensureIndexes()`, 서버 기동 시 1회 호출). `playerId`를
+  프로바이더 값과 분리해두는 이유: 로그인 수단이 늘거나, 여러 로그인 수단을 한 플레이어에
+  연결하는 기능이 생겨도(현재는 다루지 않음 — 같은 사람이 구글/페이스북 각각으로 로그인하면
+  서로 다른 Player로 생성된다) `playerId` 체계 자체는 안 바뀐다
   - 로그인 조회는 `PlayerRepository.findByPlatform(platformType, platformUserId)`로
     한다 — 로그인 시점엔 아직 내부 `playerId`를 모르므로 이게 진입점
   - `randomUUID()`는 인스턴스 간 조율 없이 각자 로컬에서 생성해도 안전(122비트 랜덤,
@@ -165,12 +192,12 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
     서비스 서버를 N대로 늘려도 영향 없다. MongoDB가 1대(레플리카셋 포함)인 한 프라이머리가
     하나뿐이라 unique 인덱스가 동시 요청 순서를 항상 일관되게 판정한다
 - 최초 로그인 시 신규 Player를 생성(최저 등급 원형 중 랜덤 1장으로 시작 카드 지급,
-  초기 골드 1000, `clearedStage=0`, 구글 프로필의 `name`/`email`/`picture` 포함) —
+  초기 골드 1000, `clearedStage=0`, 소셜 프로필의 `name`/`email`/`picture` 포함) —
   `authService.ts`의 `pickStarterCard()`, 최저 등급은 `masterDataCache.getCardTemplatesByGrade()`로
   조회(등급 순서 N < R < SR < SSR 중 N 고정, 원형 간 가중치 없이 균등 확률). 이름/프로필 사진은 최초 가입 시 1회만
-  가져오고 이후 구글과 재동기화하지 않는다 — 닉네임/프로필 사진을 게임 내에서 바꾸는
-  기능이 나중에 추가될 수 있는데, 구글 쪽과 계속 동기화하면 게임 내 변경을 도로 덮어쓰게
-  되기 때문. `PlayerRepository.create()`는 삽입 전용(update 아님)이며, 동시 최초 로그인
+  가져오고 이후 프로바이더와 재동기화하지 않는다 — 닉네임/프로필 사진을 게임 내에서 바꾸는
+  기능이 나중에 추가될 수 있는데, 프로바이더 쪽과 계속 동기화하면 게임 내 변경을 도로
+  덮어쓰게 되기 때문. `PlayerRepository.create()`는 삽입 전용(update 아님)이며, 동시 최초 로그인
   레이스로 unique 인덱스 중복 에러(11000)가 나면 조용히 무시한다 — 이때 자신이 만든
   `playerId`가 실제로 저장됐다는 보장이 없으므로, 호출부(`authService.ts`의
   `loginOrRegister()`)는 그 뒤 반드시 `findByPlatform`으로 실제 저장된 `playerId`를
@@ -327,6 +354,16 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   `mongoLogClient.close()`를 반드시 같이 추가해야 한다 — 안 하면 프로세스가 안 끝나
   테스트가 멈춘다(이미 있는 모든 e2e 테스트 파일에 이 훅을 추가해둠,
   `mailboxCleanupService.e2e.test.ts` 포함)
+- 페이스북 로그인 연동 추가(Authorization Code Flow 하나만 — 자세한 이유와 구글과의 차이는
+  "인증 전략" 절 참고), 이어서 향후 프로바이더 추가 시 라우트/authService를 계속 건드리지
+  않도록 `SocialAuthProvider` 인터페이스 + `authRoutes.ts`의 레지스트리 배열 순회 방식으로
+  리팩터링 완료(상세는 "인증 전략" 절) — `socialAuthProvider.ts`(신규), `googleAuth.ts`의
+  `googleAuthCodeProvider`/`facebookAuth.ts`의 `facebookAuthProvider`(각각 인터페이스 구현
+  객체), `authService.ts`의 `loginWithSocialProvider()`(프로바이더별 분기 없는 단일 함수).
+  OAuth 콜백(구글 authorization_code/페이스북 공통) 실패 시에도 `errorHandler`의 날것 JSON
+  대신 `/?loginError=1`로 리다이렉트해 로그인 화면에 안내 메시지를 보여준다
+  (`authRoutes.ts`의 `handleOAuthCallback()`). 구글/페이스북 모두 로그인 자체는 e2e 테스트
+  대상 밖(실제 프로바이더 서버 연동 필요, mock 안 씀)
 
 ## MongoDB 데이터 모델링 / 원자성 전략 (확정)
 

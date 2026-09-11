@@ -24,6 +24,10 @@ export const config = {
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
   /** authorization_code 플로우 전용 — 구글 콘솔에 등록한 redirect URI와 정확히 일치해야 함. */
   googleRedirectUri: process.env.GOOGLE_REDIRECT_URI,
+  facebookAppId: process.env.FACEBOOK_APP_ID,
+  facebookAppSecret: process.env.FACEBOOK_APP_SECRET,
+  /** 페이스북 콘솔의 유효한 OAuth 리디렉션 URI 목록과 정확히 일치해야 함. */
+  facebookRedirectUri: process.env.FACEBOOK_REDIRECT_URI,
   sessionTtlSec: Number(process.env.SESSION_TTL_SEC ?? 7 * 24 * 60 * 60),
   /** 만료 우편 정리 배치 스케줄(cron 표현식). 기본값: 매월 1일 00시. */
   mailboxCleanupCron: process.env.MAILBOX_CLEANUP_CRON ?? "0 0 1 * *",

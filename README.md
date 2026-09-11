@@ -51,6 +51,7 @@ Redis, 구글 OAuth 클라이언트 정보 등).
 - [x] Player 애그리게잇 (Inventory/Economy, 낙관적 락) + Repository
 - [x] 마스터 데이터 캐시 (Change Stream/폴링 워처, 시드 스크립트)
 - [x] 구글 로그인 (Google Identity Services/Authorization Code Flow) + Redis 세션 인증
+- [x] 페이스북 로그인 (Authorization Code Flow)
 - [x] 세션 인증 미들웨어
 - [x] 강화(Enhancement) API + E2E 테스트
 - [x] 합성(Synthesis) API(등급 승급/강화 재료) + E2E 테스트
