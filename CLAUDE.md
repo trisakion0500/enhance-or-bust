@@ -8,8 +8,10 @@
 - **레포명**: enhance-or-bust
 - **장르**: 카드 수집형 방치(Idle) RPG
 - **구성**: 서버 + 클라이언트 풀스택 프로젝트 (백엔드 전용 아님)
+- **학습 목적**: MongoDB는 이 프로젝트에서 처음 사용해보는 학습 대상이다 — 낙관적 락,
+  멀티도큐먼트 트랜잭션, Change Streams 등을 실전처럼 다뤄보기 위해 이 스택을 택했다.
 
-기획 상세는 `docs/design/GAME_DESIGN.md` 참고. 이 문서는 확정 상태이며 임의로 변경하지 않는다.
+기획 상세는 `docs/01_GAME_DESIGN.md` 참고. 이 문서는 확정 상태이며 임의로 변경하지 않는다.
 
 ## 기술 스택
 
@@ -21,7 +23,7 @@
 | 프론트엔드 | 바닐라 JavaScript |
 | 아키텍처 | DDD (도메인 주도 설계) |
 
-상세는 `docs/architecture/TECH_STACK.md` 참고.
+상세는 `docs/02_TECH_STACK.md` 참고.
 
 ### Redis 용도 (확정)
 
@@ -251,7 +253,7 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   상성으로 데미지 1.2배/0.8배. `clearedStage` 이하 재도전(파밍) 가능하되 보상은
   `farmRewardRate`만큼 축소, `clearedStage+1` 초과는 진입 차단. **서버가 카드 스탯 기준으로
   직접 시뮬레이션 판정**하며 클라이언트가 보내는 전투 결과는 신뢰하지 않는다. 상세는
-  `docs/design/GAME_DESIGN.md` 6절.
+  `docs/01_GAME_DESIGN.md` 6절.
 - **우편**: 발송 후 7일 만료, 중복 수령 방지 필요
 
 ## 현재 상태
@@ -389,7 +391,8 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   `GET /auth/register/pending`/`POST /auth/register/complete` 2개 신규(GIS/리다이렉트 두
   로그인 방식이 전부 이 둘로 합류). 프론트는 `index.html`에 `registerScreen`(닉네임 입력 폼)
   섹션을 추가하고, `app.js`의 `showScreen()`을 로그인/닉네임입력/게임 3단 모드로 확장했다
-- 별도 사내 운영툴 프로젝트인 `gm_platform`과의 연동 추가 — GM 운영자가 gm_platform 화면에서
+- 이전에 직접 개발한 별도 포트폴리오 프로젝트(GM 운영툴)인 `gm_platform`
+  (https://github.com/trisakion0500/gm_platform)과의 연동 추가 — GM 운영자가 gm_platform 화면에서
   이 서버의 플레이어 데이터를 조회할 수 있게 하는 전용 컨텍스트(`src/contexts/gm/`)다.
   **`gm_platform`의 소스는 이 프로젝트 작업 범위에서 절대 건드리지 않는다** — 읽기(레퍼런스
   확인)나 그 서버의 살아있는 REST API 호출(데이터 등록/조회)만 허용되고, 파일 수정은 전부
@@ -479,7 +482,7 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
 
 ## Inventory 슬롯 상한 구현 노트
 
-정책(상한 존재 여부, 차단/무조건지급 원칙)은 `docs/design/GAME_DESIGN.md`의
+정책(상한 존재 여부, 차단/무조건지급 원칙)은 `docs/01_GAME_DESIGN.md`의
 "인벤토리 슬롯 정책" 절이 원본이다. 여기는 구현 방식만 다룬다.
 
 - players 문서에 카드를 배열로 embedding하는 구조라 MongoDB 문서 16MB 제한과
