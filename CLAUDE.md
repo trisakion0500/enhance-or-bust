@@ -224,6 +224,11 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
 - 세션은 랜덤 opaque 토큰을 발급해 Redis에 `session:<token> → playerId` 형태로
   TTL(기본 7일, `SESSION_TTL_SEC`)과 함께 저장한다(Redis 용도 절의 "세션/인증 토큰 관리"
   그대로). JWT처럼 자체 서명된 토큰이 아니라, Redis에서 지우면 즉시 무효화할 수 있다
+- **중복 로그인 방지(1계정 1세션)**: `playerId → 현재 세션 토큰` 역방향 매핑
+  (`playerSession:<playerId>`, `redisKeys.ts`의 `redisPlayerSessionKey()`)을 별도로 두고,
+  `createSession()`이 새 세션 발급 전 이 매핑으로 이전 토큰을 찾아 먼저 무효화한다. 그래서
+  같은 계정으로 다른 기기/브라우저에서 로그인하면 이전 세션은 즉시 끊긴다(여러 기기 동시
+  로그인 허용 정책이 아님). `deleteSession()`(로그아웃)도 이 역방향 매핑을 함께 지운다
 - 세션 토큰은 httpOnly 쿠키(`sessionToken`)로 내려준다. 프론트(정적 파일)와 API를 같은
   오리진에서 같이 서빙하므로 CORS 설정이 필요 없다
 - 로그아웃은 `POST /auth/logout`(`authRoutes.ts`) — 쿠키의 세션 토큰으로 Redis 세션을

@@ -11,6 +11,16 @@ export function redisSessionKey(token: string): string {
 }
 
 /**
+ * 플레이어가 현재 보유한 세션 토큰을 저장하는 Redis 키를 만든다(1계정 1세션 강제용 역방향 매핑).
+ * @param playerId 세션을 소유한 플레이어 ID
+ * @returns Redis 키
+ * @author trisakion
+ */
+export function redisPlayerSessionKey(playerId: string): string {
+  return `${config.redisKeyPrefix}playerSession:${playerId}`;
+}
+
+/**
  * 플레이어 단위 분산 락 Redis 키를 만든다.
  * @param playerId 락을 걸 플레이어 ID
  * @returns Redis 키

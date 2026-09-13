@@ -66,6 +66,13 @@ Player가 생성된다(계정 연결 기능 없음).
 `requireAuth` 미들웨어(`shared-kernel/sessionAuth.ts`)가 쿠키를 Redis 세션과 대조해
 `req.playerId`를 세팅한다 — 전역 `app.use`가 아니라 보호가 필요한 라우터에 개별 적용.
 
+**중복 로그인 방지(1계정 1세션)**: `createSession()`이 새 세션을 발급하기 전에
+`playerId → 현재 세션 토큰` 역방향 매핑(Redis)을 조회해 이전 토큰이 있으면 먼저 무효화한다.
+그래서 같은 계정으로 다른 기기/브라우저에서 새로 로그인하면 이전 세션은 즉시 끊긴다. 이전
+기기의 `sessionToken` 쿠키 자체는 그대로 남아있지만, 그 값으로 Redis를 조회하면 이미 지워진
+뒤라 `requireAuth`가 인증 실패로 처리한다 — TTL 만료를 기다릴 필요 없이 그 자리에서 즉시
+로그아웃된 것과 같은 효과다.
+
 로그아웃(`POST /auth/logout`)은 `requireAuth`를 붙이지 않고 세션이 없거나 만료됐어도
 그냥 성공 처리한다(멱등).
 
