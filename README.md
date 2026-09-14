@@ -121,6 +121,39 @@ Inventory/Progression/Economy/Battle-Stage 4개는 `Player` 애그리게잇 하�
 
 ---
 
+## 서버 구조
+
+```mermaid
+graph LR
+    browser["브라우저\n(public/js/*.js)"]
+
+    subgraph enhanceOrBust["enhanceOrBust (Express)"]
+        auth["requireAuth\n(세션 인증)"]
+        routes["라우트\n(7개 바운디드 컨텍스트 + gm/coupon)"]
+        services["애플리케이션 서비스"]
+    end
+
+    mongo[("MongoDB\nenhance_or_bust\n(players/mailbox/coupon_redemptions/master_*)")]
+    mongoLog[("MongoDB\nenhance_or_bust_log\n(log_*/stats_*/attempts_*)")]
+    redis[("Redis\n세션 · 분산 락 · 가입 보류")]
+
+    gmPlatform["gm_platform\n(운영툴, 별도 프로젝트)"]
+    couponPlatform["coupon_platform\n(쿠폰 발급, 별도 프로젝트)"]
+
+    browser -->|"fetch (세션 쿠키)"| auth --> routes --> services
+    services --> mongo
+    services --> mongoLog
+    services --> redis
+    gmPlatform -->|"X-API-Key"| routes
+    services -->|"S2S API Key + HMAC"| couponPlatform
+```
+
+컬렉션/DB 상세 관계는 [`docs/04_DATA_MODEL.md`](docs/04_DATA_MODEL.md), gm_platform/coupon_platform
+연동 배경은 각각 [`docs/18_GM_PLATFORM_INTEGRATION.md`](docs/18_GM_PLATFORM_INTEGRATION.md)/
+[`docs/20_COUPON_PLATFORM_INTEGRATION.md`](docs/20_COUPON_PLATFORM_INTEGRATION.md) 참고.
+
+---
+
 ## 기술 스택
 
 | 항목 | 스택 |
@@ -190,7 +223,7 @@ Inventory/Progression/Economy/Battle-Stage 4개는 `Player` 애그리게잇 하�
 enhanceOrBust/
 ├── src/
 │   ├── contexts/        # 바운디드 컨텍스트별(application/domain/infrastructure/routes)
-│   │   ├── auth/ battleStage/ enhancement/ synthesis/ mailbox/ player/ gm/
+│   │   ├── auth/ battleStage/ enhancement/ synthesis/ mailbox/ player/ gm/ coupon/
 │   ├── shared-kernel/   # 공용 헬퍼(에러맵, 낙관적 락 재시도, Redis 락, 감사 로그, 마스터데이터 캐시 등)
 │   ├── infra/           # Mongo/Redis/log4js 연결
 │   ├── config/          # 환경변수 로딩
