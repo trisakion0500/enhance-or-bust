@@ -1,6 +1,7 @@
 import { MongoClient } from "mongodb";
 import type { Db } from "mongodb";
 import { config } from "../config/env.js";
+import { COLLECTIONS } from "../shared-kernel/collectionNames.js";
 
 /**
  * 게임 이벤트/감사 로그 전용 DB(`enhance_or_bust_log`) 클라이언트. 메인 앱 DB와 물리적으로 분리된 별도
@@ -30,13 +31,14 @@ export async function connectMongoLog() {
  * @author trisakion
  */
 export async function ensureLogIndexes(logDb: Db): Promise<void> {
-  await logDb.collection("log_auth").createIndex({ actorId: 1, occurredAt: -1 });
-  await logDb.collection("log_enhancement").createIndex({ actorId: 1, occurredAt: -1 });
-  await logDb.collection("log_synthesis").createIndex({ actorId: 1, occurredAt: -1 });
-  await logDb.collection("log_battle_stage").createIndex({ actorId: 1, occurredAt: -1 });
+  await logDb.collection(COLLECTIONS.LOG_AUTH).createIndex({ actorId: 1, occurredAt: -1 });
+  await logDb.collection(COLLECTIONS.LOG_ENHANCEMENT).createIndex({ actorId: 1, occurredAt: -1 });
+  await logDb.collection(COLLECTIONS.LOG_SYNTHESIS).createIndex({ actorId: 1, occurredAt: -1 });
+  await logDb.collection(COLLECTIONS.LOG_BATTLE_STAGE).createIndex({ actorId: 1, occurredAt: -1 });
   // 스테이지 승률/카드 조합 통계용(감사 로그 아님) — 승패 무관 매 시도 기록.
-  await logDb.collection("attempts_battle_stage").createIndex({ actorId: 1, occurredAt: -1 });
-  await logDb.collection("log_mailbox").createIndex({ actorId: 1, occurredAt: -1 });
+  await logDb.collection(COLLECTIONS.ATTEMPTS_BATTLE_STAGE).createIndex({ actorId: 1, occurredAt: -1 });
+  await logDb.collection(COLLECTIONS.LOG_MAILBOX).createIndex({ actorId: 1, occurredAt: -1 });
+  await logDb.collection(COLLECTIONS.LOG_COUPON).createIndex({ actorId: 1, occurredAt: -1 });
   // DAU 집계용 — 플레이어당 하루 1건만 남도록 강제(dailyActive.ts의 멱등 삽입이 기대는 제약).
-  await logDb.collection("stats_daily_active_players").createIndex({ playerId: 1, date: 1 }, { unique: true });
+  await logDb.collection(COLLECTIONS.STATS_DAILY_ACTIVE_PLAYERS).createIndex({ playerId: 1, date: 1 }, { unique: true });
 }

@@ -1,4 +1,5 @@
 import type { Db, MongoServerError } from "mongodb";
+import { COLLECTIONS } from "./collectionNames.js";
 
 /** `system_batch_runs` 컬렉션 문서 — `{jobName}:{period}`를 `_id`로 삼아 유니크 삽입으로 실행권을 선점한다. */
 interface BatchRunDocument {
@@ -20,7 +21,7 @@ interface BatchRunDocument {
  */
 export async function tryClaimBatchRun(db: Db, jobName: string, period: string): Promise<boolean> {
   try {
-    await db.collection<BatchRunDocument>("system_batch_runs").insertOne({ _id: `${jobName}:${period}`, claimedAt: new Date() });
+    await db.collection<BatchRunDocument>(COLLECTIONS.SYSTEM_BATCH_RUNS).insertOne({ _id: `${jobName}:${period}`, claimedAt: new Date() });
     return true;
   } catch (err) {
     if ((err as MongoServerError).code === 11000) return false;

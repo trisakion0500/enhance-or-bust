@@ -11,6 +11,7 @@ import { Player } from "../../player/domain/player.js";
 import { connectMongo, mongoClient } from "../../../infra/mongo.js";
 import { connectMongoLog, mongoLogClient } from "../../../infra/mongoLog.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
+import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
 import { MongoMailboxRepository } from "../infrastructure/mongoMailboxRepository.js";
 import { MongoPlayerRepository } from "../../player/infrastructure/mongoPlayerRepository.js";
 import { connectRedis, redisClient } from "../../../infra/redis.js";
@@ -39,7 +40,7 @@ before(async () => {
 
   playerRepository = new MongoPlayerRepository(db);
   mailboxRepository = new MongoMailboxRepository(db);
-  httpServer = createServer(playerRepository, mailboxRepository).listen(0);
+  httpServer = createServer(playerRepository, mailboxRepository, db).listen(0);
   await new Promise<void>(resolve => httpServer.once("listening", resolve));
   const { port } = httpServer.address() as AddressInfo;
   baseUrl = `http://127.0.0.1:${port}`;
@@ -76,8 +77,8 @@ async function createTestPlayer(cardCount = 1) {
 /** 테스트가 만든 플레이어/우편 문서를 지운다. */
 async function deleteTestPlayer(playerId: string) {
   const db = mongoClient.db(process.env.MONGO_APP_DATABASE);
-  await db.collection<{ _id: string }>("players").deleteOne({ _id: playerId });
-  await db.collection<{ playerId: string }>("mailbox").deleteMany({ playerId });
+  await db.collection<{ _id: string }>(COLLECTIONS.PLAYERS).deleteOne({ _id: playerId });
+  await db.collection<{ playerId: string }>(COLLECTIONS.MAILBOX).deleteMany({ playerId });
 }
 
 /** playerId로 현재 플레이어 문서를 직접 읽는다(응답 바디만으로는 확인 못 하는 최종 DB 상태 검증용). */
@@ -88,7 +89,7 @@ async function readPlayer(playerId: string) {
       _id: string;
       inventory: { cardId: string; templateId: string }[];
       economy: { gold: number; enhancementStone: number; diamond: number };
-    }>("players")
+    }>(COLLECTIONS.PLAYERS)
     .findOne({ _id: playerId });
 }
 

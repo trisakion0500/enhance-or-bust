@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
 import { connectMongo, mongoClient } from "../infra/mongo.js";
+import { COLLECTIONS } from "../shared-kernel/collectionNames.js";
 import type { MasterDataContent } from "../shared-kernel/masterData/masterDataContent.js";
 import { GRADE_CONFIGS, buildCardTemplates } from "../shared-kernel/masterData/seedData.js";
 import { ENHANCEMENT_RULES } from "../contexts/enhancement/seedData.js";
@@ -26,7 +27,7 @@ import { buildCardDropRules, buildStageConfigs } from "../contexts/battleStage/s
  * 두지 않는다.
  */
 async function bumpMasterDataVersion(db: Db, content: MasterDataContent) {
-  await db.collection("master_data_meta").updateOne({ content }, { $inc: { version: 1 } }, { upsert: true });
+  await db.collection(COLLECTIONS.MASTER_DATA_META).updateOne({ content }, { $inc: { version: 1 } }, { upsert: true });
 }
 
 /** 각 마스터 데이터 컬렉션에 자연키 기준으로 upsert하고, 컨텐츠별 버전을 갱신한다. */
@@ -34,52 +35,52 @@ async function main() {
   const db = await connectMongo();
 
   await Promise.all(
-    GRADE_CONFIGS.map(doc => db.collection("master_grade_configs").updateOne({ grade: doc.grade }, { $set: doc }, { upsert: true })),
+    GRADE_CONFIGS.map(doc => db.collection(COLLECTIONS.MASTER_GRADE_CONFIGS).updateOne({ grade: doc.grade }, { $set: doc }, { upsert: true })),
   );
-  await bumpMasterDataVersion(db, "master_grade_configs");
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_GRADE_CONFIGS);
 
   await Promise.all(
     buildCardTemplates().map(doc =>
-      db.collection("master_card_templates").updateOne({ templateId: doc.templateId }, { $set: doc }, { upsert: true }),
+      db.collection(COLLECTIONS.MASTER_CARD_TEMPLATES).updateOne({ templateId: doc.templateId }, { $set: doc }, { upsert: true }),
     ),
   );
-  await bumpMasterDataVersion(db, "master_card_templates");
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_CARD_TEMPLATES);
 
   await Promise.all(
     ENHANCEMENT_RULES.map(doc =>
       db
-        .collection("master_enhancement_rules")
+        .collection(COLLECTIONS.MASTER_ENHANCEMENT_RULES)
         .updateOne({ minTargetEnhancementLevel: doc.minTargetEnhancementLevel }, { $set: doc }, { upsert: true }),
     ),
   );
-  await bumpMasterDataVersion(db, "master_enhancement_rules");
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_ENHANCEMENT_RULES);
 
   await Promise.all(
     SYNTHESIS_RULES.map(doc => {
       const key = doc.type === "gradeUpgrade" ? { type: doc.type, sourceGrade: doc.sourceGrade } : { type: doc.type };
-      return db.collection("master_synthesis_rules").updateOne(key, { $set: doc }, { upsert: true });
+      return db.collection(COLLECTIONS.MASTER_SYNTHESIS_RULES).updateOne(key, { $set: doc }, { upsert: true });
     }),
   );
-  await bumpMasterDataVersion(db, "master_synthesis_rules");
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_SYNTHESIS_RULES);
 
   await Promise.all(
     buildStageConfigs().map(doc =>
       db
-        .collection("master_stage_configs")
+        .collection(COLLECTIONS.MASTER_STAGE_CONFIGS)
         // cardDropTable(구 필드)이 master_stage_card_drops 컬렉션으로 분리되며 남은 이전 문서를 정리한다.
         .updateOne({ stageId: doc.stageId }, { $set: doc, $unset: { cardDropTable: "" } }, { upsert: true }),
     ),
   );
-  await bumpMasterDataVersion(db, "master_stage_configs");
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_STAGE_CONFIGS);
 
   await Promise.all(
     buildCardDropRules().map(doc =>
       db
-        .collection("master_stage_card_drops")
+        .collection(COLLECTIONS.MASTER_STAGE_CARD_DROPS)
         .updateOne({ stageId: doc.stageId, templateId: doc.templateId }, { $set: doc }, { upsert: true }),
     ),
   );
-  await bumpMasterDataVersion(db, "master_stage_card_drops");
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_STAGE_CARD_DROPS);
 
   console.log("마스터 데이터 시드 완료");
   await mongoClient.close();

@@ -1,6 +1,7 @@
 import type { Collection, Db, MongoServerError } from "mongodb";
 import { BusinessException } from "../../../shared-kernel/businessException.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
+import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
 import { Card } from "../domain/card.js";
 import { Economy } from "../domain/economy.js";
 import { Inventory } from "../domain/inventory.js";
@@ -65,7 +66,7 @@ export class MongoPlayerRepository implements PlayerRepository {
 
   /** @param db 연결된 앱 DB 핸들 — 테스트 시 가짜 Db로 교체 가능하도록 주입받는다. */
   constructor(db: Db) {
-    this.collection = db.collection<PlayerDocument>("players");
+    this.collection = db.collection<PlayerDocument>(COLLECTIONS.PLAYERS);
   }
 
   /**

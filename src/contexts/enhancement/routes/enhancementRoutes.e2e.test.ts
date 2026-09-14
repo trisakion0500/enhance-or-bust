@@ -9,6 +9,7 @@ import { Player } from "../../player/domain/player.js";
 import { connectMongo, mongoClient } from "../../../infra/mongo.js";
 import { connectMongoLog, mongoLogClient } from "../../../infra/mongoLog.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
+import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
 import { MongoPlayerRepository } from "../../player/infrastructure/mongoPlayerRepository.js";
 import { MongoMailboxRepository } from "../../mailbox/infrastructure/mongoMailboxRepository.js";
 import { connectRedis, redisClient } from "../../../infra/redis.js";
@@ -34,7 +35,7 @@ before(async () => {
   await masterDataCache.loadAll(db);
 
   playerRepository = new MongoPlayerRepository(db);
-  httpServer = createServer(playerRepository, new MongoMailboxRepository(db)).listen(0);
+  httpServer = createServer(playerRepository, new MongoMailboxRepository(db), db).listen(0);
   await new Promise<void>(resolve => httpServer.once("listening", resolve));
   const { port } = httpServer.address() as AddressInfo;
   baseUrl = `http://127.0.0.1:${port}`;
@@ -69,14 +70,14 @@ async function createTestPlayer(enhancementLevel = 0, templateId = "N_01") {
 
 /** 테스트가 만든 플레이어 문서를 지운다. */
 async function deleteTestPlayer(playerId: string) {
-  await mongoClient.db(process.env.MONGO_APP_DATABASE).collection<{ _id: string }>("players").deleteOne({ _id: playerId });
+  await mongoClient.db(process.env.MONGO_APP_DATABASE).collection<{ _id: string }>(COLLECTIONS.PLAYERS).deleteOne({ _id: playerId });
 }
 
 /** playerId로 현재 플레이어 문서를 직접 읽는다(응답 바디만으로는 확인 못 하는 최종 DB 상태 검증용). */
 async function readPlayer(playerId: string) {
   return mongoClient
     .db(process.env.MONGO_APP_DATABASE)
-    .collection<{ _id: string; inventory: { cardId: string; enhancementLevel: number }[]; economy: { gold: number; enhancementStone: number } }>("players")
+    .collection<{ _id: string; inventory: { cardId: string; enhancementLevel: number }[]; economy: { gold: number; enhancementStone: number } }>(COLLECTIONS.PLAYERS)
     .findOne({ _id: playerId });
 }
 

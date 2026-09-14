@@ -15,6 +15,7 @@ import { sendMail } from "../../mailbox/application/mailboxService.js";
 import { MAIL_CONTENTS } from "../../mailbox/domain/mailContent.js";
 import { config } from "../../../config/env.js";
 import { writeAuditLog } from "../../../shared-kernel/auditLog.js";
+import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
 
 /** 출전 카드 1장이 이번 전투로 얻은 EXP 결과. */
 export interface ExpGainResult {
@@ -99,7 +100,7 @@ export async function clearStage(
           mailboxRepository,
           content.expiryMs,
         );
-        await writeAuditLog("log_battle_stage", {
+        await writeAuditLog(COLLECTIONS.LOG_BATTLE_STAGE, {
           actorId: playerId,
           action: "clear",
           changes: {
@@ -116,7 +117,7 @@ export async function clearStage(
   );
 
   // 감사 로그(승리 시에만)와 별개로, 스테이지별 승률/카드 조합 통계는 승패 무관 매 시도마다 남긴다.
-  await writeAuditLog("attempts_battle_stage", {
+  await writeAuditLog(COLLECTIONS.ATTEMPTS_BATTLE_STAGE, {
     actorId: playerId,
     action: "attempt",
     changes: { stageId, squadCardIds, squadTemplateIds: result.squadTemplateIds, won: result.won, clearedStage: result.clearedStage },

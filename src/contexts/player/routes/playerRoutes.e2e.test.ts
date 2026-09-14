@@ -9,6 +9,7 @@ import { Player } from "../domain/player.js";
 import { connectMongo, mongoClient } from "../../../infra/mongo.js";
 import { connectMongoLog, mongoLogClient } from "../../../infra/mongoLog.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
+import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
 import { MongoPlayerRepository } from "../infrastructure/mongoPlayerRepository.js";
 import { MongoMailboxRepository } from "../../mailbox/infrastructure/mongoMailboxRepository.js";
 import { connectRedis, redisClient } from "../../../infra/redis.js";
@@ -32,7 +33,7 @@ before(async () => {
   await masterDataCache.loadAll(db);
 
   playerRepository = new MongoPlayerRepository(db);
-  httpServer = createServer(playerRepository, new MongoMailboxRepository(db)).listen(0);
+  httpServer = createServer(playerRepository, new MongoMailboxRepository(db), db).listen(0);
   await new Promise<void>(resolve => httpServer.once("listening", resolve));
   const { port } = httpServer.address() as AddressInfo;
   baseUrl = `http://127.0.0.1:${port}`;
@@ -68,7 +69,7 @@ async function createTestPlayer() {
 
 /** 테스트가 만든 플레이어 문서를 지운다. */
 async function deleteTestPlayer(playerId: string) {
-  await mongoClient.db(process.env.MONGO_APP_DATABASE).collection<{ _id: string }>("players").deleteOne({ _id: playerId });
+  await mongoClient.db(process.env.MONGO_APP_DATABASE).collection<{ _id: string }>(COLLECTIONS.PLAYERS).deleteOne({ _id: playerId });
 }
 
 test("로그인한 플레이어는 자신의 재화/clearedStage/보유 카드(원형 정보 조인)를 조회할 수 있다", async () => {

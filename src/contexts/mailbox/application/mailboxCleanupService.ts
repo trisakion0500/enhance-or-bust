@@ -3,6 +3,7 @@ import { logger } from "../../../infra/logger.js";
 import { tryClaimBatchRun } from "../../../shared-kernel/batchRunGuard.js";
 import type { MailboxRepository } from "../domain/mailboxRepository.js";
 import { writeAuditLog, SYSTEM_ACTOR } from "../../../shared-kernel/auditLog.js";
+import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
 
 /** `system_batch_runs` 마커에 쓰이는 이 배치의 고유 식별자. */
 const JOB_NAME = "mailbox_cleanup";
@@ -34,7 +35,7 @@ export async function runMailboxCleanupJob(db: Db, mailboxRepository: MailboxRep
 
   // 삭제된 게 없으면(상태 변경 없음) 다른 도메인과 동일한 기준으로 로그도 남기지 않는다.
   if (deletedCount > 0)
-    await writeAuditLog("log_mailbox", {
+    await writeAuditLog(COLLECTIONS.LOG_MAILBOX, {
       actorId: SYSTEM_ACTOR,
       action: "cleanupBatch",
       changes: { cutoff: cutoff.toISOString(), deletedCount },

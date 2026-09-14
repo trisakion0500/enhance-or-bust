@@ -1,22 +1,25 @@
+import { COLLECTIONS } from "../collectionNames.js";
+
 /**
- * 마스터 데이터 컨텐츠(컬렉션) 종류. 컬렉션명 문자열 리터럴을 캐시/워처/폴러 세 곳에서
- * 따로 타이핑하지 않도록 한 곳에서 유니온 타입 + 목록으로 관리한다.
+ * 마스터 데이터 컨텐츠(컬렉션) 종류. 실제 컬렉션명 리터럴의 유일한 출처는
+ * `collectionNames.ts`의 `COLLECTIONS`이고, 이 타입/목록은 그중 `master_` 6개만 모아
+ * 캐시/워처/폴러가 컨텐츠 단위(유니온 타입 + 순회 목록)로 다루기 편하게 재구성한 것이다.
  * @author trisakion
  */
 export type MasterDataContent =
-  | "master_card_templates"
-  | "master_grade_configs"
-  | "master_enhancement_rules"
-  | "master_synthesis_rules"
-  | "master_stage_configs"
-  | "master_stage_card_drops";
+  | typeof COLLECTIONS.MASTER_CARD_TEMPLATES
+  | typeof COLLECTIONS.MASTER_GRADE_CONFIGS
+  | typeof COLLECTIONS.MASTER_ENHANCEMENT_RULES
+  | typeof COLLECTIONS.MASTER_SYNTHESIS_RULES
+  | typeof COLLECTIONS.MASTER_STAGE_CONFIGS
+  | typeof COLLECTIONS.MASTER_STAGE_CARD_DROPS;
 
 /** {@link MasterDataContent}의 전체 목록 — 전체 로드/워처 대상 컬렉션 필터링에 쓴다. */
 export const MASTER_DATA_CONTENTS: readonly MasterDataContent[] = [
-  "master_card_templates",
-  "master_grade_configs",
-  "master_enhancement_rules",
-  "master_synthesis_rules",
-  "master_stage_configs",
-  "master_stage_card_drops",
+  COLLECTIONS.MASTER_CARD_TEMPLATES,
+  COLLECTIONS.MASTER_GRADE_CONFIGS,
+  COLLECTIONS.MASTER_ENHANCEMENT_RULES,
+  COLLECTIONS.MASTER_SYNTHESIS_RULES,
+  COLLECTIONS.MASTER_STAGE_CONFIGS,
+  COLLECTIONS.MASTER_STAGE_CARD_DROPS,
 ];

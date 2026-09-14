@@ -4,6 +4,7 @@ import { Router } from "express";
 import { completeRegistration, loginWithGoogleIdToken, loginWithSocialProvider, type LoginResult } from "../application/authService.js";
 import { deleteSession, resolveSession } from "../infrastructure/sessionStore.js";
 import { writeAuditLog } from "../../../shared-kernel/auditLog.js";
+import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
 import { BusinessException } from "../../../shared-kernel/businessException.js";
 import { readCookie } from "../../../shared-kernel/cookies.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
@@ -112,7 +113,7 @@ export function createAuthRoutes(playerRepository: PlayerRepository): Router {
     if (token) {
       const playerId = await resolveSession(token);
       await deleteSession(token);
-      if (playerId) await writeAuditLog("log_auth", { actorId: playerId, action: "logout", changes: {} });
+      if (playerId) await writeAuditLog(COLLECTIONS.LOG_AUTH, { actorId: playerId, action: "logout", changes: {} });
     }
     res.clearCookie(SESSION_COOKIE_NAME, { httpOnly: true, sameSite: "lax", secure: isSecureCookie });
     res.json({ result: 0 });

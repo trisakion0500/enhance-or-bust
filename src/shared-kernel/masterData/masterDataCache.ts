@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import { COLLECTIONS } from "../collectionNames.js";
 import type { CardTemplate } from "./cardTemplate.js";
 import type { EnhancementRule } from "../../contexts/enhancement/domain/enhancementRule.js";
 import type { Grade } from "./grade.js";
@@ -53,31 +54,31 @@ class MasterDataCache {
    */
   async reload(db: Db, content: MasterDataContent): Promise<void> {
     switch (content) {
-      case "master_card_templates": {
-        const docs = await db.collection<CardTemplate>("master_card_templates").find().toArray();
+      case COLLECTIONS.MASTER_CARD_TEMPLATES: {
+        const docs = await db.collection<CardTemplate>(content).find().toArray();
         this.cardTemplates = new Map(docs.map(doc => [doc.templateId, doc]));
         break;
       }
-      case "master_grade_configs": {
-        const docs = await db.collection<GradeConfig>("master_grade_configs").find().toArray();
+      case COLLECTIONS.MASTER_GRADE_CONFIGS: {
+        const docs = await db.collection<GradeConfig>(content).find().toArray();
         this.gradeConfigs = new Map(docs.map(doc => [doc.grade, doc]));
         break;
       }
-      case "master_enhancement_rules": {
-        this.enhancementRules = await db.collection<EnhancementRule>("master_enhancement_rules").find().toArray();
+      case COLLECTIONS.MASTER_ENHANCEMENT_RULES: {
+        this.enhancementRules = await db.collection<EnhancementRule>(content).find().toArray();
         break;
       }
-      case "master_synthesis_rules": {
-        this.synthesisRules = await db.collection<SynthesisRule>("master_synthesis_rules").find().toArray();
+      case COLLECTIONS.MASTER_SYNTHESIS_RULES: {
+        this.synthesisRules = await db.collection<SynthesisRule>(content).find().toArray();
         break;
       }
-      case "master_stage_configs": {
-        const docs = await db.collection<StageConfig>("master_stage_configs").find().toArray();
+      case COLLECTIONS.MASTER_STAGE_CONFIGS: {
+        const docs = await db.collection<StageConfig>(content).find().toArray();
         this.stageConfigs = new Map(docs.map(doc => [doc.stageId, doc]));
         break;
       }
-      case "master_stage_card_drops": {
-        const docs = await db.collection<CardDropRuleDoc>("master_stage_card_drops").find().toArray();
+      case COLLECTIONS.MASTER_STAGE_CARD_DROPS: {
+        const docs = await db.collection<CardDropRuleDoc>(content).find().toArray();
         const grouped = new Map<number, CardDropEntry[]>();
         for (const doc of docs) {
           const table = grouped.get(doc.stageId) ?? [];
@@ -94,7 +95,7 @@ class MasterDataCache {
       }
     }
 
-    const meta = await db.collection<MasterDataMetaDocument>("master_data_meta").findOne({ content });
+    const meta = await db.collection<MasterDataMetaDocument>(COLLECTIONS.MASTER_DATA_META).findOne({ content });
     this.versions.set(content, meta?.version ?? 0);
   }
 

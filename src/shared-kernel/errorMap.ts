@@ -1,6 +1,7 @@
 import { AUTH_ERROR_MAP } from "../contexts/auth/errorMap.js";
 import { BATTLE_STAGE_ERROR_MAP } from "../contexts/battleStage/errorMap.js";
 import { COMMON_ERROR_MAP } from "./errorMapCommon.js";
+import { COUPON_ERROR_MAP } from "../contexts/coupon/errorMap.js";
 import { ECONOMY_ERROR_MAP } from "../contexts/player/errorMap/economy.js";
 import { ENHANCEMENT_ERROR_MAP } from "../contexts/enhancement/errorMap.js";
 import { GM_ERROR_MAP } from "../contexts/gm/errorMap.js";
@@ -25,4 +26,5 @@ export const ERROR_MAP = {
   BATTLE_STAGE: BATTLE_STAGE_ERROR_MAP,
   AUTH: AUTH_ERROR_MAP,
   GM: GM_ERROR_MAP,
+  COUPON: COUPON_ERROR_MAP,
 };

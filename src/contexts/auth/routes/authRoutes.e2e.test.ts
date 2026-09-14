@@ -8,6 +8,7 @@ import { Player } from "../../player/domain/player.js";
 import { connectMongo, mongoClient } from "../../../infra/mongo.js";
 import { connectMongoLog, mongoLogClient } from "../../../infra/mongoLog.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
+import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
 import { MongoPlayerRepository } from "../../player/infrastructure/mongoPlayerRepository.js";
 import { MongoMailboxRepository } from "../../mailbox/infrastructure/mongoMailboxRepository.js";
 import { connectRedis, redisClient } from "../../../infra/redis.js";
@@ -32,7 +33,7 @@ before(async () => {
   await masterDataCache.loadAll(db);
 
   playerRepository = new MongoPlayerRepository(db);
-  httpServer = createServer(playerRepository, new MongoMailboxRepository(db)).listen(0);
+  httpServer = createServer(playerRepository, new MongoMailboxRepository(db), db).listen(0);
   await new Promise<void>(resolve => httpServer.once("listening", resolve));
   const { port } = httpServer.address() as AddressInfo;
   baseUrl = `http://127.0.0.1:${port}`;
@@ -60,7 +61,7 @@ test("로그아웃하면 세션이 Redis에서 지워지고 쿠키도 함께 삭
     const setCookie = res.headers.get("set-cookie") ?? "";
     assert.match(setCookie, /sessionToken=;/, `쿠키 삭제 지시가 없음: ${setCookie}`);
   } finally {
-    await mongoClient.db(process.env.MONGO_APP_DATABASE).collection<{ _id: string }>("players").deleteOne({ _id: playerId });
+    await mongoClient.db(process.env.MONGO_APP_DATABASE).collection<{ _id: string }>(COLLECTIONS.PLAYERS).deleteOne({ _id: playerId });
   }
 });
 

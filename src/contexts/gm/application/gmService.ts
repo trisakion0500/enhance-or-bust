@@ -1,5 +1,6 @@
 import { BusinessException } from "../../../shared-kernel/businessException.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
+import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
 import { config } from "../../../config/env.js";
 import { mongoLogClient } from "../../../infra/mongoLog.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
@@ -253,25 +254,25 @@ async function getAuditLogsForGm(
 
 /** @returns log_auth 로그 목록 @author trisakion */
 export function getAuthLogsForGm(playerId: string, playerRepository: PlayerRepository, fromDate?: string, toDate?: string): Promise<GmLogEntry[]> {
-  return getAuditLogsForGm("log_auth", playerId, playerRepository, fromDate, toDate);
+  return getAuditLogsForGm(COLLECTIONS.LOG_AUTH, playerId, playerRepository, fromDate, toDate);
 }
 
 /** @returns log_enhancement 로그 목록 @author trisakion */
 export function getEnhancementLogsForGm(playerId: string, playerRepository: PlayerRepository, fromDate?: string, toDate?: string): Promise<GmLogEntry[]> {
-  return getAuditLogsForGm("log_enhancement", playerId, playerRepository, fromDate, toDate);
+  return getAuditLogsForGm(COLLECTIONS.LOG_ENHANCEMENT, playerId, playerRepository, fromDate, toDate);
 }
 
 /** @returns log_synthesis 로그 목록 @author trisakion */
 export function getSynthesisLogsForGm(playerId: string, playerRepository: PlayerRepository, fromDate?: string, toDate?: string): Promise<GmLogEntry[]> {
-  return getAuditLogsForGm("log_synthesis", playerId, playerRepository, fromDate, toDate);
+  return getAuditLogsForGm(COLLECTIONS.LOG_SYNTHESIS, playerId, playerRepository, fromDate, toDate);
 }
 
 /** @returns log_battle_stage 로그 목록 @author trisakion */
 export function getBattleStageLogsForGm(playerId: string, playerRepository: PlayerRepository, fromDate?: string, toDate?: string): Promise<GmLogEntry[]> {
-  return getAuditLogsForGm("log_battle_stage", playerId, playerRepository, fromDate, toDate);
+  return getAuditLogsForGm(COLLECTIONS.LOG_BATTLE_STAGE, playerId, playerRepository, fromDate, toDate);
 }
 
 /** @returns log_mailbox 로그 목록 @author trisakion */
 export function getMailboxLogsForGm(playerId: string, playerRepository: PlayerRepository, fromDate?: string, toDate?: string): Promise<GmLogEntry[]> {
-  return getAuditLogsForGm("log_mailbox", playerId, playerRepository, fromDate, toDate);
+  return getAuditLogsForGm(COLLECTIONS.LOG_MAILBOX, playerId, playerRepository, fromDate, toDate);
 }

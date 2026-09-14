@@ -8,7 +8,7 @@
 상태를 바꾸는 모든 액션에 대해 "언제/누가/어떤 액션/어떤 내용이 추가·수정·삭제됐는지"를
 남긴다. 로그 DB(`enhance_or_bust_log`, 앱 DB와 물리 분리 — `04_DATA_MODEL.md`)에
 컨텐츠(도메인)별 컬렉션을 분리해서 둔다: `log_auth`/`log_enhancement`/`log_synthesis`/
-`log_battle_stage`/`log_mailbox`.
+`log_battle_stage`/`log_mailbox`/`log_coupon`.
 
 ## 공통 스키마
 
@@ -62,6 +62,7 @@
 | `log_mailbox` | `claim` | mailId, attachments(지급된 첨부) | 구현됨 |
 | `log_mailbox` | `delete` | mailId | 구현됨 |
 | `log_mailbox` | `cleanupBatch` | actorId="SYSTEM", cutoff, deletedCount(0건이면 로그도 생략) | 구현됨 |
+| `log_coupon` | `redeem` | code, usageId, attachments(지급된 첨부) — 정상 플로우와 재처리 배치의 크래시 보정 지급 둘 다 이 액션으로 기록 | 구현됨 |
 | `stats_daily_active_players` | (감사 로그 아님, DAU 전용) | {playerId, date} 유니크 인덱스, 하루 1건 | 구현됨 |
 | `attempts_battle_stage` | `attempt` | (감사 로그 아님, 통계 전용) stageId, squadCardIds, squadTemplateIds, won, clearedStage | 구현됨 |
 

@@ -18,6 +18,9 @@ import {
 import { MongoPlayerRepository } from "./contexts/player/infrastructure/mongoPlayerRepository.js";
 import { MongoMailboxRepository } from "./contexts/mailbox/infrastructure/mongoMailboxRepository.js";
 import { runMailboxCleanupJob } from "./contexts/mailbox/application/mailboxCleanupService.js";
+import { createCouponS2sClient } from "./contexts/coupon/infrastructure/couponS2sClient.js";
+import { ensureCouponRedemptionIndexes } from "./contexts/coupon/infrastructure/couponRedemptionStore.js";
+import { reconcileUnconfirmedCoupons } from "./contexts/coupon/application/couponService.js";
 import { connectRedis, redisClient } from "./infra/redis.js";
 import { createServer } from "./server.js";
 
@@ -36,7 +39,8 @@ const playerRepository = new MongoPlayerRepository(db);
 await playerRepository.ensureIndexes();
 const mailboxRepository = new MongoMailboxRepository(db);
 await mailboxRepository.ensureIndexes();
-const app = createServer(playerRepository, mailboxRepository);
+await ensureCouponRedemptionIndexes(db);
+const app = createServer(playerRepository, mailboxRepository, db);
 const httpServer = app.listen(config.port, () => {
   logger.info(`listening on port ${config.port}`);
 });
@@ -44,6 +48,13 @@ const httpServer = app.listen(config.port, () => {
 const mailboxCleanupTask = cron.schedule(config.mailboxCleanupCron, () => {
   runMailboxCleanupJob(db, mailboxRepository, config.mailboxCleanupRetentionMonths).catch(err =>
     logger.error("만료 우편 정리 배치 실패", err),
+  );
+});
+
+const couponClient = createCouponS2sClient();
+const couponReconcileTask = cron.schedule(config.couponReconcileCron, () => {
+  reconcileUnconfirmedCoupons(couponClient, mailboxRepository, db).catch(err =>
+    logger.error("쿠폰 confirm 재처리 배치 실패", err),
   );
 });
 
@@ -55,6 +66,7 @@ const mailboxCleanupTask = cron.schedule(config.mailboxCleanupCron, () => {
  */
 async function shutdown() {
   mailboxCleanupTask.stop();
+  couponReconcileTask.stop();
   stopMasterDataPolling();
   await stopMasterDataWatch();
   await Promise.all([mongoClient.close(), mongoLogClient.close(), redisClient.quit()]);

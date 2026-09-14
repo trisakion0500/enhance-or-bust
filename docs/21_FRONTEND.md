@@ -1,4 +1,4 @@
-# 19_FRONTEND.md
+# 21_FRONTEND.md
 
 `public/` 아래, 빌드 스텝 없이 브라우저가 그대로 읽는 순수 ES 모듈 + 플레인 CSS. 카드
 이미지/애니메이션은 만들지 않는다(GAME_DESIGN.md "최소 UI" 원칙 — 전투 결과는 텍스트/

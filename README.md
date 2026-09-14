@@ -177,8 +177,10 @@ Inventory/Progression/Economy/Battle-Stage 4개는 `Player` 애그리게잇 하�
 | [16_PLAYER_API.md](docs/16_PLAYER_API.md) | 플레이어 조회 |
 | [17_GM_API.md](docs/17_GM_API.md) | gm_platform 연동 API |
 | [18_GM_PLATFORM_INTEGRATION.md](docs/18_GM_PLATFORM_INTEGRATION.md) | gm_platform 연동 배경/설계 |
-| [19_FRONTEND.md](docs/19_FRONTEND.md) | 화면 구성, JS 모듈 매핑 |
-| [20_TEST_STRATEGY.md](docs/20_TEST_STRATEGY.md) | 테스트 전략 |
+| [19_COUPON_API.md](docs/19_COUPON_API.md) | 쿠폰 사용 API |
+| [20_COUPON_PLATFORM_INTEGRATION.md](docs/20_COUPON_PLATFORM_INTEGRATION.md) | coupon_platform 연동 배경/설계 |
+| [21_FRONTEND.md](docs/21_FRONTEND.md) | 화면 구성, JS 모듈 매핑 |
+| [22_TEST_STRATEGY.md](docs/22_TEST_STRATEGY.md) | 테스트 전략 |
 
 ---
 
@@ -254,9 +256,12 @@ MongoDB는 반드시 **replica set**으로 띄워야 한다(Change Streams/우�
 - [x] 감사 로그/DAU/전투 스테이지 승률 통계
 - [x] gm_platform 연동(X-API-Key 인증) — 플레이어/마스터데이터/감사로그 조회
 - [x] 클러스터(다중 인스턴스) 구동 대비 로그 파일 인스턴스 suffix
+- [x] coupon_platform 연동(API Key+HMAC 서명, 발신 방향) — 쿠폰 사용(reserve/confirm),
+      크래시 복구용 상태 추적(`coupon_redemptions`), 매일 새벽 4시 재처리 배치
 
 세부 구현 내역은 [`docs/09_AUTH_SECURITY.md`](docs/09_AUTH_SECURITY.md),
-[`docs/18_GM_PLATFORM_INTEGRATION.md`](docs/18_GM_PLATFORM_INTEGRATION.md) 참고.
+[`docs/18_GM_PLATFORM_INTEGRATION.md`](docs/18_GM_PLATFORM_INTEGRATION.md),
+[`docs/20_COUPON_PLATFORM_INTEGRATION.md`](docs/20_COUPON_PLATFORM_INTEGRATION.md) 참고.
 
 ---
 

@@ -7,6 +7,7 @@ import type { PlayerRepository } from "../../player/domain/playerRepository.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
 import { withOptimisticRetry } from "../../../shared-kernel/optimisticPlayerWrite.js";
 import { writeAuditLog } from "../../../shared-kernel/auditLog.js";
+import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
 import type { GradeUpgradeSynthesisRule, EnhanceMaterialSynthesisRule } from "../domain/synthesisRule.js";
 
 /** 등급 승급 합성 결과. 실패 시 소재 1장만 소모되고 나머지는 인벤토리에 그대로 남는다(GAME_DESIGN.md 3절). */
@@ -41,7 +42,7 @@ export async function synthesizeGradeUpgrade(
 ): Promise<GradeUpgradeResult> {
   return withOptimisticRetry(playerId, playerRepository, player => applyGradeUpgrade(player, materialCardIds), {
     onSaved: result =>
-      writeAuditLog("log_synthesis", {
+      writeAuditLog(COLLECTIONS.LOG_SYNTHESIS, {
         actorId: playerId,
         action: "gradeUpgrade",
         changes: { materialCardIds, success: result.success, resultCardId: result.resultCardId, resultTemplateId: result.resultTemplateId },
@@ -70,7 +71,7 @@ export async function synthesizeEnhanceMaterial(
 ): Promise<EnhanceMaterialResult> {
   return withOptimisticRetry(playerId, playerRepository, player => applyEnhanceMaterial(player, targetCardId, materialCardIds), {
     onSaved: result =>
-      writeAuditLog("log_synthesis", {
+      writeAuditLog(COLLECTIONS.LOG_SYNTHESIS, {
         actorId: playerId,
         action: "enhanceMaterial",
         changes: { targetCardId, materialCardIds, enhancementLevel: result.enhancementLevel },

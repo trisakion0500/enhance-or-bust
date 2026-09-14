@@ -1,6 +1,6 @@
 # 09_AUTH_SECURITY.md
 
-플레이어 인증(소셜 로그인 + 세션)과 서버 간(gm_platform) 인증 정책.
+플레이어 인증(소셜 로그인 + 세션)과 서버 간(gm_platform/coupon_platform) 인증 정책.
 
 ## 소셜 로그인만 지원
 
@@ -91,6 +91,28 @@ Player가 생성된다(계정 연결 기능 없음).
 — gm_platform과 enhanceOrBust는 서로 별개로 개발한(연동 관계가 없는) 개인 포트폴리오
 프로젝트라, 정적 API Key 대조만으로 충분하다고 판단한 범위다. 결제/쿠폰류처럼 외부에
 노출되는 S2S와는 위협 모델이 다르다.
+
+## 서버 간(S2S) 인증 — coupon_platform 연동(발신 방향)
+
+gm_platform은 그쪽이 이 서버를 호출하는(수신) 연동이고, coupon_platform은 반대로 이
+서버가 그쪽을 호출하는(발신) 연동이다 — 바로 위 문단이 예고한 "결제/쿠폰류처럼 외부에
+노출되는 S2S는 위협 모델이 다르다"는 판단이 실제로 적용된 사례다. 게임서버가 쿠폰
+사용(reserve/confirm)을 호출할 때 API Key 단순 대조가 아니라 **API Key +
+HMAC-SHA256 서명**을 쓴다.
+
+- 서명 대상 문자열: `METHOD\nPATH\nRAW_QUERY\nX-API-Timestamp\nX-API-Nonce\nRAW_BODY`를
+  `\n`으로 이어붙여 `apiSecret`으로 HMAC-SHA256(hex). 요청마다 `X-API-Key`/
+  `X-API-Timestamp`/`X-API-Nonce`/`X-API-Signature` 4개 헤더를 새로 계산해 붙인다 —
+  coupon_platform이 정한 규칙(그쪽 `09_AUTH_SECURITY.md` 2.3)을 그대로 구현했다.
+- 서명/HTTP 호출 로직은 coupon_platform이 입점사(게임서버)용으로 그대로 제공하는 SDK를
+  복사해와 `src/contexts/coupon/infrastructure/couponS2sClient.ts`에 둔 것이다 — 직접
+  설계가 아니라 이식. 상세는 `20_COUPON_PLATFORM_INTEGRATION.md`.
+- `api_key`/`api_secret`은 coupon_platform 관리 콘솔에서 이 프로젝트용 프로젝트
+  (company `Developer Company`, `project_code=EOB`)를 만들 때 1회 발급받은 값을 `.env`
+  (`COUPON_PLATFORM_API_KEY`/`COUPON_PLATFORM_API_SECRET`)에 평문으로 보관한다.
+- Nonce/Timestamp는 요청을 보내는 쪽(이 서버의 SDK)이 매 호출 새로 만들어 붙이기만
+  하면 되고, 재전송 여부 검증은 coupon_platform 쪽 책임이다 — gm_platform 연동과
+  반대로 여기서는 이 서버가 "클라이언트" 역할이라 검증 로직 자체를 갖지 않는다.
 
 ## 웹 취약점 방어
 

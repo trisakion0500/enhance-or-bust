@@ -1,10 +1,12 @@
 import express from "express";
+import type { Db } from "mongodb";
 import { errorHandler } from "./shared-kernel/errorHandler.js";
 import { requestId, requestLogger } from "./shared-kernel/requestLogger.js";
 import type { PlayerRepository } from "./contexts/player/domain/playerRepository.js";
 import type { MailboxRepository } from "./contexts/mailbox/domain/mailboxRepository.js";
 import { createAuthRoutes } from "./contexts/auth/routes/authRoutes.js";
 import { createBattleStageRoutes } from "./contexts/battleStage/routes/battleStageRoutes.js";
+import { createCouponRoutes } from "./contexts/coupon/routes/couponRoutes.js";
 import { createEnhancementRoutes } from "./contexts/enhancement/routes/enhancementRoutes.js";
 import { createGmRoutes } from "./contexts/gm/routes/gmRoutes.js";
 import { createMailboxRoutes } from "./contexts/mailbox/routes/mailboxRoutes.js";
@@ -16,10 +18,11 @@ import { createSynthesisRoutes } from "./contexts/synthesis/routes/synthesisRout
  * 미들웨어/라우트 등록만 책임진다 — 이 분리 덕분에 실제 포트를 열거나 인프라에 붙지 않고도 라우트 단위 테스트가 가능하다.
  * @param playerRepository Player 영속성 포트(DI) — 인증 라우터가 로그인/신규가입 시 사용
  * @param mailboxRepository Mailbox 영속성 포트(DI)
+ * @param db 메인 앱 DB 핸들(쿠폰 라우터가 `coupon_redemptions` 상태 기록에 직접 사용)
  * @returns 설정이 끝난 Express `app` 인스턴스
  * @author trisakion
  */
-export function createServer(playerRepository: PlayerRepository, mailboxRepository: MailboxRepository) {
+export function createServer(playerRepository: PlayerRepository, mailboxRepository: MailboxRepository, db: Db) {
   const app = express();
   app.use(requestId);
   app.use(express.json());
@@ -41,6 +44,7 @@ export function createServer(playerRepository: PlayerRepository, mailboxReposito
   app.use(createSynthesisRoutes(playerRepository));
   app.use(createBattleStageRoutes(playerRepository, mailboxRepository));
   app.use(createMailboxRoutes(mailboxRepository));
+  app.use(createCouponRoutes(mailboxRepository, db));
   app.use(createPlayerRoutes(playerRepository));
 
   app.use(errorHandler);

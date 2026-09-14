@@ -39,4 +39,14 @@ export const config = {
   squadMaxSize: Number(process.env.SQUAD_MAX_SIZE ?? 5),
   /** gm_platform이 이 프로젝트(api_base_url)를 호출할 때 실어 보내는 X-API-Key와 대조할 값. 미설정 시(로컬 개발용) 검증을 건너뛴다. */
   gmPlatformApiKey: process.env.GM_PLATFORM_API_KEY,
+  /** coupon_platform 서버 주소(S2S 호출 대상, 예: http://localhost:3001). */
+  couponPlatformBaseUrl: process.env.COUPON_PLATFORM_BASE_URL,
+  /** coupon_platform에 등록된 이 프로젝트(project_code=EOB)의 project.api_key. */
+  couponPlatformApiKey: process.env.COUPON_PLATFORM_API_KEY,
+  /** 위 프로젝트의 평문 api_secret(발급 응답에 1회만 노출된 값을 그대로 보관). */
+  couponPlatformApiSecret: process.env.COUPON_PLATFORM_API_SECRET,
+  /** confirm 실패분 재처리 배치 스케줄(cron 표현식). 기본값: 매일 새벽 4시. */
+  couponReconcileCron: process.env.COUPON_RECONCILE_CRON ?? "0 4 * * *",
+  /** `confirm()` 즉시 재시도 간격(ms, 콤마 구분). 기본값 1초→3초 — 1회차 실패 후 1초, 2회차 실패 후 3초 대기하고 마지막(3회차)을 시도한다. */
+  couponConfirmRetryDelaysMs: (process.env.COUPON_CONFIRM_RETRY_DELAYS_MS ?? "1000,3000").split(",").map(Number),
 };

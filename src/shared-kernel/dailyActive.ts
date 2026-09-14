@@ -2,6 +2,7 @@ import type { MongoServerError } from "mongodb";
 import { mongoLogClient } from "../infra/mongoLog.js";
 import { config } from "../config/env.js";
 import { logger } from "../infra/logger.js";
+import { COLLECTIONS } from "./collectionNames.js";
 
 /**
  * @returns 서버 로컬 타임존 기준 오늘 날짜(YYYY-MM-DD). `toISOString()`은 UTC라 로컬
@@ -27,7 +28,7 @@ export async function markDailyActive(playerId: string): Promise<void> {
   try {
     await mongoLogClient
       .db(config.mongoAppDatabaseLog)
-      .collection("stats_daily_active_players")
+      .collection(COLLECTIONS.STATS_DAILY_ACTIVE_PLAYERS)
       .insertOne({ playerId, date: todayDateString() });
   } catch (err) {
     if ((err as MongoServerError).code !== 11000) logger.error("일일 활동 기록 실패", err);

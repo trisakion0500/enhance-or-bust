@@ -1,6 +1,7 @@
 import type { ChangeStream, Db } from "mongodb";
 import { MongoError } from "mongodb";
 import { config } from "../../config/env.js";
+import { COLLECTIONS } from "../collectionNames.js";
 import type { MasterDataContent } from "./masterDataContent.js";
 import { MASTER_DATA_CONTENTS } from "./masterDataContent.js";
 import { logger } from "../../infra/logger.js";
@@ -31,7 +32,7 @@ let retryDelayMs = 0;
  * @author trisakion
  */
 export async function startMasterDataWatch(db: Db): Promise<void> {
-  const stateCollection = db.collection<ChangeStreamStateDocument>("system_change_stream_state");
+  const stateCollection = db.collection<ChangeStreamStateDocument>(COLLECTIONS.SYSTEM_CHANGE_STREAM_STATE);
   const state = await stateCollection.findOne({ _id: "masterData" });
   const pipeline = [{ $match: { "ns.coll": { $in: [...MASTER_DATA_CONTENTS] } } }];
 
@@ -98,7 +99,7 @@ export function stopMasterDataPolling(): void {
  */
 async function pollOnce(db: Db): Promise<void> {
   try {
-    const metaDocs = await db.collection<MasterDataMetaDocument>("master_data_meta").find().toArray();
+    const metaDocs = await db.collection<MasterDataMetaDocument>(COLLECTIONS.MASTER_DATA_META).find().toArray();
     const cachedVersions = masterDataCache.getVersions();
     for (const meta of metaDocs) {
       if (cachedVersions.get(meta.content) !== meta.version)

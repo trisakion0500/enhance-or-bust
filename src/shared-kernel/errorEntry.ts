@@ -9,6 +9,8 @@
  *  - 우편(Mailbox)               : 7000
  *  - 전투/스테이지(Battle-Stage)  : 8000
  *  - 인증(Auth)                  : 9000
+ *  - GM 연동(gm_platform)        : 10000
+ *  - 쿠폰(coupon_platform 연동)  : 11000
  * @author trisakion
  */
 export interface ErrorEntry {

@@ -116,6 +116,7 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   | `log_mailbox` | `claim` | mailId, attachments(지급된 첨부) | 구현됨 |
   | `log_mailbox` | `delete` | mailId | 구현됨 |
   | `log_mailbox` | `cleanupBatch` | actorId="SYSTEM", cutoff, deletedCount(0건이면 상태 변경 없어 로그도 생략) | 구현됨 |
+  | `log_coupon` | `redeem` | code, usageId, attachments(지급된 첨부) | 구현됨 |
   | `stats_daily_active_players` | (감사 로그 아님, DAU 전용) | {playerId, date} 유니크 인덱스, 하루 1건 | 구현됨 |
   | `attempts_battle_stage` | `attempt` | (감사 로그 아님, 통계 전용) stageId, squadCardIds, squadTemplateIds, won, clearedStage — 승패 무관 매 시도 | 구현됨 |
 
@@ -449,6 +450,59 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   목록으로 표시돼도 무방해 더 내려가지 않음). gm_platform 쪽 응답 컬럼도 기존 `changes`
   컬럼은 `status=0`으로 비활성화하고(하드삭제 없는 gm_platform 관례), 컬렉션별 실제
   `changes.*` 필드에 맞는 컬럼을 새로 등록했다.
+- 또 다른 별도 포트폴리오 프로젝트인 `coupon_platform`(https://github.com/trisakion0500/coupon_platform)과의
+  연동 추가 — 플레이어가 게임 내에서 쿠폰 코드를 입력해 보상을 받는 기능이다. **`coupon_platform`의
+  소스도 gm_platform과 동일한 원칙으로 절대 건드리지 않는다** — 그쪽 관리 콘솔 API를 호출해
+  회사(Developer Company, `company_id=2`) 아래 `EOB`(project_code) 프로젝트를 등록해뒀고(SUPER_ADMIN
+  `sa` 계정으로 `POST /projects` 1회 호출, `project_id=9`), 발급된 `api_key`/`api_secret`(평문, 발급
+  응답에 1회만 노출)은 `.env`의 `COUPON_PLATFORM_API_KEY`/`COUPON_PLATFORM_API_SECRET`에 저장했다.
+  실제 캠페인 생성/코드 발급은 coupon_platform 관리 콘솔에서 사람이 직접 해야 하는 영역이라(19_CAMPAIGN_API.md)
+  이 레포 작업 범위 밖이다.
+  - 이 프로젝트가 쓰는 것은 coupon_platform의 S2S 쿠폰 사용 API(`POST /v1/coupons/{code}/reserve`,
+    `/confirm`, API Key + HMAC-SHA256 서명 인증)뿐이다. coupon_platform이 입점사(게임서버)용으로
+    그대로 제공하는 SDK(`test_game_server/src/sdk/CouponS2sClient.ts`)를 그 리포에서 복사해와
+    `src/contexts/coupon/infrastructure/couponS2sClient.ts`에 두었다 — reserve/confirm 서명
+    로직은 원본과 동일, JSDoc만 이 프로젝트 스타일(`@author` 등)로 정리했다. 원본에 있는
+    `getUnconfirmed()`(미확인 소모 건 조회)는 이 프로젝트가 쓰지 않아 뺐다(아래 재처리 배치
+    문단 참고). 이후로도 coupon_platform 쪽 원본이 바뀌면 다시 복사해오는 방식이지, 이 사본을
+    coupon_platform 저장소에 역으로 반영하지 않는다
+  - `reward_data`(캠페인 생성 시 coupon_platform 관리자가 입력하는 자유 형식 JSON)는
+    coupon_platform이 내용을 모르는 값이라, 이 프로젝트가 스스로 스키마를 정했다: `gold`/
+    `enhancementStone`/`diamond`/`cardTemplateIds` — Mailbox의 `MailAttachments`와 필드명을
+    그대로 맞춰서(`couponService.ts`의 `toMailAttachments()`) 별도 변환 테이블 없이 옮긴다.
+    캠페인을 coupon_platform 콘솔에서 만들 때 이 필드명 그대로 `reward_data`를 입력해야 한다
+  - `POST /coupon/redeem`(`requireAuth` 적용, `couponRoutes.ts`) — 쿠폰 코드를 받아
+    `couponService.ts`의 `redeemCoupon()`이 `reserve()` 호출 → 응답의 `reward_data`를 위 스키마로
+    매핑 → 스테이지 클리어 보상과 동일하게 **우편(Mailbox) 경유로 지급**한다(재화/카드 지급 경로를
+    통일해 인벤토리 슬롯 상한 검증 등을 다시 만들 필요가 없음). 우편의 `sourceType`/`sourceId`는
+    `"coupon"`/`reserve()`가 반환한 `coupon_code_usage_id`(coupon_platform 쪽에서 같은 소모 건에
+    항상 동일하게 반환되는 값)를 그대로 써서, 이 레포의 SendMail 멱등 처리가 재시도로 인한 중복
+    지급도 막는다
+  - **`coupon_redemptions` 컬렉션(메인 게임 DB, players/mailbox와 동일하게 프리픽스 없는 런타임
+    쓰기 컬렉션) — `reserve()` 성공 응답을 받는 그 즉시 상태를 기록한다**(`couponRedemptionStore.ts`,
+    `_id`는 `coupon_code_usage_id`). `redeemCoupon()`은 reserve 성공 직후 가장 먼저
+    `recordReserved()`로 이 레코드부터 남긴 뒤에야 우편 발송(`mailGrantedAt`) → confirm 보고
+    (`confirmedAt`) 순으로 진행한다. 이렇게 하는 이유: coupon_platform이 "사용됨"으로 확정한
+    순간과 이 서버가 실제로 보상을 지급하는 순간 사이에 크래시가 나도(극히 드문 케이스), 이
+    레코드가 남아있는 한 무엇이 빠졌는지 정확히 알 수 있다 — 처음엔 이 레코드 없이 coupon_platform의
+    `getUnconfirmed()` 응답만으로 보정하려 했는데, 그 응답엔 `coupon_code_usage_id`가 없어 원래
+    발송 때 쓴 우편 sourceId를 재구성할 방법이 없었다(그래서 크래시 케이스를 영영 놓칠 수 있는
+    구멍이 있었음 — 지금은 이 컬렉션이 소스 오브 트루스라 해결됨). 부수 효과로 이 컬렉션이 곧
+    이 게임서버 자체의 독립적인 쿠폰 사용 집계가 되어, coupon_platform 쪽 집계와 대조해 불일치를
+    찾는 운영 체크에도 쓸 수 있다
+  - **confirm 실패 처리 — 즉시 재시도 + 매일 새벽 4시 재처리 배치의 2단계**. `confirm()`은 지급
+    결과 보고일 뿐이라 실패해도 이미 보낸 우편에는 영향이 없다. ①`redeemCoupon()` 안에서
+    `confirmWithRetry()`가 짧은 백오프(1초→3초, 최초 포함 총 3회)로 즉시 재시도한다 — 그마저
+    실패해도 요청 자체는 성공으로 끝낸다. ②그 이후는 `reconcileUnconfirmedCoupons()`가
+    `COUPON_RECONCILE_CRON`(기본 매일 새벽 4시) 주기로 `coupon_redemptions`에서
+    `confirmedAt: null`인 레코드를 조회해 처리한다 — `mailGrantedAt`이 비어있으면(크래시로
+    미지급) 먼저 `sendMail()`로 보정 지급하고 나서 confirm을 보고한다. confirm/sendMail 둘 다
+    멱등이라 — ClaimMail의 `$inc` 원자 증가와 같은 이유로 — 여러 인스턴스가 동시에 이 배치를
+    돌려도 `system_batch_runs` 같은 중복 실행 방지 락이 필요 없다
+  - coupon_platform이 반환하는 result 코드(31005/33001/33002/33003 등)는 이 레포의 에러 코드
+    대역(11000번대, `COUPON_ERROR_MAP`)으로 옮겨서 응답한다 — gm_platform(10000번대)과 동일하게
+    새 연동마다 새 대역을 하나씩 쓴다(`errorEntry.ts` 대역 목록 참고)
+  - `log_coupon`(감사 로그, action=`redeem`)도 구현됨 — "감사 로그 / DAU 정책" 절 표 참고
 
 ## MongoDB 데이터 모델링 / 원자성 전략 (확정)
 

@@ -16,6 +16,7 @@ import {
   resolvePendingRegistration,
 } from "../infrastructure/pendingRegistrationStore.js";
 import { writeAuditLog } from "../../../shared-kernel/auditLog.js";
+import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
 
 /** 신규 플레이어에게 지급하는 초기 골드. */
 const INITIAL_GOLD = 1000;
@@ -69,7 +70,7 @@ async function loginOrRegister(
 
   const existing = await playerRepository.findByPlatform(platformType, platformUserId);
   if (existing) {
-    await writeAuditLog("log_auth", { actorId: existing.playerId, action: "login", changes: { platformType } });
+    await writeAuditLog(COLLECTIONS.LOG_AUTH, { actorId: existing.playerId, action: "login", changes: { platformType } });
     return { status: "login", sessionToken: await createSession(existing.playerId) };
   }
 
@@ -121,7 +122,7 @@ export async function completeRegistration(token: string, nickname: string, play
   // 저장된 적이 없으므로, 그 값으로 "register" 로그를 남기면 사실과 다른 내용이 된다.
   const won = persisted!.playerId === player.playerId;
   await writeAuditLog(
-    "log_auth",
+    COLLECTIONS.LOG_AUTH,
     won
       ? {
           actorId: persisted!.playerId,

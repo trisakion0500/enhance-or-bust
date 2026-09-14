@@ -3,6 +3,7 @@ import type { Collection, Db, MongoServerError } from "mongodb";
 import { BusinessException } from "../../../shared-kernel/businessException.js";
 import { config } from "../../../config/env.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
+import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
 import { mongoClient } from "../../../infra/mongo.js";
 import type { CardDocument, PlayerDocument } from "../../player/infrastructure/mongoPlayerRepository.js";
 import { Mail } from "../domain/mail.js";
@@ -36,8 +37,8 @@ export class MongoMailboxRepository implements MailboxRepository {
 
   /** @param db 연결된 앱 DB 핸들 */
   constructor(db: Db) {
-    this.mailboxCollection = db.collection<MailDocument>("mailbox");
-    this.playersCollection = db.collection<PlayerDocument>("players");
+    this.mailboxCollection = db.collection<MailDocument>(COLLECTIONS.MAILBOX);
+    this.playersCollection = db.collection<PlayerDocument>(COLLECTIONS.PLAYERS);
   }
 
   async ensureIndexes(): Promise<void> {
