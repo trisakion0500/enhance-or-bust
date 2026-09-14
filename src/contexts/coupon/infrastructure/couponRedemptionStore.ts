@@ -13,7 +13,14 @@ interface CouponRedemptionDocument {
   code: string;
   attachments: MailAttachments;
   reservedAt: Date;
-  /** 우편(Mailbox) 발송이 끝난 시각, 아직이면 null. */
+  /**
+   * 우편(Mailbox) 발송이 끝난 시각, 아직이면 null. 중복 지급을 막는 잠금장치가 아니라
+   * "다음 조회 때 sendMail을 다시 시도해볼 필요가 있는지"를 판단하는 힌트일 뿐이다 —
+   * 실제 중복 방지는 mailbox의 (sourceType, sourceId) 유니크 인덱스가 담당하므로, sendMail
+   * 성공 직후 크래시로 이 필드가 늦게 세팅되거나 재시도로 다시 세팅돼도 무해하다. sendMail
+   * 호출과 이 필드 갱신을 트랜잭션으로 묶지 않는 이유도 이것 — 유니크 인덱스가 이미
+   * 멱등성을 보장해 트랜잭션이 추가로 줄 수 있는 게 없다.
+   */
   mailGrantedAt: Date | null;
   /** coupon_platform에 confirm 보고가 끝난 시각, 아직이면 null. */
   confirmedAt: Date | null;

@@ -13,8 +13,8 @@ loginScreen     구글/페이스북 로그인 버튼
 registerScreen  닉네임 입력 폼(신규 가입, 디폴트는 플랫폼 제공 닉네임)
 gameScreen
   header        닉네임/골드/강화석/다이아/clearedStage/로그아웃
-  nav (탭)      인벤토리 / 강화 / 합성 / 전투 / 우편함
-  tabPanel × 5  선택된 탭만 보이고 나머지는 hidden
+  nav (탭)      인벤토리 / 강화 / 합성 / 전투 / 우편함 / 쿠폰
+  tabPanel × 6  선택된 탭만 보이고 나머지는 hidden
 ```
 
 `GET /player/me` 하나로 로그인 여부 확인과 게임 화면 초기 데이터(재화/clearedStage/
@@ -31,6 +31,7 @@ gameScreen
 | `public/js/synthesis.js` | Synthesis — 등급 승급 합성 + 강화 재료 합성 두 폼(체크박스 선택 시 남은 장수/성공률/비용 힌트 갱신) |
 | `public/js/battle.js` | Battle-Stage — 스테이지 번호 입력 + 인벤토리에서 최대 `squadMaxSize`장 체크박스 스쿼드 선택 + 도전 버튼 → 라운드 로그/승패/보상 텍스트 표시 |
 | `public/js/mailbox.js` | Mailbox — 목록 + 수령/삭제 버튼, 실패(특히 7004 인벤토리 초과) 메시지 표시 |
+| `public/js/coupon.js` | Coupon — 쿠폰 코드 입력 폼, 사용 결과 메시지 표시(보상은 우편 경유 지급이라 수령은 우편함 탭에서) |
 
 - 상태를 바꾸는 액션(강화/합성/전투 도전/우편 수령) 뒤에는 `app.js`의
   `refreshPlayer()` 하나가 헤더/인벤토리/전투/우편함 패널을 전부 다시 그린다 — 각

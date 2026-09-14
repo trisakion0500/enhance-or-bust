@@ -573,6 +573,10 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   내부 운영 상태(Change Stream resume token, 배치 중복실행 방지 마커 등)는 `system_`
   프리픽스로 별도 구분한다(`system_change_stream_state`, `system_batch_runs`) — 세
   카테고리(콘텐츠/플레이어/시스템)를 프리픽스만 보고 바로 구분할 수 있게 하기 위함
+- 모든 컬렉션명은 `shared-kernel/collectionNames.ts`의 `COLLECTIONS` 상수로만 참조한다 —
+  Redis 키를 `redisKeys.ts` 빌더 함수로 모으는 것과 동일한 원칙("Redis 용도" 절 참고).
+  호출부마다 문자열 리터럴을 흩어두면 오타가 나도 타입체커가 못 잡고 컬렉션명을 바꿀 때도
+  놓치는 곳이 생긴다. 새 컬렉션이 추가되면 이 파일에 먼저 추가하고 재사용한다
 - 이 분리 원칙은 스테이지 문서 내부 배열도 예외가 아니다: 카드 드랍 테이블은 처음에
   `master_stage_configs` 문서 안에 배열(`cardDropTable`)로 넣었다가, "행 단위로 늘어나는
   데이터는 운영툴 엑셀 업로드/개별 관리가 쉽도록 별도 컬렉션으로 분리한다"는 판단에 따라

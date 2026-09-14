@@ -14,6 +14,7 @@ graph TB
     subgraph "enhance_or_bust (앱 DB)"
         players["players\n(Player 애그리게잇, 낙관적 락)"]
         mailbox["mailbox"]
+        couponRedemptions["coupon_redemptions"]
         masterData["master_card_templates\nmaster_grade_configs\nmaster_enhancement_rules\nmaster_synthesis_rules\nmaster_stage_configs\nmaster_stage_card_drops"]
         masterMeta["master_data_meta"]
         systemState["system_change_stream_state\nsystem_batch_runs"]
@@ -24,12 +25,14 @@ graph TB
         logSyn["log_synthesis"]
         logBattle["log_battle_stage"]
         logMail["log_mailbox"]
+        logCoupon["log_coupon"]
         stats["stats_daily_active_players"]
         attempts["attempts_battle_stage"]
     end
 
     players -. "ClaimMail 트랜잭션" .- mailbox
     players -. "sendMail (멱등, sourceType+sourceId)" .- mailbox
+    couponRedemptions -. "reserve 성공 직후 상태 기록 → sendMail(sourceId=usageId)" .- mailbox
     masterData -. "버전 비교" .- masterMeta
 ```
 
@@ -72,6 +75,21 @@ mailbox/{mailId}
   묶는다 — 두 컬렉션에 걸친 유일한 쓰기라 트랜잭션이 필요한 케이스.
 - **삭제**는 `deletedAt` 플래그만(하드 삭제 아님), 만료 정리 배치만 실제 물리 삭제.
 
+## coupon_redemptions 컬렉션 (별도 컬렉션)
+
+```
+coupon_redemptions/{usageId}    (_id = coupon_platform의 coupon_code_usage_id)
+├─ playerId, code, attachments
+├─ reservedAt
+├─ mailGrantedAt                  (null이면 아직 우편 미발송)
+└─ confirmedAt                    (null이면 아직 confirm 미보고)
+```
+
+- coupon_platform `reserve()` 성공 직후 가장 먼저 이 레코드부터 남긴다 — 이후 우편 발송/
+  confirm 보고 중 어느 단계에서 죽어도 재처리 배치가 `mailGrantedAt`/`confirmedAt`만 보고
+  정확히 이어서 처리할 수 있다. 우편의 `sourceId`로 `_id`(usageId)를 그대로 써서 SendMail의
+  멱등 발송과 사슬로 엮인다. 상세는 `20_COUPON_PLATFORM_INTEGRATION.md` 참고.
+
 ## 마스터 데이터 (콘텐츠, `master_` 프리픽스)
 
 `master_card_templates`/`master_grade_configs`/`master_enhancement_rules`/
@@ -89,8 +107,8 @@ mailbox/{mailId}
 ## 로그 DB (`enhance_or_bust_log`)
 
 - **감사 로그**(상태 변경 액션 추적): `log_auth`/`log_enhancement`/`log_synthesis`/
-  `log_battle_stage`/`log_mailbox` — 공통 스키마 `{actorId, action, changes, occurredAt}`.
-  상세 정책은 `08_AUDIT_LOG_POLICY.md`.
+  `log_battle_stage`/`log_mailbox`/`log_coupon` — 공통 스키마
+  `{actorId, action, changes, occurredAt}`. 상세 정책은 `08_AUDIT_LOG_POLICY.md`.
 - **DAU**: `stats_daily_active_players` — `(playerId, date)` unique, 감사 로그와 무관한
   별도 집계.
 - **전투 통계**: `attempts_battle_stage` — 승패 무관 매 시도 기록(승률/카드 조합 분석용,

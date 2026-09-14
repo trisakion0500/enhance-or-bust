@@ -40,6 +40,20 @@
 **인덱스**: `(sourceType, sourceId)` unique(멱등 발송). `GET /mailbox` 조회는
 `(playerId, deletedAt, expiresAt)` 조건으로 필터링.
 
+### `coupon_redemptions`
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `_id` | string | coupon_platform의 `coupon_code_usage_id` — 재시도해도 같은 문서로 수렴(멱등) |
+| `playerId` | string | — |
+| `code` | string | 쿠폰 코드 |
+| `attachments.gold` / `.enhancementStone` / `.diamond` / `.cardTemplateIds` | — | `reward_data`를 매핑한 지급 예정 첨부물 |
+| `reservedAt` | Date | coupon_platform `reserve()` 성공 직후 기록 |
+| `mailGrantedAt` | Date? | 우편 발송 완료 시각, 아직이면 null |
+| `confirmedAt` | Date? | coupon_platform `confirm()` 보고 완료 시각, 아직이면 null |
+
+**인덱스**: `confirmedAt: 1`(재처리 배치의 `confirmedAt: null` 조회용).
+
 ### `master_card_templates`
 
 | 필드 | 설명 |
@@ -115,7 +129,7 @@
 
 ## enhance_or_bust_log (로그 DB)
 
-### `log_auth` / `log_enhancement` / `log_synthesis` / `log_battle_stage` / `log_mailbox`
+### `log_auth` / `log_enhancement` / `log_synthesis` / `log_battle_stage` / `log_mailbox` / `log_coupon`
 
 공통 스키마: `{ actorId, action, changes, occurredAt }` — `changes`는 액션별 자유 형식
 객체(필드 목록은 `08_AUDIT_LOG_POLICY.md`의 액션 표 참고).
