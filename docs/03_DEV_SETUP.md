@@ -26,6 +26,13 @@
   `REDIS_PASSWORD`에 맞춰준다. 로컬 Redis 하나를 다른 프로젝트와 같이 쓴다면
   `REDIS_KEY_PREFIX`로 키 네임스페이스를 분리한다(기본값 `eob:`).
 
+## 저장소 클론
+
+```bash
+git clone https://github.com/trisakion0500/enhance-or-bust.git
+cd enhance-or-bust
+```
+
 ## 설정 및 실행
 
 ```bash
