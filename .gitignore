@@ -2,6 +2,7 @@
 */.env
 .env.local
 .mcp.json
+secret/
 
 *.log
 logs/
