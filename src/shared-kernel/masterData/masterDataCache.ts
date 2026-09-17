@@ -272,6 +272,21 @@ class MasterDataCache {
   getAttendanceCatchupPrices(defId: string): AttendanceCatchupPrice[] {
     return this.attendanceCatchupPrices.get(defId) ?? [];
   }
+
+  /** @returns 전체 출석부 정의 목록(GM 마스터데이터 조회용) */
+  getAllAttendanceBookDefs(): AttendanceBookDef[] {
+    return [...this.attendanceBookDefs.values()];
+  }
+
+  /** @returns 전체 출석부 날짜별 보상 행 목록(GM 마스터데이터 조회용) */
+  getAllAttendanceRewards(): AttendanceReward[] {
+    return [...this.attendanceRewards.values()].flat();
+  }
+
+  /** @returns 전체 캐치업 회차별 가격 행 목록(GM 마스터데이터 조회용) */
+  getAllAttendanceCatchupPrices(): AttendanceCatchupPrice[] {
+    return [...this.attendanceCatchupPrices.values()].flat();
+  }
 }
 
 /** 프로젝트 전역에서 공유하는 마스터 데이터 캐시 싱글톤.

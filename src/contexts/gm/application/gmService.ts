@@ -6,6 +6,9 @@ import { mongoLogClient } from "../../../infra/mongoLog.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
 import type { CardTemplate } from "../../../shared-kernel/masterData/cardTemplate.js";
 import type { GradeConfig } from "../../../shared-kernel/masterData/gradeConfig.js";
+import type { AttendanceBookDef } from "../../attendance/domain/attendanceBookDef.js";
+import type { AttendanceCatchupPrice } from "../../attendance/domain/attendanceCatchupPrice.js";
+import type { AttendanceReward } from "../../attendance/domain/attendanceReward.js";
 import type { EnhancementRule } from "../../enhancement/domain/enhancementRule.js";
 import type { SynthesisRule } from "../../synthesis/domain/synthesisRule.js";
 import type { StageConfig } from "../../battleStage/domain/stageConfig.js";
@@ -119,11 +122,12 @@ export async function getPlayerCardsForGm(playerId: string, playerRepository: Pl
 }
 
 /**
- * gm_platform이 조회하는 시드데이터(마스터데이터) 6종 — 컬렉션을 그대로 덤프한다.
+ * gm_platform이 조회하는 시드데이터(마스터데이터) 9종 — 컬렉션을 그대로 덤프한다.
  * 1차는 조회만 지원하고 수정/삭제는 아직 없다(밸런스 데이터라 잘못 저장되면 파급이 커서
- * 별도 검증 설계 후 추가 예정).
+ * 별도 검증 설계 후 추가 예정 — 출석부 정의/보상/캐치업가격 3종도 동일 원칙 적용).
  * @returns 전체 카드 원형 목록
  * @author trisakion
+ * @modified 2026-09-17 trisakion 출석부 정의/보상/캐치업가격 GM 조회 3종 추가로 "6종"→"9종" 문구 갱신
  */
 export function getCardTemplatesForGm(): CardTemplate[] {
   return masterDataCache.getAllCardTemplates();
@@ -167,6 +171,32 @@ export function getStageConfigsForGm(): StageConfig[] {
  */
 export function getStageCardDropsForGm(): CardDropRuleDoc[] {
   return masterDataCache.getAllCardDropRules();
+}
+
+/**
+ * @returns 전체 출석부 정의 목록
+ * @author trisakion
+ */
+export function getAttendanceDefsForGm(): AttendanceBookDef[] {
+  return masterDataCache.getAllAttendanceBookDefs();
+}
+
+/**
+ * @param defId 조회 범위를 좁힐 출석부 정의 ID(선택 — 없으면 전체 반환)
+ * @returns defId를 지정하면 해당 defId의 날짜별 보상 행만, 아니면 전체 목록
+ * @author trisakion
+ */
+export function getAttendanceRewardsForGm(defId?: string): AttendanceReward[] {
+  return defId ? masterDataCache.getAttendanceRewards(defId) : masterDataCache.getAllAttendanceRewards();
+}
+
+/**
+ * @param defId 조회 범위를 좁힐 출석부 정의 ID(선택 — 없으면 전체 반환)
+ * @returns defId를 지정하면 해당 defId의 캐치업 회차별 가격 행만, 아니면 전체 목록
+ * @author trisakion
+ */
+export function getAttendanceCatchupPricesForGm(defId?: string): AttendanceCatchupPrice[] {
+  return defId ? masterDataCache.getAttendanceCatchupPrices(defId) : masterDataCache.getAllAttendanceCatchupPrices();
 }
 
 /** gm_platform이 조회할 때 컬렉션 하나에서 한 번에 반환할 최대 로그 건수 — 무제한 스캔 방지. */

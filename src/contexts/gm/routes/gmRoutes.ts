@@ -5,6 +5,9 @@ import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
 import { gmApiKeyAuth } from "../../../shared-kernel/gmApiKeyAuth.js";
 import type { PlayerRepository } from "../../player/domain/playerRepository.js";
 import {
+  getAttendanceCatchupPricesForGm,
+  getAttendanceDefsForGm,
+  getAttendanceRewardsForGm,
   getAuthLogsForGm,
   getBattleStageLogsForGm,
   getCardTemplatesForGm,
@@ -41,6 +44,21 @@ function parseGmLogQuery(body: unknown): { playerId: string; fromDate?: string; 
 }
 
 /**
+ * 출석부 보상/캐치업가격 조회 라우트 2개가 공통으로 쓰는 요청 파라미터 파싱 — defId(선택
+ * 문자열, 없으면 전체 반환).
+ * @param body 요청 바디
+ * @returns 파싱된 defId(없으면 undefined)
+ * @throws {BusinessException} defId 타입이 문자열이 아니면 GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+function parseOptionalDefId(body: unknown): string | undefined {
+  const { defId } = (body ?? {}) as Record<string, unknown>;
+  if (defId !== undefined && typeof defId !== "string")
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { body });
+  return defId;
+}
+
+/**
  * gm_platform 연동 전용 라우터 — 세션 쿠키가 아니라 X-API-Key(`gmApiKeyAuth`)로 인증한다.
  * gm_platform의 apiExecution은 등록된 API를 항상 `POST {api_base_url}{endpoint}`로 호출하므로
  * (gm_platform의 test_game_server와 동일 관례), 조회 엔드포인트도 GET이 아니라 POST로 둔다.
@@ -53,6 +71,7 @@ function parseGmLogQuery(body: unknown): { playerId: string; fromDate?: string; 
  * @returns 등록된 Express Router
  * @author trisakion
  * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
+ * @modified 2026-09-17 trisakion 출석부 정의/보상/캐치업가격 GM 조회 라우트 3종 추가
  */
 export function createGmRoutes(playerRepository: PlayerRepository): Router {
   const router = Router();
@@ -82,7 +101,7 @@ export function createGmRoutes(playerRepository: PlayerRepository): Router {
     res.json({ result: 0, message: "OK", data: cards });
   }));
 
-  // 시드데이터(마스터데이터) 6종 — 1차는 조회만, 수정/삭제는 아직 없다.
+  // 시드데이터(마스터데이터) 9종 — 1차는 조회만, 수정/삭제는 아직 없다.
   router.post("/gm/get-card-templates", gmApiKeyAuth, asyncHandler(async (_req, res) => {
     res.json({ result: 0, message: "OK", data: getCardTemplatesForGm() });
   }));
@@ -105,6 +124,20 @@ export function createGmRoutes(playerRepository: PlayerRepository): Router {
 
   router.post("/gm/get-stage-card-drops", gmApiKeyAuth, asyncHandler(async (_req, res) => {
     res.json({ result: 0, message: "OK", data: getStageCardDropsForGm() });
+  }));
+
+  router.post("/gm/get-attendance-defs", gmApiKeyAuth, asyncHandler(async (_req, res) => {
+    res.json({ result: 0, message: "OK", data: getAttendanceDefsForGm() });
+  }));
+
+  router.post("/gm/get-attendance-rewards", gmApiKeyAuth, asyncHandler(async (req, res) => {
+    const defId = parseOptionalDefId(req.body);
+    res.json({ result: 0, message: "OK", data: getAttendanceRewardsForGm(defId) });
+  }));
+
+  router.post("/gm/get-attendance-catchup-prices", gmApiKeyAuth, asyncHandler(async (req, res) => {
+    const defId = parseOptionalDefId(req.body);
+    res.json({ result: 0, message: "OK", data: getAttendanceCatchupPricesForGm(defId) });
   }));
 
   // 유저고유번호(playerId)별 감사 로그 조회 5종 — playerId 필수, fromDate/toDate 선택.
