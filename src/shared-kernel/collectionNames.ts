@@ -10,6 +10,7 @@
  * 메인 게임 DB(`enhance_or_bust`), `log_`/`stats_`/`attempts_`는 물리적으로 분리된
  * 로그 DB(`enhance_or_bust_log`)에 있다.
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export const COLLECTIONS = {
   // 메인 게임 DB — 런타임 쓰기 컬렉션

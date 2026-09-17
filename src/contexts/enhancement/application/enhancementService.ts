@@ -32,6 +32,7 @@ export interface EnhanceResult {
  *   재시도 초과 시 낙관적 락 충돌(COMMON.CONFLICT), 또는 같은 플레이어의 동시 요청으로
  *   Redis 락을 못 잡으면 COMMON.LOCKED(연타 방지)
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export async function enhanceCard(playerId: string, cardId: string, playerRepository: PlayerRepository): Promise<EnhanceResult> {
   return withOptimisticRetry(playerId, playerRepository, player => applyEnhanceAttempt(player, cardId), {

@@ -18,6 +18,7 @@ interface BatchRunDocument {
  * @param period 이번 실행 주기 식별자(예: 월별 배치는 "2026-09" 같은 YYYY-MM)
  * @returns 이번 호출이 실행권을 선점했으면 true, 이미 다른 인스턴스가 같은 주기를 실행했으면 false
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export async function tryClaimBatchRun(db: Db, jobName: string, period: string): Promise<boolean> {
   try {

@@ -49,6 +49,7 @@ export function buildCardDropRules(): CardDropRuleDoc[] {
 /**
  * @returns 100개 스테이지의 몬스터 스탯(지수 증가)과 보상(선형/확률, 임시값)
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export function buildStageConfigs(): StageConfig[] {
   const stages: StageConfig[] = [];

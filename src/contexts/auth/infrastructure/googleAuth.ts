@@ -21,6 +21,7 @@ function toProfile(payload: TokenPayload | undefined): SocialProfile {
  * @returns 검증된 구글 프로필
  * @throws {BusinessException} 서명/audience 검증 실패 시 AUTH.INVALID_GOOGLE_TOKEN
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export async function verifyGoogleIdToken(idToken: string): Promise<SocialProfile> {
   try {
@@ -52,6 +53,7 @@ export function generateGoogleAuthUrl(state: string): string {
  * @returns 검증된 구글 프로필
  * @throws {BusinessException} 교환/서명 검증 실패 시 AUTH.INVALID_GOOGLE_TOKEN
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export async function exchangeGoogleAuthCode(code: string): Promise<SocialProfile> {
   try {

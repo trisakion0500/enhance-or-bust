@@ -30,6 +30,7 @@ let retryDelayMs = 0;
  * 덮어써 경합이 나도, `reload()`가 매번 컬렉션 전체를 재조회하므로 무해하다.
  * @param db 메인 앱 DB 핸들
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export async function startMasterDataWatch(db: Db): Promise<void> {
   const stateCollection = db.collection<ChangeStreamStateDocument>(COLLECTIONS.SYSTEM_CHANGE_STREAM_STATE);

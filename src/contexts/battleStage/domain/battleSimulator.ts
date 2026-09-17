@@ -59,6 +59,7 @@ export interface BattleResult {
  * @param monster 대상 스테이지의 몬스터 스탯
  * @returns 승패와 라운드별 진행 로그
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export function simulateBattle(squad: SquadMember[], monster: Monster): BattleResult {
   let monsterHp = monster.hp;

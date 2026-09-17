@@ -6,6 +6,7 @@ import type { MailAttachments } from "../../mailbox/domain/mail.js";
  * 쿠폰 사용 건 하나의 진행 상태. `_id`를 coupon_platform의 `coupon_code_usage_id`로 고정해
  * 같은 소모 건에 대해 몇 번을 다시 호출해도(재시도 등) 항상 같은 문서로 수렴한다(멱등).
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 interface CouponRedemptionDocument {
   _id: string;

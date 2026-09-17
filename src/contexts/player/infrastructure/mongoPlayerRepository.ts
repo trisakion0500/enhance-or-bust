@@ -13,6 +13,7 @@ import type { PlayerRepository } from "../domain/playerRepository.js";
  * `export`한 이유: Mailbox 컨텍스트의 ClaimMail 트랜잭션(`MongoMailboxRepository`)이
  * players 컬렉션에 카드를 직접 `$push`할 때 이 형태를 그대로 재사용한다.
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export interface CardDocument {
   /** 카드 인스턴스 고유 ID */
@@ -31,6 +32,7 @@ export interface CardDocument {
  * `Player` 애그리게잇의 MongoDB 저장 형태(`players` 컬렉션 문서 스키마). `export`한 이유는
  * {@link CardDocument}와 동일 — Mailbox의 ClaimMail 트랜잭션이 재사용한다.
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export interface PlayerDocument {
   /** 플레이어 ID(`Player.playerId`) */
@@ -60,6 +62,7 @@ export interface PlayerDocument {
  * CLAUDE.md의 MongoDB 모델링 전략(낙관적 락, 트랜잭션 없음)을 그대로 따른다 — 조건부
  * 업데이트(쿼리에 `version` 포함)로 원자성을 확보하고, 실패하면 호출부가 재조회 후 재시도한다.
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export class MongoPlayerRepository implements PlayerRepository {
   private readonly collection: Collection<PlayerDocument>;

@@ -8,6 +8,7 @@
  * 목표 단계를 곱해야 실제 필요 골드가 나온다(예: +6 시도 시 300×6) — 구간 내에서도
  * 단계마다 비용이 달라 고정값이 아니라 배율로 저장한다.
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export interface EnhancementRule {
   /** 이 규칙이 적용되는 목표 강화 단계({@link Card.enhancementLevel}+1) 구간 하한(포함) */

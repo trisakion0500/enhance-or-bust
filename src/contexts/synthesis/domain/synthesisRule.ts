@@ -33,5 +33,6 @@ export interface EnhanceMaterialSynthesisRule {
  * 합성 규칙 마스터 데이터(`master_synthesis_rules` 컬렉션). 레시피 종류(등급 승급/강화 재료)가
  * 서로 다른 필드를 가져 판별 유니온으로 표현한다.
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export type SynthesisRule = GradeUpgradeSynthesisRule | EnhanceMaterialSynthesisRule;

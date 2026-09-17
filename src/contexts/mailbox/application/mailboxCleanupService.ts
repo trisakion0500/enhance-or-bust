@@ -18,6 +18,7 @@ const JOB_NAME = "mailbox_cleanup";
  * @param mailboxRepository Mailbox 영속성 포트
  * @param retentionMonths 만료 후 이 개월 수보다 오래된 우편만 삭제 대상
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export async function runMailboxCleanupJob(db: Db, mailboxRepository: MailboxRepository, retentionMonths: number): Promise<void> {
   const period = new Date().toISOString().slice(0, 7); // YYYY-MM

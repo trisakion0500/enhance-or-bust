@@ -89,6 +89,7 @@ async function loginOrRegister(
  * @throws {BusinessException} 토큰이 없거나 만료됐으면 AUTH.REGISTRATION_EXPIRED, 닉네임이
  *   비어있거나 너무 길면 AUTH.VALIDATION_FAILED
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export async function completeRegistration(token: string, nickname: string, playerRepository: PlayerRepository): Promise<string> {
   const pending = await resolvePendingRegistration(token);
@@ -141,6 +142,7 @@ export async function completeRegistration(token: string, nickname: string, play
  * @param playerRepository Player 영속성 포트
  * @returns 로그인 결과
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export async function loginWithGoogleIdToken(idToken: string, playerRepository: PlayerRepository): Promise<LoginResult> {
   const profile = await verifyGoogleIdToken(idToken);
@@ -156,6 +158,7 @@ export async function loginWithGoogleIdToken(idToken: string, playerRepository: 
  * @param playerRepository Player 영속성 포트
  * @returns 로그인 결과
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export async function loginWithSocialProvider(provider: SocialAuthProvider, code: string, playerRepository: PlayerRepository): Promise<LoginResult> {
   const profile = await provider.exchangeAuthCode(code);

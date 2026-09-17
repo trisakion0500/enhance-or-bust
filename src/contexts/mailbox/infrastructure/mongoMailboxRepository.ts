@@ -30,6 +30,7 @@ interface MailDocument {
  * 이 경우엔 별도 컬렉션과 원자적으로 묶여야 하므로 예외) 이 리포지토리가 players 컬렉션
  * 핸들도 함께 갖는다 — CLAUDE.md의 mailbox 컬렉션 절이 이미 정한 경계.
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export class MongoMailboxRepository implements MailboxRepository {
   private readonly mailboxCollection: Collection<MailDocument>;

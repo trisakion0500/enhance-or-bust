@@ -8,6 +8,7 @@ import { COLLECTIONS } from "../collectionNames.js";
  * 워처는 쓰기 주체와 무관하게 `event.ns.coll`만 보므로 이 목록에 넣는 것만으로 자동으로
  * Change Stream/폴링 대상이 된다.
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export type MasterDataContent =
   | typeof COLLECTIONS.MASTER_CARD_TEMPLATES

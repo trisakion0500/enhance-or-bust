@@ -6,6 +6,7 @@ import type { Mail } from "./mail.js";
  * 이 포트의 구현체(`MongoMailboxRepository`)가 players 컬렉션 접근까지 함께 책임진다 —
  * CLAUDE.md의 "mailbox 컬렉션" 절이 이미 정한 경계다.
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export interface MailboxRepository {
   /**

@@ -13,6 +13,7 @@
  *  - 쿠폰(coupon_platform 연동)  : 11000
  *  - 출석보상(Attendance)        : 12000
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export interface ErrorEntry {
   /** 응답 `result` 필드에 실리는 도메인 결과 코드 */

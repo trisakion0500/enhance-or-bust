@@ -3,6 +3,7 @@ import type { Player } from "./player.js";
 /**
  * `Player` 애그리게잇의 영속성 포트. 구현체(Mongo)는 인프라 레이어에 둔다.
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export interface PlayerRepository {
   /**

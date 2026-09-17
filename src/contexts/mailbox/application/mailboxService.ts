@@ -26,6 +26,7 @@ import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
  *   판단할 수 있다(coupon 재처리 배치의 `reconcileUnconfirmedCoupons()` 참고)
  * @throws {BusinessException} attachments에 음수/NaN 값이 있으면 MAILBOX.VALIDATION_FAILED
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export async function sendMail(
   playerId: string,
@@ -89,6 +90,7 @@ export async function claimMail(playerId: string, mailId: string, mailboxReposit
  * @throws {BusinessException} 우편이 없거나 소유자가 아니면 MAILBOX.NOT_FOUND, 아직 수령 전이면
  *   MAILBOX.NOT_CLAIMED
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export async function deleteMail(playerId: string, mailId: string, mailboxRepository: MailboxRepository): Promise<void> {
   await mailboxRepository.deleteMail(mailId, playerId);

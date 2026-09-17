@@ -25,6 +25,7 @@ interface AuditLogEntry {
  * @param collection 남길 도메인별 로그 컬렉션 이름
  * @param entry 남길 감사 로그 내용
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export async function writeAuditLog(collection: string, entry: AuditLogEntry): Promise<void> {
   try {

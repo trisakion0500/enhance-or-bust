@@ -18,6 +18,7 @@ import { replaceCatchupPriceRows, replaceRewardRows, upsertBookDef } from "../co
  * 부분 반영된 채로 끝난다(재실행으로 복구, 위 멱등성 참고). 이미 서비스 중인 서버에 대고
  * 밸런스 패치 용도로 재사용할 때는 세션 트랜잭션 + 동시 실행 방지 락을 추가해야 한다.
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 
 /** 각 마스터 데이터 컬렉션에 자연키 기준으로 upsert하고, 컨텐츠별 버전을 갱신한다. */

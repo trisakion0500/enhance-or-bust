@@ -11,6 +11,7 @@ import { redisPlayerSessionKey, redisSessionKey } from "../../../shared-kernel/r
  * @param playerId 세션을 소유할 플레이어 ID
  * @returns 발급된 세션 토큰
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export async function createSession(playerId: string): Promise<string> {
   const oldToken = await redisClient.get(redisPlayerSessionKey(playerId));
@@ -39,6 +40,7 @@ export async function resolveSession(token: string): Promise<string | undefined>
  * 삭제 시도하는 불필요한 조회가 남지 않게 한다.
  * @param token 세션 토큰
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export async function deleteSession(token: string): Promise<void> {
   const playerId = await redisClient.get(redisSessionKey(token));

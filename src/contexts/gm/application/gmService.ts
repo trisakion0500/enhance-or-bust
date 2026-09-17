@@ -252,27 +252,47 @@ async function getAuditLogsForGm(
   }));
 }
 
-/** @returns log_auth 로그 목록 @author trisakion */
+/**
+ * @returns log_auth 로그 목록
+ * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
+ */
 export function getAuthLogsForGm(playerId: string, playerRepository: PlayerRepository, fromDate?: string, toDate?: string): Promise<GmLogEntry[]> {
   return getAuditLogsForGm(COLLECTIONS.LOG_AUTH, playerId, playerRepository, fromDate, toDate);
 }
 
-/** @returns log_enhancement 로그 목록 @author trisakion */
+/**
+ * @returns log_enhancement 로그 목록
+ * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
+ */
 export function getEnhancementLogsForGm(playerId: string, playerRepository: PlayerRepository, fromDate?: string, toDate?: string): Promise<GmLogEntry[]> {
   return getAuditLogsForGm(COLLECTIONS.LOG_ENHANCEMENT, playerId, playerRepository, fromDate, toDate);
 }
 
-/** @returns log_synthesis 로그 목록 @author trisakion */
+/**
+ * @returns log_synthesis 로그 목록
+ * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
+ */
 export function getSynthesisLogsForGm(playerId: string, playerRepository: PlayerRepository, fromDate?: string, toDate?: string): Promise<GmLogEntry[]> {
   return getAuditLogsForGm(COLLECTIONS.LOG_SYNTHESIS, playerId, playerRepository, fromDate, toDate);
 }
 
-/** @returns log_battle_stage 로그 목록 @author trisakion */
+/**
+ * @returns log_battle_stage 로그 목록
+ * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
+ */
 export function getBattleStageLogsForGm(playerId: string, playerRepository: PlayerRepository, fromDate?: string, toDate?: string): Promise<GmLogEntry[]> {
   return getAuditLogsForGm(COLLECTIONS.LOG_BATTLE_STAGE, playerId, playerRepository, fromDate, toDate);
 }
 
-/** @returns log_mailbox 로그 목록 @author trisakion */
+/**
+ * @returns log_mailbox 로그 목록
+ * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
+ */
 export function getMailboxLogsForGm(playerId: string, playerRepository: PlayerRepository, fromDate?: string, toDate?: string): Promise<GmLogEntry[]> {
   return getAuditLogsForGm(COLLECTIONS.LOG_MAILBOX, playerId, playerRepository, fromDate, toDate);
 }

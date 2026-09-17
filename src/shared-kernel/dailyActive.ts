@@ -12,6 +12,7 @@ import { todayDateString } from "./dateUtil.js";
  * 진입점인 `requireAuth`에서 호출되므로, 실패해도 요청 자체를 막지 않도록 여기서 삼킨다.
  * @param playerId 활동을 남길 플레이어
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export async function markDailyActive(playerId: string): Promise<void> {
   try {

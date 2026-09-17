@@ -52,6 +52,7 @@ function parseGmLogQuery(body: unknown): { playerId: string; fromDate?: string; 
  * @param playerRepository Player 영속성 포트(DI)
  * @returns 등록된 Express Router
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export function createGmRoutes(playerRepository: PlayerRepository): Router {
   const router = Router();

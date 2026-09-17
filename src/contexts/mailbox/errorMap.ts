@@ -3,6 +3,7 @@ import type { ErrorEntry } from "../../shared-kernel/errorEntry.js";
 /**
  * 우편 에러(검증 실패, Not Found, 시스템 오류) 정의. 코드 대역은 7000번대 고정.
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export const MAILBOX_ERROR_MAP = {
   VALIDATION_FAILED:  { code: 7000,   httpStatus: 400,    message: "요청 값이 올바르지 않습니다." },

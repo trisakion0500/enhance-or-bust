@@ -15,6 +15,7 @@ import { SYNTHESIS_ERROR_MAP } from "../contexts/synthesis/errorMap.js";
  * 전체 도메인 error-map을 도메인 이름으로 묶어 노출하는 진입점.
  * 새 바운디드 컨텍스트가 생기면 그 컨텍스트 폴더의 error-map(예: `errorMapInventory.ts`)을 여기 추가한다.
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export const ERROR_MAP = {
   COMMON: COMMON_ERROR_MAP,

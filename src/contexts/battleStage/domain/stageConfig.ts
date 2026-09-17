@@ -5,6 +5,7 @@ import type { Element } from "../../../shared-kernel/masterData/element.js";
  * 스탯은 공식(기본값×1.15^스테이지번호)으로 계산한 값을 기획자가 검토 후 저장하며,
  * 필요 시 특정 스테이지만 예외적으로 다른 값으로 덮어쓸 수 있다.
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export interface StageConfig {
   /** 스테이지 번호 */

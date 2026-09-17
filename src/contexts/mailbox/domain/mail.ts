@@ -25,6 +25,7 @@ export interface MailAttachments {
  * 우편 한 건(`mailbox` 컬렉션). SendMail(발송)과 ClaimMail(수령)의 대상 — 발송/수령 정책은
  * CLAUDE.md "MongoDB 데이터 모델링 / 원자성 전략"의 mailbox 컬렉션 절 참고.
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export class Mail {
   /**

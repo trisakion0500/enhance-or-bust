@@ -13,6 +13,7 @@ import { markDailyActive } from "./dailyActive.js";
  * 없으므로 이 미들웨어 자체는 서버 조립(`server.ts`)에 연결되어 있지 않고, 첫 보호 라우트를
  * 만들 때 그 라우터에 붙인다.
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export const requireAuth = asyncHandler(async (req: Request, _res: Response, next: NextFunction) => {
   const token = readCookie(req.headers.cookie, SESSION_COOKIE_NAME);

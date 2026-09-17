@@ -15,6 +15,7 @@ import type { MailboxRepository } from "../../mailbox/domain/mailboxRepository.j
  * @param mailboxRepository Mailbox 영속성 포트(DI) — 클리어 보상 발송에 사용
  * @returns 등록된 Express Router
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export function createBattleStageRoutes(playerRepository: PlayerRepository, mailboxRepository: MailboxRepository): Router {
   const router = Router();

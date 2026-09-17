@@ -17,6 +17,7 @@ import type { SynthesisRule } from "../../contexts/synthesis/domain/synthesisRul
  * `master_data_meta` 컬렉션 문서 형태 — 컨텐츠(컬렉션)당 1개, 폴링 폴백이 이 DB 버전과
  * 캐시가 적재해둔 버전을 비교해 어긋나면 강제 리로드한다.
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export interface MasterDataMetaDocument {
   /** 대상 마스터 데이터 컨텐츠(컬렉션 이름) */
@@ -30,6 +31,7 @@ export interface MasterDataMetaDocument {
  * Change Stream/폴링이 변경분만 골라 {@link MasterDataCache.reload}로 갱신한다. 애플리케이션
  * 서비스 계층은 매 요청마다 DB를 조회하지 않고 이 싱글톤의 getter만 호출한다.
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 class MasterDataCache {
   private cardTemplates = new Map<string, CardTemplate>();

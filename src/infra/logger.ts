@@ -66,5 +66,6 @@ process.on("SIGHUP", loadConfig);
 /**
  * 프로젝트 전역에서 쓰는 log4js 기본 카테고리 로거.
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export const logger = log4js.getLogger();

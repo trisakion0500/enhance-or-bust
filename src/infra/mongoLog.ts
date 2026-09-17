@@ -7,6 +7,7 @@ import { COLLECTIONS } from "../shared-kernel/collectionNames.js";
  * 게임 이벤트/감사 로그 전용 DB(`enhance_or_bust_log`) 클라이언트. 메인 앱 DB와 물리적으로 분리된 별도
  * 계정/커넥션을 쓴다 — 로그 기록 실패가 메인 트랜잭션에 영향을 주지 않게 하기 위함.
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export const mongoLogClient = new MongoClient(config.mongoUri, {
   auth: { username: config.mongoAppUsernameLog, password: config.mongoAppPasswordLog },
@@ -29,6 +30,7 @@ export async function connectMongoLog() {
  * "감사 로그 / DAU 정책" 절 참고).
  * @param logDb 연결된 로그 DB 핸들
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export async function ensureLogIndexes(logDb: Db): Promise<void> {
   await logDb.collection(COLLECTIONS.LOG_AUTH).createIndex({ actorId: 1, occurredAt: -1 });

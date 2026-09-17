@@ -28,6 +28,7 @@ const ELEMENTS: Element[] = ["fire", "water", "grass"];
 /**
  * @returns 등급별 10개씩, 등급 공격력 범위에 균등분포한 샘플 카드 원형 40개
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export function buildCardTemplates(): CardTemplate[] {
   const templates: CardTemplate[] = [];

@@ -37,6 +37,7 @@ function sleep(ms: number): Promise<void> {
  * @returns `fn`의 반환값
  * @throws {BusinessException} 짧은 재시도 안에 락을 못 잡으면 COMMON.LOCKED(429)
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export async function withPlayerLock<T>(playerId: string, fn: () => Promise<T>): Promise<T> {
   const key = redisLockKey(playerId);

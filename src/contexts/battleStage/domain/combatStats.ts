@@ -17,6 +17,7 @@ export interface CombatStats {
  * @param template 카드 원형(기본 공격력/체력)
  * @returns 레벨/강화 성장이 반영된 실제 전투 스탯
  * @author trisakion
+ * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */
 export function computeCombatStats(card: Card, template: CardTemplate): CombatStats {
   const growthMultiplier = (1 + (card.level - 1) * 0.02) * (1 + card.enhancementLevel * 0.05);
