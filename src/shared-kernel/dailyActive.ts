@@ -3,18 +3,7 @@ import { mongoLogClient } from "../infra/mongoLog.js";
 import { config } from "../config/env.js";
 import { logger } from "../infra/logger.js";
 import { COLLECTIONS } from "./collectionNames.js";
-
-/**
- * @returns 서버 로컬 타임존 기준 오늘 날짜(YYYY-MM-DD). `toISOString()`은 UTC라 로컬
- * 타임존과 날짜가 어긋날 수 있어 쓰지 않는다(만료 우편 정리 배치의 cutoff 계산과 동일하게
- * `getFullYear`/`getMonth`/`getDate` 로컬 컴포넌트로 조립한다).
- */
-function todayDateString(): string {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const date = String(now.getDate()).padStart(2, "0");
-  return `${now.getFullYear()}-${month}-${date}`;
-}
+import { todayDateString } from "./dateUtil.js";
 
 /**
  * DAU 집계를 위해 플레이어의 오늘 활동을 1건만 남긴다. `(playerId, date)` 유니크 인덱스

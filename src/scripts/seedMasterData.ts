@@ -1,11 +1,12 @@
-import type { Db } from "mongodb";
 import { connectMongo, mongoClient } from "../infra/mongo.js";
 import { COLLECTIONS } from "../shared-kernel/collectionNames.js";
-import type { MasterDataContent } from "../shared-kernel/masterData/masterDataContent.js";
+import { bumpMasterDataVersion } from "../shared-kernel/masterData/masterDataVersion.js";
 import { GRADE_CONFIGS, buildCardTemplates } from "../shared-kernel/masterData/seedData.js";
 import { ENHANCEMENT_RULES } from "../contexts/enhancement/seedData.js";
 import { SYNTHESIS_RULES } from "../contexts/synthesis/seedData.js";
 import { buildCardDropRules, buildStageConfigs } from "../contexts/battleStage/seedData.js";
+import { ATTENDANCE_BOOK_SEEDS, buildAttendanceCatchupPriceRows, buildAttendanceRewardRows } from "../contexts/attendance/seedData.js";
+import { replaceCatchupPriceRows, replaceRewardRows, upsertBookDef } from "../contexts/attendance/infrastructure/attendanceStore.js";
 
 /**
  * GAME_DESIGN.md 기준 마스터 데이터를 각 컬렉션에 upsert하는 1회성 시드 스크립트.
@@ -18,17 +19,6 @@ import { buildCardDropRules, buildStageConfigs } from "../contexts/battleStage/s
  * 밸런스 패치 용도로 재사용할 때는 세션 트랜잭션 + 동시 실행 방지 락을 추가해야 한다.
  * @author trisakion
  */
-
-/**
- * `master_data_meta`의 해당 컨텐츠 버전을 1 증가시킨다 — 마스터 데이터 캐시의 폴링
- * 폴백(CLAUDE.md "마스터 데이터 로딩/리로드 전략")이 이 버전으로 DB와 캐시의 어긋남을
- * 감지한다. 값이 바뀌지 않은 재실행이어도 그냥 증가시킨다 — 어차피 리로드는 멱등하고
- * 안전망이 여분으로 한 번 더 도는 것뿐이라, 실제 변경분과 구분하는 값 비교 로직을 따로
- * 두지 않는다.
- */
-async function bumpMasterDataVersion(db: Db, content: MasterDataContent) {
-  await db.collection(COLLECTIONS.MASTER_DATA_META).updateOne({ content }, { $inc: { version: 1 } }, { upsert: true });
-}
 
 /** 각 마스터 데이터 컬렉션에 자연키 기준으로 upsert하고, 컨텐츠별 버전을 갱신한다. */
 async function main() {
@@ -81,6 +71,15 @@ async function main() {
     ),
   );
   await bumpMasterDataVersion(db, COLLECTIONS.MASTER_STAGE_CARD_DROPS);
+
+  // 출석부 정의/보상/캐치업가격은 gm_platform이 운영 중 실시간으로 쓰는 컬렉션이라(
+  // attendanceStore.ts 참고) 위 컬렉션들처럼 자연키로 직접 upsert하지 않고, 그 실시간
+  // 쓰기 경로와 동일한 store 함수(버전 bump 포함)를 재사용한다.
+  for (const spec of ATTENDANCE_BOOK_SEEDS) {
+    await upsertBookDef(db, spec);
+    await replaceRewardRows(db, spec.defId, buildAttendanceRewardRows(spec.durationDays));
+    await replaceCatchupPriceRows(db, spec.defId, buildAttendanceCatchupPriceRows(spec.catchupMaxCount));
+  }
 
   console.log("마스터 데이터 시드 완료");
   await mongoClient.close();

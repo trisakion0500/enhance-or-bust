@@ -1,3 +1,4 @@
+import { ATTENDANCE_ERROR_MAP } from "../contexts/attendance/errorMap.js";
 import { AUTH_ERROR_MAP } from "../contexts/auth/errorMap.js";
 import { BATTLE_STAGE_ERROR_MAP } from "../contexts/battleStage/errorMap.js";
 import { COMMON_ERROR_MAP } from "./errorMapCommon.js";
@@ -27,4 +28,5 @@ export const ERROR_MAP = {
   AUTH: AUTH_ERROR_MAP,
   GM: GM_ERROR_MAP,
   COUPON: COUPON_ERROR_MAP,
+  ATTENDANCE: ATTENDANCE_ERROR_MAP,
 };

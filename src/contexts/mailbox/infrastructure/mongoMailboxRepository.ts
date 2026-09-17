@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Collection, Db, MongoServerError } from "mongodb";
+import type { ClientSession, Collection, Db, MongoServerError } from "mongodb";
 import { BusinessException } from "../../../shared-kernel/businessException.js";
 import { config } from "../../../config/env.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
@@ -46,9 +46,9 @@ export class MongoMailboxRepository implements MailboxRepository {
     await this.mailboxCollection.createIndex({ playerId: 1 });
   }
 
-  async insertMail(mail: Mail): Promise<boolean> {
+  async insertMail(mail: Mail, session?: ClientSession): Promise<boolean> {
     try {
-      await this.mailboxCollection.insertOne(MongoMailboxRepository.toDocument(mail));
+      await this.mailboxCollection.insertOne(MongoMailboxRepository.toDocument(mail), { session });
       return true;
     } catch (err) {
       // (sourceType, sourceId) 유니크 인덱스 중복 — 이미 발송된 건이라 무해하게 무시한다(멱등 발송).

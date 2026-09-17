@@ -1,3 +1,4 @@
+import type { ClientSession } from "mongodb";
 import type { Mail } from "./mail.js";
 
 /**
@@ -11,10 +12,12 @@ export interface MailboxRepository {
    * (sourceType, sourceId) 유니크 인덱스로 멱등하게 삽입한다 — 이미 같은 조합으로 발송된
    * 우편이 있으면 조용히 무시한다.
    * @param mail 발송할 우편
+   * @param session 다른 컬렉션과 같은 멀티도큐먼트 트랜잭션으로 묶어야 할 때만 전달
+   *   (출석보상 캐치업 구매 트랜잭션 등, `claimMail()`과 동일 패턴) — 일반 발송은 생략
    * @returns 실제로 새로 삽입됐는지 여부(false면 멱등 스킵 — 이미 발송된 건) — 호출부가 이
    *   값으로 감사 로그 중복 기록을 막는다(`mailboxService.ts`의 `sendMail()`)
    */
-  insertMail(mail: Mail): Promise<boolean>;
+  insertMail(mail: Mail, session?: ClientSession): Promise<boolean>;
 
   /**
    * @param mailId 조회할 우편 ID

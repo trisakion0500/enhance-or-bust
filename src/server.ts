@@ -4,6 +4,7 @@ import { errorHandler } from "./shared-kernel/errorHandler.js";
 import { requestId, requestLogger } from "./shared-kernel/requestLogger.js";
 import type { PlayerRepository } from "./contexts/player/domain/playerRepository.js";
 import type { MailboxRepository } from "./contexts/mailbox/domain/mailboxRepository.js";
+import { createAttendanceRoutes } from "./contexts/attendance/routes/attendanceRoutes.js";
 import { createAuthRoutes } from "./contexts/auth/routes/authRoutes.js";
 import { createBattleStageRoutes } from "./contexts/battleStage/routes/battleStageRoutes.js";
 import { createCouponRoutes } from "./contexts/coupon/routes/couponRoutes.js";
@@ -21,6 +22,7 @@ import { createSynthesisRoutes } from "./contexts/synthesis/routes/synthesisRout
  * @param db 메인 앱 DB 핸들(쿠폰 라우터가 `coupon_redemptions` 상태 기록에 직접 사용)
  * @returns 설정이 끝난 Express `app` 인스턴스
  * @author trisakion
+ * @modified 2026-09-17 trisakion 출석보상 연동 — createPlayerRoutes 호출부에 mailboxRepository/db 전달, createAttendanceRoutes 라우터 등록 추가
  */
 export function createServer(playerRepository: PlayerRepository, mailboxRepository: MailboxRepository, db: Db) {
   const app = express();
@@ -34,7 +36,7 @@ export function createServer(playerRepository: PlayerRepository, mailboxReposito
   });
 
   app.use(createAuthRoutes(playerRepository));
-  // enhancement/synthesis/battleStage/mailbox/player 라우터는 전부 router.use(requireAuth)를
+  // enhancement/synthesis/battleStage/mailbox/player/attendance 라우터는 전부 router.use(requireAuth)를
   // 경로 제한 없이 걸어둔다 — 프리픽스 없이 app.use()로 마운트되는 구조상, 이 라우터들보다
   // 뒤에 마운트되면 그 requireAuth가 경로 매칭 전에 먼저 걸려 /gm/*까지 세션 인증을 요구하게
   // 된다(gmRoutes 자체는 라우트별로 gmApiKeyAuth를 붙여 안전하지만, 그 앞의 다른 라우터가
@@ -45,7 +47,8 @@ export function createServer(playerRepository: PlayerRepository, mailboxReposito
   app.use(createBattleStageRoutes(playerRepository, mailboxRepository));
   app.use(createMailboxRoutes(mailboxRepository));
   app.use(createCouponRoutes(mailboxRepository, db));
-  app.use(createPlayerRoutes(playerRepository));
+  app.use(createPlayerRoutes(playerRepository, mailboxRepository, db));
+  app.use(createAttendanceRoutes(playerRepository, mailboxRepository, db));
 
   app.use(errorHandler);
 

@@ -20,6 +20,7 @@ import { MongoMailboxRepository } from "./contexts/mailbox/infrastructure/mongoM
 import { runMailboxCleanupJob } from "./contexts/mailbox/application/mailboxCleanupService.js";
 import { createCouponS2sClient } from "./contexts/coupon/infrastructure/couponS2sClient.js";
 import { ensureCouponRedemptionIndexes } from "./contexts/coupon/infrastructure/couponRedemptionStore.js";
+import { ensureAttendanceIndexes } from "./contexts/attendance/infrastructure/attendanceStore.js";
 import { reconcileUnconfirmedCoupons } from "./contexts/coupon/application/couponService.js";
 import { connectRedis, redisClient } from "./infra/redis.js";
 import { createServer } from "./server.js";
@@ -40,6 +41,7 @@ await playerRepository.ensureIndexes();
 const mailboxRepository = new MongoMailboxRepository(db);
 await mailboxRepository.ensureIndexes();
 await ensureCouponRedemptionIndexes(db);
+await ensureAttendanceIndexes(db);
 const app = createServer(playerRepository, mailboxRepository, db);
 const httpServer = app.listen(config.port, () => {
   logger.info(`listening on port ${config.port}`);

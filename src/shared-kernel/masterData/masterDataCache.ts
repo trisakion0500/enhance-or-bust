@@ -1,5 +1,8 @@
 import type { Db } from "mongodb";
 import { COLLECTIONS } from "../collectionNames.js";
+import type { AttendanceBookDef } from "../../contexts/attendance/domain/attendanceBookDef.js";
+import type { AttendanceCatchupPrice } from "../../contexts/attendance/domain/attendanceCatchupPrice.js";
+import type { AttendanceReward } from "../../contexts/attendance/domain/attendanceReward.js";
 import type { CardTemplate } from "./cardTemplate.js";
 import type { EnhancementRule } from "../../contexts/enhancement/domain/enhancementRule.js";
 import type { Grade } from "./grade.js";
@@ -35,10 +38,13 @@ class MasterDataCache {
   private synthesisRules: SynthesisRule[] = [];
   private stageConfigs = new Map<number, StageConfig>();
   private cardDropRules = new Map<number, CardDropEntry[]>();
+  private attendanceBookDefs = new Map<string, AttendanceBookDef>();
+  private attendanceRewards = new Map<string, AttendanceReward[]>();
+  private attendanceCatchupPrices = new Map<string, AttendanceCatchupPrice[]>();
   private versions = new Map<MasterDataContent, number>();
 
   /**
-   * 6개 마스터 데이터 컬렉션 + 버전 메타를 전부 읽어 캐시를 채운다. 서버 부트스트랩에서
+   * 9개 마스터 데이터 컬렉션 + 버전 메타를 전부 읽어 캐시를 채운다. 서버 부트스트랩에서
    * 한 번 호출한다.
    * @param db 메인 앱 DB 핸들
    */
@@ -86,6 +92,33 @@ class MasterDataCache {
           grouped.set(doc.stageId, table);
         }
         this.cardDropRules = grouped;
+        break;
+      }
+      case COLLECTIONS.MASTER_ATTENDANCE_DEFS: {
+        const docs = await db.collection<AttendanceBookDef>(content).find().toArray();
+        this.attendanceBookDefs = new Map(docs.map(doc => [doc.defId, doc]));
+        break;
+      }
+      case COLLECTIONS.MASTER_ATTENDANCE_REWARDS: {
+        const docs = await db.collection<AttendanceReward>(content).find().toArray();
+        const grouped = new Map<string, AttendanceReward[]>();
+        for (const doc of docs) {
+          const rows = grouped.get(doc.defId) ?? [];
+          rows.push(doc);
+          grouped.set(doc.defId, rows);
+        }
+        this.attendanceRewards = grouped;
+        break;
+      }
+      case COLLECTIONS.MASTER_ATTENDANCE_CATCHUP_PRICES: {
+        const docs = await db.collection<AttendanceCatchupPrice>(content).find().toArray();
+        const grouped = new Map<string, AttendanceCatchupPrice[]>();
+        for (const doc of docs) {
+          const rows = grouped.get(doc.defId) ?? [];
+          rows.push(doc);
+          grouped.set(doc.defId, rows);
+        }
+        this.attendanceCatchupPrices = grouped;
         break;
       }
       default: {
@@ -190,6 +223,52 @@ class MasterDataCache {
     return [...this.cardDropRules.entries()].flatMap(([stageId, entries]) =>
       entries.map(entry => ({ stageId, ...entry })),
     );
+  }
+
+  /**
+   * @param defId 조회할 출석부 정의 ID
+   * @returns 해당 출석부 정의, 없으면 undefined
+   */
+  getAttendanceBookDef(defId: string): AttendanceBookDef | undefined {
+    return this.attendanceBookDefs.get(defId);
+  }
+
+  /**
+   * 현재 발급 가능한(enrollable 기간 내) 활성 GENERAL def를 찾는다 — 시스템 전체에서 항상
+   * 최대 1개(23_GAME_DESIGN_ATTENDANCE.md "개요" 절).
+   * @param now 기준 시각(테스트 용도로만 주입, 기본값은 현재 시각)
+   */
+  getActiveGeneralDef(now: Date = new Date()): AttendanceBookDef | undefined {
+    return [...this.attendanceBookDefs.values()].find(
+      def => def.type === "GENERAL" && def.enrollableStart <= now && now <= def.enrollableEnd,
+    );
+  }
+
+  /**
+   * 현재 발급 가능한 활성 EVENT def 전체를 찾는다 — 여러 개 동시 활성 가능(GENERAL과 달리
+   * 1개 제약 없음).
+   * @param now 기준 시각(테스트 용도로만 주입, 기본값은 현재 시각)
+   */
+  getActiveEventDefs(now: Date = new Date()): AttendanceBookDef[] {
+    return [...this.attendanceBookDefs.values()].filter(
+      def => def.type === "EVENT" && def.enrollableStart <= now && now <= def.enrollableEnd,
+    );
+  }
+
+  /**
+   * @param defId 조회할 출석부 정의 ID
+   * @returns 해당 defId의 날짜별 보상 행 전체(없으면 빈 배열)
+   */
+  getAttendanceRewards(defId: string): AttendanceReward[] {
+    return this.attendanceRewards.get(defId) ?? [];
+  }
+
+  /**
+   * @param defId 조회할 출석부 정의 ID
+   * @returns 해당 defId의 캐치업 회차별 가격 행 전체(없으면 빈 배열)
+   */
+  getAttendanceCatchupPrices(defId: string): AttendanceCatchupPrice[] {
+    return this.attendanceCatchupPrices.get(defId) ?? [];
   }
 }
 

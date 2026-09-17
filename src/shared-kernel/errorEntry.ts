@@ -11,6 +11,7 @@
  *  - 인증(Auth)                  : 9000
  *  - GM 연동(gm_platform)        : 10000
  *  - 쿠폰(coupon_platform 연동)  : 11000
+ *  - 출석보상(Attendance)        : 12000
  * @author trisakion
  */
 export interface ErrorEntry {

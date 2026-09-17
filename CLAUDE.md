@@ -117,6 +117,9 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   | `log_mailbox` | `delete` | mailId | 구현됨 |
   | `log_mailbox` | `cleanupBatch` | actorId="SYSTEM", cutoff, deletedCount(0건이면 상태 변경 없어 로그도 생략) | 구현됨 |
   | `log_coupon` | `redeem` | code, usageId, attachments(지급된 첨부) | 구현됨 |
+  | `log_attendance` | `attend` | defId, type, day, attachments(지급된 첨부) | 구현됨 |
+  | `log_attendance` | `catchup_purchase` | defId, type, day, price, attachments(지급된 첨부) | 구현됨 |
+  | `log_attendance` | `issue` | defId, type, startDate, endDate(신규 발급/GENERAL 로테이션) | 구현됨 |
   | `stats_daily_active_players` | (감사 로그 아님, DAU 전용) | {playerId, date} 유니크 인덱스, 하루 1건 | 구현됨 |
   | `attempts_battle_stage` | `attempt` | (감사 로그 아님, 통계 전용) stageId, squadCardIds, squadTemplateIds, won, clearedStage — 승패 무관 매 시도 | 구현됨 |
 

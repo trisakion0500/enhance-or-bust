@@ -1,7 +1,11 @@
+import type { Db } from "mongodb";
 import { BusinessException } from "../../../shared-kernel/businessException.js";
 import { config } from "../../../config/env.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
+import { processLoginAttendance } from "../../attendance/application/attendanceService.js";
+import type { AttendanceLoginResult } from "../../attendance/application/attendanceService.js";
+import type { MailboxRepository } from "../../mailbox/domain/mailboxRepository.js";
 import type { SynthesisRule } from "../../synthesis/domain/synthesisRule.js";
 import type { PlayerRepository } from "../domain/playerRepository.js";
 
@@ -50,19 +54,34 @@ export interface PlayerSummary {
   squadMaxSize: number;
   /** 합성 규칙 전체(마스터 데이터) — 프론트가 합성 화면의 소재 장수/확률/비용 안내에 그대로 쓴다 */
   synthesisRules: readonly SynthesisRule[];
+  /** 이번 조회에서 처리된 출석보상 결과 — 프론트가 이 필드로 토스트/신규출석부 안내를 띄운다 */
+  attendanceNotice: AttendanceLoginResult;
 }
 
 /**
  * 로그인한 플레이어 자신의 상태(재화/clearedStage/보유 카드)를 조회한다. 인벤토리 각 카드는
  * `masterDataCache`의 카드 원형과 조인해 등급/공격력/체력/속성까지 포함시킨다 — 프론트가
  * 별도 마스터 데이터 엔드포인트 없이 이 응답 하나로 인벤토리 화면을 그릴 수 있게 하기 위함.
+ * 조회에 앞서 `processLoginAttendance()`를 먼저 호출한다 — 이 엔드포인트가 곧 "로그인/새로고침
+ * 시 진입점"이라 출석 처리와 상태 조회를 별도 API로 나누지 않고 여기서 함께 처리한다
+ * (23_GAME_DESIGN_ATTENDANCE.md "로그인 시 처리 흐름" 절).
  * @param playerId 조회할 플레이어(세션에서 이미 검증된 값)
  * @param playerRepository Player 영속성 포트
+ * @param db 메인 앱 DB 핸들(출석 인스턴스 조회/갱신용)
+ * @param mailboxRepository Mailbox 영속성 포트(출석 보상 발송용)
  * @returns 플레이어 상태 요약
  * @throws {BusinessException} 세션은 유효한데 플레이어 문서가 없는 이례적 상황이면 COMMON.NOT_FOUND
  * @author trisakion
+ * @modified 2026-09-17 trisakion 출석보상 로그인 처리(processLoginAttendance) 연동, db/mailboxRepository 파라미터와 attendanceNotice 응답 필드 추가
  */
-export async function getPlayerSummary(playerId: string, playerRepository: PlayerRepository): Promise<PlayerSummary> {
+export async function getPlayerSummary(
+  playerId: string,
+  playerRepository: PlayerRepository,
+  db: Db,
+  mailboxRepository: MailboxRepository,
+): Promise<PlayerSummary> {
+  const attendanceNotice = await processLoginAttendance(playerId, db, mailboxRepository);
+
   const player = await playerRepository.findById(playerId);
   if (!player) throw new BusinessException(ERROR_MAP.COMMON.NOT_FOUND, { playerId });
 
@@ -90,5 +109,6 @@ export async function getPlayerSummary(playerId: string, playerRepository: Playe
     inventory,
     squadMaxSize: config.squadMaxSize,
     synthesisRules: masterDataCache.getSynthesisRules(),
+    attendanceNotice,
   };
 }

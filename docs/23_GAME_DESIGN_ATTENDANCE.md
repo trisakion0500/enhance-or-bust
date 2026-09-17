@@ -68,7 +68,12 @@ unique 인덱스를 둔다 — 두 그룹의 쓰기 패턴이 다른 데서 오�
 **보유 정보**: `playerId`, `defId`, `type`, 발급 시점 def 스냅샷, 캐치업 구매 횟수,
 `startDate`, `endDate`, `attendedDays`(아래), `status`(ACTIVE/COMPLETED).
 
-- 유니크 키: `(playerId, defId)` — 같은 defId 중복 발급 방지.
+- 유니크 키: `(playerId, defId)`이지만, **ACTIVE 상태인 문서에만 적용되는 partial 유니크
+  인덱스**다 — GENERAL은 같은 defId를 영구히 재사용하며 로테이션마다 새 인스턴스를
+  발급할 수 있어(완료된 과거 인스턴스는 컬렉션에 그대로 남음), 유니크 제약을 전체
+  문서가 아니라 "현재 ACTIVE인 문서 1개"로만 좁혀야 정상적인 순차 로테이션이 막히지
+  않는다. 막는 대상은 어디까지나 "동시 로그인 레이스로 같은 순간에 발급이 두 번
+  시도되는 것"뿐이다.
 - "유저의 현재 ACTIVE GENERAL" 조회: `(playerId, type=GENERAL, status=ACTIVE)`.
   시스템상 항상 최대 1개만 존재해야 한다.
 
