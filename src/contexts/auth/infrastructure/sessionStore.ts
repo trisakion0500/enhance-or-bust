@@ -28,6 +28,7 @@ export async function createSession(playerId: string): Promise<string> {
  * 세션 토큰으로 playerId를 조회한다.
  * @param token 세션 토큰
  * @returns 해당 세션의 playerId, 없거나 만료됐으면 undefined
+ * @author trisakion
  */
 export async function resolveSession(token: string): Promise<string | undefined> {
   const playerId = await redisClient.get(redisSessionKey(token));

@@ -31,6 +31,7 @@ const NICKNAME_MAX_LENGTH = 20;
  * 소셜 로그인 시도 결과 — 기존 플레이어면 바로 세션이 발급되고("login"), 처음 보는
  * 사용자면 Player를 아직 만들지 않고 닉네임 입력을 기다린다("pending", CLAUDE.md
  * "인증 전략" 참고).
+ * @author trisakion
  */
 export type LoginResult =
   | { status: "login"; sessionToken: string }

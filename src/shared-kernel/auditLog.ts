@@ -2,7 +2,9 @@ import { mongoLogClient } from "../infra/mongoLog.js";
 import { config } from "../config/env.js";
 import { logger } from "../infra/logger.js";
 
-/** 배치/크론처럼 사람이 아닌 시스템이 직접 남기는 감사 로그의 actorId sentinel. */
+/** 배치/크론처럼 사람이 아닌 시스템이 직접 남기는 감사 로그의 actorId sentinel.
+ * @author trisakion
+ */
 export const SYSTEM_ACTOR = "SYSTEM";
 
 /** 감사 로그 한 건 — 언제(occurredAt)/누가(actorId)/무엇을(action)/어떤 내용이 바뀌었는지(changes). */

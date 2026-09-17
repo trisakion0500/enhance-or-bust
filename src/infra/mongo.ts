@@ -15,6 +15,7 @@ export const mongoClient = new MongoClient(config.mongoUri, {
 /**
  * 메인 앱 DB에 연결하고 DB 핸들을 반환한다.
  * @returns 연결된 `enhance_or_bust` DB 핸들
+ * @author trisakion
  */
 export async function connectMongo() {
   await mongoClient.connect();

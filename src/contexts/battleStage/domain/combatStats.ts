@@ -1,7 +1,9 @@
 import type { CardTemplate } from "../../../shared-kernel/masterData/cardTemplate.js";
 import type { Card } from "../../player/domain/card.js";
 
-/** 카드 한 장의 전투 스탯(성장 보너스 적용 후). */
+/** 카드 한 장의 전투 스탯(성장 보너스 적용 후).
+ * @author trisakion
+ */
 export interface CombatStats {
   /** 성장(레벨/강화) 보너스가 적용된 실제 공격력 */
   attack: number;

@@ -17,7 +17,9 @@ import { facebookAuthProvider } from "../infrastructure/facebookAuth.js";
 import type { SocialAuthProvider } from "../infrastructure/socialAuthProvider.js";
 import { resolvePendingRegistration } from "../infrastructure/pendingRegistrationStore.js";
 
-/** 세션 토큰을 담는 쿠키 이름. */
+/** 세션 토큰을 담는 쿠키 이름.
+ * @author trisakion
+ */
 export const SESSION_COOKIE_NAME = "sessionToken";
 
 /** Authorization Code Flow CSRF 방지용 state를 담는 임시 쿠키 이름. */

@@ -17,6 +17,7 @@ export const mongoLogClient = new MongoClient(config.mongoUri, {
 /**
  * 로그 DB에 연결하고 DB 핸들을 반환한다.
  * @returns 연결된 `enhance_or_bust_log` DB 핸들
+ * @author trisakion
  */
 export async function connectMongoLog() {
   await mongoLogClient.connect();

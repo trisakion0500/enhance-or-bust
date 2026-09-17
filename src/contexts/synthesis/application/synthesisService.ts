@@ -10,14 +10,18 @@ import { writeAuditLog } from "../../../shared-kernel/auditLog.js";
 import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
 import type { GradeUpgradeSynthesisRule, EnhanceMaterialSynthesisRule } from "../domain/synthesisRule.js";
 
-/** 등급 승급 합성 결과. 실패 시 소재 1장만 소모되고 나머지는 인벤토리에 그대로 남는다(GAME_DESIGN.md 3절). */
+/** 등급 승급 합성 결과. 실패 시 소재 1장만 소모되고 나머지는 인벤토리에 그대로 남는다(GAME_DESIGN.md 3절).
+ * @author trisakion
+ */
 export interface GradeUpgradeResult {
   success: boolean;
   resultCardId?: string;
   resultTemplateId?: string;
 }
 
-/** 강화 재료 합성 결과(100% 성공, 파괴 없음). */
+/** 강화 재료 합성 결과(100% 성공, 파괴 없음).
+ * @author trisakion
+ */
 export interface EnhanceMaterialResult {
   enhancementLevel: number;
   gold: number;

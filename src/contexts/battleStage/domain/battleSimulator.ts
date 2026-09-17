@@ -4,7 +4,9 @@ import { elementMultiplier } from "../../../shared-kernel/masterData/element.js"
 /** 라운드 상한 — 도달하면 미해결로 간주해 패배 처리한다(무한루프 방지, 임시값). */
 const MAX_ROUNDS = 30;
 
-/** 출전 카드 한 장의 전투 참여 스탯. */
+/** 출전 카드 한 장의 전투 참여 스탯.
+ * @author trisakion
+ */
 export interface SquadMember {
   /** 원본 카드 ID(전투 결과를 응답에서 카드별로 구분하는 용도) */
   cardId: string;
@@ -16,7 +18,9 @@ export interface SquadMember {
   element: Element;
 }
 
-/** 몬스터 스탯(`StageConfig`에서 그대로 옮겨온 값). */
+/** 몬스터 스탯(`StageConfig`에서 그대로 옮겨온 값).
+ * @author trisakion
+ */
 export interface Monster {
   /** 몬스터 체력 */
   hp: number;
@@ -28,7 +32,9 @@ export interface Monster {
   element: Element;
 }
 
-/** 라운드 하나의 진행 로그 — 클라이언트가 턴 진행을 보여줄 수 있게 응답에 그대로 실어보낸다. */
+/** 라운드 하나의 진행 로그 — 클라이언트가 턴 진행을 보여줄 수 있게 응답에 그대로 실어보낸다.
+ * @author trisakion
+ */
 export interface RoundLog {
   /** 라운드 번호(1부터 시작) */
   round: number;
@@ -42,7 +48,9 @@ export interface RoundLog {
   squadHpAfter: number;
 }
 
-/** 전투 시뮬레이션 최종 결과. */
+/** 전투 시뮬레이션 최종 결과.
+ * @author trisakion
+ */
 export interface BattleResult {
   /** 스쿼드 승리 여부(라운드 상한 도달 시에도 false) */
   won: boolean;

@@ -1,6 +1,8 @@
 import type { Grade } from "../../../shared-kernel/masterData/grade.js";
 
-/** 등급 승급 합성 — 동일 등급 카드 N장 소모 → 상위 등급 카드 1장(확률적). */
+/** 등급 승급 합성 — 동일 등급 카드 N장 소모 → 상위 등급 카드 1장(확률적).
+ * @author trisakion
+ */
 export interface GradeUpgradeSynthesisRule {
   /** 규칙 종류 판별 태그 */
   type: "gradeUpgrade";
@@ -19,6 +21,7 @@ export interface GradeUpgradeSynthesisRule {
  * 대상 카드의 강화 단계를 +1 시킨다(100% 성공, 파괴 없음). 대상 카드 자체는 소모되지
  * 않으며 이 규칙 데이터에도 포함되지 않는다 — 어떤 카드를 대상으로 할지는 합성 요청 시점의
  * 런타임 파라미터다.
+ * @author trisakion
  */
 export interface EnhanceMaterialSynthesisRule {
   /** 규칙 종류 판별 태그 */

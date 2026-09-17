@@ -17,6 +17,10 @@ import { config } from "../../../config/env.js";
  * @author trisakion
  */
 
+/**
+ * `CouponS2sClient` 생성자 옵션 — coupon_platform 접속 정보 3종.
+ * @author trisakion
+ */
 export interface CouponS2sClientOptions {
   /** coupon_platform 서버 주소(끝에 슬래시 없이). */
   baseUrl: string;
@@ -26,6 +30,9 @@ export interface CouponS2sClientOptions {
   apiSecret: string;
 }
 
+/** `reserve()` 성공 응답 — coupon_platform 원본 필드명(snake_case)을 그대로 쓴다(변환 없이 통과).
+ * @author trisakion
+ */
 export interface CouponReserveResult {
   coupon_code_usage_id: number;
   coupon_campaign_id: number;
@@ -35,12 +42,17 @@ export interface CouponReserveResult {
   created_at: string;
 }
 
+/** `confirm()` 성공 응답.
+ * @author trisakion
+ */
 export interface CouponConfirmResult {
   coupon_code_usage_id: number;
   confirmed_at: string;
 }
 
-/** `POST /v1/coupons/{code}/reserve`/`confirm`이 `{result!==0}`을 반환했을 때 던지는 에러. */
+/** `POST /v1/coupons/{code}/reserve`/`confirm`이 `{result!==0}`을 반환했을 때 던지는 에러.
+ * @author trisakion
+ */
 export class CouponApiError extends Error {
   constructor(
     public readonly resultCode: number,

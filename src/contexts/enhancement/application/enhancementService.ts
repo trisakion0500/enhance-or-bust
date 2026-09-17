@@ -7,7 +7,9 @@ import { withOptimisticRetry } from "../../../shared-kernel/optimisticPlayerWrit
 import { writeAuditLog } from "../../../shared-kernel/auditLog.js";
 import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
 
-/** 강화 한 번 시도 결과. */
+/** 강화 한 번 시도 결과.
+ * @author trisakion
+ */
 export interface EnhanceResult {
   /** 이번 시도의 강화 성공 여부 */
   success: boolean;

@@ -18,10 +18,14 @@ export interface MailContentConfig {
   contentType: string;
 }
 
-/** 실사용 발송 트리거 레지스트리 — 새 트리거가 생기면 여기 항목을 추가한다. */
+/** 실사용 발송 트리거 레지스트리 — 새 트리거가 생기면 여기 항목을 추가한다.
+ * @author trisakion
+ */
 export const MAIL_CONTENTS = {
   STAGE_CLEAR: { title: "스테이지 클리어 보상", expiryMs: 7 * 24 * 60 * 60 * 1000, contentType: "stage_clear" },
 } as const satisfies Record<string, MailContentConfig>;
 
-/** 실제 발송에 쓰이는 sourceType 값들의 유니온 — `MAIL_CONTENTS`의 키가 아니라 `contentType` 필드에서 도출한다. */
+/** 실제 발송에 쓰이는 sourceType 값들의 유니온 — `MAIL_CONTENTS`의 키가 아니라 `contentType` 필드에서 도출한다.
+ * @author trisakion
+ */
 export type MailContentType = (typeof MAIL_CONTENTS)[keyof typeof MAIL_CONTENTS]["contentType"];

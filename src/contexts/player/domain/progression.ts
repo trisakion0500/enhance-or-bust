@@ -5,7 +5,9 @@ function requiredExpForLevel(level: number): number {
   return Math.round(50 * level ** 1.5);
 }
 
-/** 카드 한 번의 EXP 획득 결과. */
+/** 카드 한 번의 EXP 획득 결과.
+ * @author trisakion
+ */
 export interface AddExpResult {
   /** 이번 EXP 획득으로 레벨이 한 번이라도 올랐는지 */
   leveledUp: boolean;

@@ -3,6 +3,7 @@
  * `mailContent.ts`의 `MAIL_CONTENTS` 레지스트리로 관리하며, 이 값은 레지스트리를 쓰지
  * 않는 호출(테스트 등)의 기본값으로만 쓰인다. 일→ms 환산까지 여기서 끝내둬서 호출부는
  * `Date`에 그대로 더하기만 하면 된다.
+ * @author trisakion
  */
 export const MAIL_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 

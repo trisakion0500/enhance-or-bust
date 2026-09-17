@@ -1,4 +1,6 @@
-/** 출석부 유형 — GENERAL은 상시 1개 라인 로테이션, EVENT는 병렬/1회성(재오픈 없음). */
+/** 출석부 유형 — GENERAL은 상시 1개 라인 로테이션, EVENT는 병렬/1회성(재오픈 없음).
+ * @author trisakion
+ */
 export type AttendanceBookType = "GENERAL" | "EVENT";
 
 /**

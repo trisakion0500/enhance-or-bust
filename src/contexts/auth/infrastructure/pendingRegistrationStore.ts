@@ -5,7 +5,9 @@ import { redisPendingRegistrationKey } from "../../../shared-kernel/redisKeys.js
 /** 가입 보류 상태가 유지되는 시간(초) — CSRF state 쿠키(5분)보다 넉넉하게, 닉네임 입력에 걸리는 시간을 감안해 10분. */
 const PENDING_REGISTRATION_TTL_SEC = 10 * 60;
 
-/** 닉네임 입력 전까지 Redis에 보류해두는 신규 가입 정보 — Player 생성에 필요한 필드만 담는다. */
+/** 닉네임 입력 전까지 Redis에 보류해두는 신규 가입 정보 — Player 생성에 필요한 필드만 담는다.
+ * @author trisakion
+ */
 export interface PendingRegistration {
   platformType: string;
   platformUserId: string;

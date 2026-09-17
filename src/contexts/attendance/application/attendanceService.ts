@@ -27,7 +27,9 @@ import {
   markInstanceCompleted,
 } from "../infrastructure/attendanceStore.js";
 
-/** 로그인 처리 흐름에서 오늘 자동 지급된 보상 한 건(프론트 토스트 안내용). */
+/** 로그인 처리 흐름에서 오늘 자동 지급된 보상 한 건(프론트 토스트 안내용).
+ * @author trisakion
+ */
 export interface AttendanceGrantNotice {
   defId: string;
   type: AttendanceBookType;
@@ -35,7 +37,9 @@ export interface AttendanceGrantNotice {
   day: number;
 }
 
-/** {@link processLoginAttendance}의 결과 — 프론트가 이 응답 하나로 알럿/토스트를 띄운다. */
+/** {@link processLoginAttendance}의 결과 — 프론트가 이 응답 하나로 알럿/토스트를 띄운다.
+ * @author trisakion
+ */
 export interface AttendanceLoginResult {
   /** 오늘 새로 지급된 보상 목록(GENERAL 최대 1건 + EVENT N건) */
   granted: AttendanceGrantNotice[];
@@ -43,17 +47,23 @@ export interface AttendanceLoginResult {
   generalStarted: boolean;
 }
 
-/** 출석 날짜 하나의 프론트 표시 상태(달력 UI). */
+/** 출석 날짜 하나의 프론트 표시 상태(달력 UI).
+ * @author trisakion
+ */
 export type AttendanceDayState = "ATTENDED" | "CATCHUP_AVAILABLE" | "CATCHUP_UNAVAILABLE" | "TODAY" | "FUTURE";
 
-/** 출석 달력의 날짜 한 칸. */
+/** 출석 달력의 날짜 한 칸.
+ * @author trisakion
+ */
 export interface AttendanceDayView {
   day: number;
   state: AttendanceDayState;
   rewards: Array<{ itemType: AttendanceRewardItemType; amount: number; cardTemplateId: string | null }>;
 }
 
-/** 캐치업 구매 버튼에 필요한 정보 — 프론트 요구사항(23_GAME_DESIGN_ATTENDANCE.md "캐치업 구매 버튼" 절). */
+/** 캐치업 구매 버튼에 필요한 정보 — 프론트 요구사항(23_GAME_DESIGN_ATTENDANCE.md "캐치업 구매 버튼" 절).
+ * @author trisakion
+ */
 export interface AttendanceCatchupView {
   remainingPurchases: number;
   /** 다음 구매 가격 — 구매 가능 횟수를 소진했으면 null */
@@ -62,7 +72,9 @@ export interface AttendanceCatchupView {
   canAfford: boolean;
 }
 
-/** 출석부 하나(GENERAL 또는 EVENT 한 건)의 현재 진행 상태 뷰. */
+/** 출석부 하나(GENERAL 또는 EVENT 한 건)의 현재 진행 상태 뷰.
+ * @author trisakion
+ */
 export interface AttendanceBookView {
   defId: string;
   type: AttendanceBookType;
@@ -72,7 +84,9 @@ export interface AttendanceBookView {
   catchup: AttendanceCatchupView;
 }
 
-/** {@link getAttendanceStatus}의 결과. */
+/** {@link getAttendanceStatus}의 결과.
+ * @author trisakion
+ */
 export interface AttendanceStatusView {
   /** GENERAL 인스턴스 — 미보유(발급 대상 def 자체가 없는 극초반 등)면 null */
   general: AttendanceBookView | null;

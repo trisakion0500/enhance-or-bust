@@ -72,7 +72,9 @@ export async function startMasterDataWatch(db: Db): Promise<void> {
   });
 }
 
-/** 마스터 데이터 워처를 정지한다. 서버 종료 시퀀스에서 호출한다. */
+/** 마스터 데이터 워처를 정지한다. 서버 종료 시퀀스에서 호출한다.
+ * @author trisakion
+ */
 export async function stopMasterDataWatch(): Promise<void> {
   clearTimeout(retryTimer);
   await changeStream?.close();
@@ -83,12 +85,15 @@ export async function stopMasterDataWatch(): Promise<void> {
  * 비교해 어긋나면 강제 리로드한다. Change Stream이 주 채널이고, 이건 이벤트를 놓쳤을 때
  * 뒤늦게라도 따라잡는 안전망이다.
  * @param db 메인 앱 DB 핸들
+ * @author trisakion
  */
 export function startMasterDataPolling(db: Db): void {
   pollTimer = setInterval(() => void pollOnce(db), config.masterDataPollIntervalMs);
 }
 
-/** 마스터 데이터 폴링을 정지한다. 서버 종료 시퀀스에서 호출한다. */
+/** 마스터 데이터 폴링을 정지한다. 서버 종료 시퀀스에서 호출한다.
+ * @author trisakion
+ */
 export function stopMasterDataPolling(): void {
   clearInterval(pollTimer);
 }

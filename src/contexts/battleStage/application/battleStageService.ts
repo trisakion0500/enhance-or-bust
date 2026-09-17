@@ -17,7 +17,9 @@ import { config } from "../../../config/env.js";
 import { writeAuditLog } from "../../../shared-kernel/auditLog.js";
 import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
 
-/** 출전 카드 1장이 이번 전투로 얻은 EXP 결과. */
+/** 출전 카드 1장이 이번 전투로 얻은 EXP 결과.
+ * @author trisakion
+ */
 export interface ExpGainResult {
   /** EXP를 얻은 카드 ID */
   cardId: string;
@@ -29,7 +31,9 @@ export interface ExpGainResult {
   levelsGained: number;
 }
 
-/** 스테이지 클리어 시도 결과. */
+/** 스테이지 클리어 시도 결과.
+ * @author trisakion
+ */
 export interface ClearStageResult {
   /** 승리 여부 */
   won: boolean;

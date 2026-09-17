@@ -7,7 +7,9 @@ import type { PlayerRepository } from "../contexts/player/domain/playerRepositor
 /** 낙관적 락 충돌 시 재조회 후 재시도할 최대 횟수(강화/합성/전투-스테이지 API 공통 정책). */
 const MAX_OPTIMISTIC_LOCK_RETRIES = 5;
 
-/** {@link withOptimisticRetry}의 선택적 훅. */
+/** {@link withOptimisticRetry}의 선택적 훅.
+ * @author trisakion
+ */
 export interface OptimisticRetryHooks<T> {
   /** `save()` 성공 직후에만 실행할 부수효과(예: 우편 발송) — 재시도 전체에서 한 번만 호출된다. */
   onSaved?: (result: T) => Promise<void>;

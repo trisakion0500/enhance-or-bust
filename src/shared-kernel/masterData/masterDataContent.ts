@@ -21,7 +21,9 @@ export type MasterDataContent =
   | typeof COLLECTIONS.MASTER_ATTENDANCE_REWARDS
   | typeof COLLECTIONS.MASTER_ATTENDANCE_CATCHUP_PRICES;
 
-/** {@link MasterDataContent}의 전체 목록 — 전체 로드/워처 대상 컬렉션 필터링에 쓴다. */
+/** {@link MasterDataContent}의 전체 목록 — 전체 로드/워처 대상 컬렉션 필터링에 쓴다.
+ * @author trisakion
+ */
 export const MASTER_DATA_CONTENTS: readonly MasterDataContent[] = [
   COLLECTIONS.MASTER_CARD_TEMPLATES,
   COLLECTIONS.MASTER_GRADE_CONFIGS,

@@ -4,6 +4,7 @@ import type { AttendanceRewardItemType } from "./attendanceReward.js";
 /**
  * 발급 시점 def/보상/캐치업가격을 그대로 복사한 스냅샷 — 이후 def 원본이 바뀌어도 이미 발급된
  * 인스턴스는 영향받지 않는다("핵심 원칙 — 시드 스냅샷" 절, `coupon_redemptions`와 동일 원칙).
+ * @author trisakion
  */
 export interface AttendanceInstanceSnapshot {
   durationDays: number;
@@ -12,6 +13,9 @@ export interface AttendanceInstanceSnapshot {
   catchupPrices: Array<{ purchaseIndex: number; price: number }>;
 }
 
+/** 인스턴스 진행 상태 — ACTIVE는 진행 중(오늘 &lt; endDate), COMPLETED는 종료(오늘 >= endDate, `markInstanceCompleted()`가 전이).
+ * @author trisakion
+ */
 export type AttendanceInstanceStatus = "ACTIVE" | "COMPLETED";
 
 /**

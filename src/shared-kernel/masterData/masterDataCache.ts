@@ -274,5 +274,7 @@ class MasterDataCache {
   }
 }
 
-/** 프로젝트 전역에서 공유하는 마스터 데이터 캐시 싱글톤. */
+/** 프로젝트 전역에서 공유하는 마스터 데이터 캐시 싱글톤.
+ * @author trisakion
+ */
 export const masterDataCache = new MasterDataCache();

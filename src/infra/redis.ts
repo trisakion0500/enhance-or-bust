@@ -11,6 +11,7 @@ export const redisClient = createClient({ url: config.redisUrl, password: config
 /**
  * Redis에 연결하고 클라이언트를 반환한다.
  * @returns 연결된 Redis 클라이언트
+ * @author trisakion
  */
 export async function connectRedis() {
   await redisClient.connect();

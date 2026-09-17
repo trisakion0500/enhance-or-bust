@@ -16,7 +16,9 @@ import type { PlayerRepository } from "../../player/domain/playerRepository.js";
 /** playerId 없이 전체 조회할 때 한 번에 반환할 최대 인원 — 무제한 컬렉션 스캔 방지. */
 const GM_PLAYER_LIST_LIMIT = 200;
 
-/** GM 운영자가 조회하는 플레이어 요약. */
+/** GM 운영자가 조회하는 플레이어 요약.
+ * @author trisakion
+ */
 export interface GmPlayerSummary {
   playerId: string;
   name: string;
@@ -70,7 +72,9 @@ export async function listPlayersForGm(playerRepository: PlayerRepository): Prom
   return players.map(toSummary);
 }
 
-/** GM 운영자가 조회하는 플레이어 보유 카드 한 장 — 마스터 데이터(카드 원형) 조인 포함. */
+/** GM 운영자가 조회하는 플레이어 보유 카드 한 장 — 마스터 데이터(카드 원형) 조인 포함.
+ * @author trisakion
+ */
 export interface GmCardSummary {
   cardId: string;
   templateId: string;
@@ -172,6 +176,7 @@ const GM_LOG_LIST_LIMIT = 200;
  * GM 운영자가 조회하는 감사 로그 한 건. `changes.*`는 컬렉션/액션마다 필드가 달라(예:
  * log_synthesis의 gradeUpgrade/enhanceMaterial) 고정 필드로 선언하지 않고 인덱스 시그니처로
  * 열어둔다 — {@link flattenChanges}가 채운 점(`.`) 표기 키가 실제 필드명이다.
+ * @author trisakion
  */
 export type GmLogEntry = {
   actorId: string;
@@ -253,6 +258,10 @@ async function getAuditLogsForGm(
 }
 
 /**
+ * @param playerId 조회할 플레이어 ID
+ * @param playerRepository Player 영속성 포트
+ * @param fromDate 조회 시작 일시(포함, ISO 8601 문자열, 선택)
+ * @param toDate 조회 종료 일시(포함, ISO 8601 문자열, 선택)
  * @returns log_auth 로그 목록
  * @author trisakion
  * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
@@ -262,6 +271,10 @@ export function getAuthLogsForGm(playerId: string, playerRepository: PlayerRepos
 }
 
 /**
+ * @param playerId 조회할 플레이어 ID
+ * @param playerRepository Player 영속성 포트
+ * @param fromDate 조회 시작 일시(포함, ISO 8601 문자열, 선택)
+ * @param toDate 조회 종료 일시(포함, ISO 8601 문자열, 선택)
  * @returns log_enhancement 로그 목록
  * @author trisakion
  * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
@@ -271,6 +284,10 @@ export function getEnhancementLogsForGm(playerId: string, playerRepository: Play
 }
 
 /**
+ * @param playerId 조회할 플레이어 ID
+ * @param playerRepository Player 영속성 포트
+ * @param fromDate 조회 시작 일시(포함, ISO 8601 문자열, 선택)
+ * @param toDate 조회 종료 일시(포함, ISO 8601 문자열, 선택)
  * @returns log_synthesis 로그 목록
  * @author trisakion
  * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
@@ -280,6 +297,10 @@ export function getSynthesisLogsForGm(playerId: string, playerRepository: Player
 }
 
 /**
+ * @param playerId 조회할 플레이어 ID
+ * @param playerRepository Player 영속성 포트
+ * @param fromDate 조회 시작 일시(포함, ISO 8601 문자열, 선택)
+ * @param toDate 조회 종료 일시(포함, ISO 8601 문자열, 선택)
  * @returns log_battle_stage 로그 목록
  * @author trisakion
  * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
@@ -289,6 +310,10 @@ export function getBattleStageLogsForGm(playerId: string, playerRepository: Play
 }
 
 /**
+ * @param playerId 조회할 플레이어 ID
+ * @param playerRepository Player 영속성 포트
+ * @param fromDate 조회 시작 일시(포함, ISO 8601 문자열, 선택)
+ * @param toDate 조회 종료 일시(포함, ISO 8601 문자열, 선택)
  * @returns log_mailbox 로그 목록
  * @author trisakion
  * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)

@@ -1,4 +1,6 @@
-/** 출석 보상 아이템 종류 — 기존 Economy/Inventory 카탈로그를 그대로 참조(별도 아이템 마스터 없음). */
+/** 출석 보상 아이템 종류 — 기존 Economy/Inventory 카탈로그를 그대로 참조(별도 아이템 마스터 없음).
+ * @author trisakion
+ */
 export type AttendanceRewardItemType = "gold" | "enhancementStone" | "diamond" | "card";
 
 /**

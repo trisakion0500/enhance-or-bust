@@ -8,6 +8,7 @@ import { ERROR_MAP } from "./errorMap.js";
  * 자동으로 잡지 못해서, 이 래퍼 없이는 {@link errorHandler}까지 에러가 도달하지 않는다.
  * @param fn 감쌀 async 라우트 핸들러
  * @returns Express가 바로 등록할 수 있는 핸들러
+ * @author trisakion
  */
 export function asyncHandler(fn: RequestHandler): RequestHandler {
   return (req, res, next) => {

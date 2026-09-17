@@ -61,6 +61,7 @@ export async function sendMail(
  * @param playerId 조회할 플레이어
  * @param mailboxRepository Mailbox 영속성 포트
  * @returns 해당 플레이어의 만료되지 않은 우편 목록(최신순)
+ * @author trisakion
  */
 export async function listMails(playerId: string, mailboxRepository: MailboxRepository): Promise<Mail[]> {
   return mailboxRepository.findByPlayer(playerId);
@@ -75,6 +76,7 @@ export async function listMails(playerId: string, mailboxRepository: MailboxRepo
  * @throws {BusinessException} 우편이 없거나 소유자가 아니면 MAILBOX.NOT_FOUND, 이미 수령했으면
  *   MAILBOX.ALREADY_CLAIMED, 만료됐으면 MAILBOX.EXPIRED, 카드 첨부물이 인벤토리 슬롯 상한을
  *   초과하면 MAILBOX.INVENTORY_FULL(이 경우 우편은 미수령 상태 그대로 남는다)
+ * @author trisakion
  */
 export async function claimMail(playerId: string, mailId: string, mailboxRepository: MailboxRepository): Promise<Mail> {
   const mail = await mailboxRepository.claimMail(mailId, playerId);

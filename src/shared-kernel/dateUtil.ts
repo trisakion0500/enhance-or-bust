@@ -3,6 +3,7 @@
  * 타임존과 날짜가 어긋날 수 있어 쓰지 않고, `getFullYear`/`getMonth`/`getDate` 로컬
  * 컴포넌트로 조립한다(만료 우편 정리 배치의 cutoff 계산, DAU 집계와 동일 패턴).
  * @param now 기준 시각(테스트 용도로만 주입, 기본값은 현재 시각)
+ * @returns 로컬 타임존 기준 오늘 날짜 문자열(YYYY-MM-DD)
  * @author trisakion
  */
 export function todayDateString(now: Date = new Date()): string {
@@ -18,6 +19,7 @@ export function todayDateString(now: Date = new Date()): string {
  * 파싱하면 DST 경계에서 날짜가 밀릴 수 있어 피한다.
  * @param dateStr 기준 날짜(YYYY-MM-DD)
  * @param days 더할 일수
+ * @returns dateStr + days일 후의 날짜 문자열(YYYY-MM-DD)
  * @author trisakion
  */
 export function addDaysToDateString(dateStr: string, days: number): string {
@@ -32,6 +34,7 @@ export function addDaysToDateString(dateStr: string, days: number): string {
  * UTC 자정 기준으로 파싱).
  * @param from 기준 날짜(YYYY-MM-DD)
  * @param to 비교 날짜(YYYY-MM-DD)
+ * @returns to - from 일수 차이(to가 미래면 양수)
  * @author trisakion
  */
 export function daysBetweenDateStrings(from: string, to: string): number {

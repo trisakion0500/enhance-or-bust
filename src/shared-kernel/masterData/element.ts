@@ -12,6 +12,7 @@ const ADVANTAGE: Record<Element, Element> = { fire: "grass", grass: "water", wat
  * @param attacker 공격측 원소
  * @param defender 방어측 원소
  * @returns 유리 1.2, 불리 0.8, 그 외(동일 원소 포함) 1.0
+ * @author trisakion
  */
 export function elementMultiplier(attacker: Element, defender: Element): number {
   if (ADVANTAGE[attacker] === defender) return 1.2;

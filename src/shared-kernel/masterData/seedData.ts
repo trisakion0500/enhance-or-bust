@@ -3,7 +3,9 @@ import type { Grade } from "./grade.js";
 import type { GradeConfig } from "./gradeConfig.js";
 import type { CardTemplate } from "./cardTemplate.js";
 
-/** GAME_DESIGN.md 1절 "등급별 성장 상한 초기값" 그대로. */
+/** GAME_DESIGN.md 1절 "등급별 성장 상한 초기값" 그대로.
+ * @author trisakion
+ */
 export const GRADE_CONFIGS: GradeConfig[] = [
   { grade: "N", maxLevel: 20, maxEnhancementLevel: 5 },
   { grade: "R", maxLevel: 40, maxEnhancementLevel: 10 },

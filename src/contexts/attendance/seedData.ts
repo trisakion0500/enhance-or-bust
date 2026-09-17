@@ -35,7 +35,9 @@ export const ATTENDANCE_BOOK_SEEDS: readonly AttendanceBookSeed[] = [
   },
 ];
 
-/** @returns 시드 대상 출석부 정의 전체 */
+/** @returns 시드 대상 출석부 정의 전체
+ * @author trisakion
+ */
 export function buildAttendanceBookDefs(): AttendanceBookSeed[] {
   return [...ATTENDANCE_BOOK_SEEDS];
 }
