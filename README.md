@@ -214,6 +214,8 @@ graph LR
 | [20_COUPON_PLATFORM_INTEGRATION.md](docs/20_COUPON_PLATFORM_INTEGRATION.md) | coupon_platform 연동 배경/설계 |
 | [21_FRONTEND.md](docs/21_FRONTEND.md) | 화면 구성, JS 모듈 매핑 |
 | [22_TEST_STRATEGY.md](docs/22_TEST_STRATEGY.md) | 테스트 전략 |
+| [23_GAME_DESIGN_ATTENDANCE.md](docs/23_GAME_DESIGN_ATTENDANCE.md) | 출석보상(GENERAL/EVENT) 상세 정책/설계 |
+| [24_TROUBLESHOOTING.md](docs/24_TROUBLESHOOTING.md) | 실전 장애 사례와 원인/해결 기록 |
 
 ---
 

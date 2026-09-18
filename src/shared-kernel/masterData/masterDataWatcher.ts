@@ -1,4 +1,4 @@
-import type { ChangeStream, Db } from "mongodb";
+import type { ChangeStream, Collection, Db } from "mongodb";
 import { MongoError } from "mongodb";
 import { config } from "../../config/env.js";
 import { COLLECTIONS } from "../collectionNames.js";
@@ -18,6 +18,7 @@ let changeStream: ChangeStream | undefined;
 let pollTimer: NodeJS.Timeout | undefined;
 let retryTimer: NodeJS.Timeout | undefined;
 let retryDelayMs = 0;
+let stopping = false;
 
 /**
  * DB 레벨 Change Stream 워처 1개로 5개 마스터 데이터 컬렉션을 전부 감시한다. 컬렉션마다
@@ -38,24 +39,41 @@ export async function startMasterDataWatch(db: Db): Promise<void> {
   const pipeline = [{ $match: { "ns.coll": { $in: [...MASTER_DATA_CONTENTS] } } }];
 
   changeStream = db.watch(pipeline, state?.resumeToken ? { resumeAfter: state.resumeToken } : {});
+  void consumeChangeStream(db, stateCollection);
+}
 
-  changeStream.on("change", async event => {
-    retryDelayMs = 0; // 이벤트를 정상 수신했다는 건 연결이 살아있다는 증거 — 백오프 리셋
-    try {
-      // invalidate/dropDatabase 이벤트는 ns.coll이 없다 — 이 프로젝트에서 마스터 데이터
-      // 컬렉션을 그렇게 다룰 일이 없으므로 무시하고 넘어간다.
-      if (!("ns" in event) || !("coll" in event.ns)) return;
-      const content = event.ns.coll as MasterDataContent;
-      await masterDataCache.reload(db, content);
-      await stateCollection.updateOne({ _id: "masterData" }, { $set: { resumeToken: event._id } }, { upsert: true });
-    } catch (err) {
-      // 이벤트 하나의 처리 실패가 스트림 전체를 죽이면 안 됨 — 다음 이벤트는 계속 받는다.
-      // 이 이벤트로 놓친 변경분은 폴링 폴백이 나중에 따라잡는다.
-      logger.error("마스터 데이터 change stream 이벤트 처리 실패", err);
+/**
+ * change stream 이벤트를 `for await`로 순차 소비한다 — 이전 이벤트의 `reload()`가 끝나야
+ * 드라이버가 다음 이벤트를 커서에서 끌어오므로(백프레셔), 이벤트가 한꺼번에 몰려도(대량
+ * 컬렉션 재생성 직후 resume token이 쌓인 백로그를 재생하는 경우 등) 동시 실행 중인
+ * `reload()` 프로미스가 무제한으로 쌓이며 힙이 터지는 사고를 구조적으로 막는다
+ * (2026-09-18 실제 OOM 크래시로 확인). `startMasterDataWatch()`가 즉시 반환해야 하므로
+ * 이 함수는 그쪽에서 `void`로 백그라운드 실행한다.
+ * @author trisakion
+ */
+async function consumeChangeStream(
+  db: Db,
+  stateCollection: Collection<ChangeStreamStateDocument>,
+): Promise<void> {
+  if (!changeStream) return;
+  try {
+    for await (const event of changeStream) {
+      retryDelayMs = 0; // 이벤트를 정상 수신했다는 건 연결이 살아있다는 증거 — 백오프 리셋
+      try {
+        // invalidate/dropDatabase 이벤트는 ns.coll이 없다 — 이 프로젝트에서 마스터 데이터
+        // 컬렉션을 그렇게 다룰 일이 없으므로 무시하고 넘어간다.
+        if (!("ns" in event) || !("coll" in event.ns)) continue;
+        const content = event.ns.coll as MasterDataContent;
+        await masterDataCache.reload(db, content);
+        await stateCollection.updateOne({ _id: "masterData" }, { $set: { resumeToken: event._id } }, { upsert: true });
+      } catch (err) {
+        // 이벤트 하나의 처리 실패가 스트림 전체를 죽이면 안 됨 — 다음 이벤트는 계속 받는다.
+        // 이 이벤트로 놓친 변경분은 폴링 폴백이 나중에 따라잡는다.
+        logger.error("마스터 데이터 change stream 이벤트 처리 실패", err);
+      }
     }
-  });
-
-  changeStream.on("error", async err => {
+  } catch (err) {
+    if (stopping) return; // stopMasterDataWatch()로 인한 의도적 종료 — 재연결 시도 안 함
     logger.error("마스터 데이터 change stream 오류, 재연결 시도", err);
     // resume token이 oplog 보존 범위를 벗어나 재개 불가능해진 경우 — 토큰을 버리고
     // 캐시를 전체 재적재한 뒤 처음부터 다시 구독한다. MongoDB는 이 상황을 codeName
@@ -69,13 +87,14 @@ export async function startMasterDataWatch(db: Db): Promise<void> {
     retryDelayMs = retryDelayMs === 0 ? 1000 : Math.min(retryDelayMs * 2, 60_000);
     logger.error(`마스터 데이터 change stream ${retryDelayMs}ms 후 재연결 시도`);
     retryTimer = setTimeout(() => void startMasterDataWatch(db), retryDelayMs);
-  });
+  }
 }
 
 /** 마스터 데이터 워처를 정지한다. 서버 종료 시퀀스에서 호출한다.
  * @author trisakion
  */
 export async function stopMasterDataWatch(): Promise<void> {
+  stopping = true;
   clearTimeout(retryTimer);
   await changeStream?.close();
 }
