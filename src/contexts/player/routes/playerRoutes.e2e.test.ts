@@ -67,9 +67,12 @@ async function createTestPlayer() {
   return { playerId, cardId, cookie: `sessionToken=${token}` };
 }
 
-/** 테스트가 만든 플레이어 문서를 지운다. */
+/** 테스트가 만든 플레이어 문서를 지운다(`GET /player/me`가 출석보상도 함께 처리해 우편/출석 인스턴스도 같이 생성되므로 함께 지운다). */
 async function deleteTestPlayer(playerId: string) {
-  await mongoClient.db(process.env.MONGO_APP_DATABASE).collection<{ _id: string }>(COLLECTIONS.PLAYERS).deleteOne({ _id: playerId });
+  const db = mongoClient.db(process.env.MONGO_APP_DATABASE);
+  await db.collection<{ _id: string }>(COLLECTIONS.PLAYERS).deleteOne({ _id: playerId });
+  await db.collection<{ playerId: string }>(COLLECTIONS.MAILBOX).deleteMany({ playerId });
+  await db.collection<{ playerId: string }>(COLLECTIONS.ATTENDANCE_INSTANCES).deleteMany({ playerId });
 }
 
 test("로그인한 플레이어는 자신의 재화/clearedStage/보유 카드(원형 정보 조인)를 조회할 수 있다", async () => {
