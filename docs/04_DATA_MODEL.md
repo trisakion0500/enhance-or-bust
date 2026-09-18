@@ -12,9 +12,9 @@ MongoDB 컬렉션 구조와 원자성 경계. 상세 원칙(왜 이렇게 나눴
 ```mermaid
 graph TB
     subgraph "enhance_or_bust (앱 DB)"
-        players["players\n(Player 애그리게잇, 낙관적 락)"]
-        mailbox["mailbox"]
-        couponRedemptions["coupon_redemptions"]
+        players["player\n(Player 애그리게잇, 낙관적 락)"]
+        mailbox["player_mailbox"]
+        couponRedemptions["player_coupon"]
         masterData["master_card_templates\nmaster_grade_configs\nmaster_enhancement_rules\nmaster_synthesis_rules\nmaster_stage_configs\nmaster_stage_card_drops"]
         masterMeta["master_data_meta"]
         systemState["system_change_stream_state\nsystem_batch_runs"]
@@ -36,13 +36,13 @@ graph TB
     masterData -. "버전 비교" .- masterMeta
 ```
 
-메인 트랜잭션(players/mailbox)은 로그 DB 쓰기 실패와 절대 묶이지 않는다 — 로그 기록은
+메인 트랜잭션(player/player_mailbox)은 로그 DB 쓰기 실패와 절대 묶이지 않는다 — 로그 기록은
 try/catch로 감싸 실패를 삼키고 log4js에만 남긴다.
 
-## players 컬렉션 (Player 애그리게잇, 단일 문서 + 낙관적 락)
+## player 컬렉션 (Player 애그리게잇, 단일 문서 + 낙관적 락)
 
 ```
-players/{playerId}
+player/{playerId}
 ├─ platformType, platformUserId   (복합 unique 인덱스)
 ├─ name, picture
 ├─ version                         (낙관적 락 카운터)
@@ -59,26 +59,26 @@ players/{playerId}
 - `Battle-Stage`는 `clearedStage` 필드만 이 문서에 저장한다. 전투 판정 자체(카드 스탯
   합산 vs 몬스터)는 저장 없는 순수 계산.
 
-## mailbox 컬렉션 (별도 컬렉션)
+## player_mailbox 컬렉션 (별도 컬렉션)
 
 ```
-mailbox/{mailId}
+player_mailbox/{mailId}
 ├─ playerId
 ├─ title, attachments: { gold?, enhancementStone?, diamond?, cardTemplateIds? }
 ├─ sourceType, sourceId            (복합 unique 인덱스 — 멱등 발송)
 ├─ createdAt, expiresAt, claimedAt, deletedAt
 ```
 
-- **발송(SendMail)**: players 갱신 성공 → mailbox insert. 재시도 시 `(sourceType,
+- **발송(SendMail)**: player 갱신 성공 → player_mailbox insert. 재시도 시 `(sourceType,
   sourceId)` unique 인덱스가 중복 삽입을 막는다(트랜잭션 대신 멱등키 방식).
-- **수령(ClaimMail)**: mailbox 상태 변경 + players 지급을 멀티도큐먼트 **트랜잭션**으로
+- **수령(ClaimMail)**: player_mailbox 상태 변경 + player 지급을 멀티도큐먼트 **트랜잭션**으로
   묶는다 — 두 컬렉션에 걸친 유일한 쓰기라 트랜잭션이 필요한 케이스.
 - **삭제**는 `deletedAt` 플래그만(하드 삭제 아님), 만료 정리 배치만 실제 물리 삭제.
 
-## coupon_redemptions 컬렉션 (별도 컬렉션)
+## player_coupon 컬렉션 (별도 컬렉션)
 
 ```
-coupon_redemptions/{usageId}    (_id = coupon_platform의 coupon_code_usage_id)
+player_coupon/{usageId}    (_id = coupon_platform의 coupon_code_usage_id)
 ├─ playerId, code, attachments
 ├─ reservedAt
 ├─ mailGrantedAt                  (null이면 아직 우편 미발송)

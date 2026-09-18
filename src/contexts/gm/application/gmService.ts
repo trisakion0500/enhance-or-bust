@@ -351,3 +351,15 @@ export function getBattleStageLogsForGm(playerId: string, playerRepository: Play
 export function getMailboxLogsForGm(playerId: string, playerRepository: PlayerRepository, fromDate?: string, toDate?: string): Promise<GmLogEntry[]> {
   return getAuditLogsForGm(COLLECTIONS.LOG_MAILBOX, playerId, playerRepository, fromDate, toDate);
 }
+
+/**
+ * @param playerId 조회할 플레이어 ID
+ * @param playerRepository Player 영속성 포트
+ * @param fromDate 조회 시작 일시(포함, ISO 8601 문자열, 선택)
+ * @param toDate 조회 종료 일시(포함, ISO 8601 문자열, 선택)
+ * @returns log_attendance 로그 목록(attend/catchup_purchase/issue/reset 액션 혼재)
+ * @author trisakion
+ */
+export function getAttendanceLogsForGm(playerId: string, playerRepository: PlayerRepository, fromDate?: string, toDate?: string): Promise<GmLogEntry[]> {
+  return getAuditLogsForGm(COLLECTIONS.LOG_ATTENDANCE, playerId, playerRepository, fromDate, toDate);
+}

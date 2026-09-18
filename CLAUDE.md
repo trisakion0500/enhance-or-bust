@@ -83,7 +83,7 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
 - 공통 스키마: `{actorId, action, changes, occurredAt}`. `actorId`는 playerId, 배치/크론처럼
   사람이 아닌 주체가 남기면 `"SYSTEM"` sentinel(`shared-kernel/auditLog.ts`의 `SYSTEM_ACTOR`).
   `changes`는 액션마다 내용이 달라 자유 형식 객체로 둔다
-- 쓰기 시점: 메인 쓰기(players/mailbox)가 성공한 뒤에만 호출. 이 로그 기록 자체가 실패해도
+- 쓰기 시점: 메인 쓰기(player/player_mailbox)가 성공한 뒤에만 호출. 이 로그 기록 자체가 실패해도
   메인 흐름을 실패시키지 않고 try/catch로 삼키며 실패만 log4js에 남긴다(개발 컨벤션 7장 —
   로그 DB는 메인 트랜잭션과 절대 묶이지 않음, 로그 실패가 핵심 기능을 막으면 안 됨)
 - 상태 변경이 없는 시도(예: 전투 패배)는 감사 로그(`*_logs`)엔 안 남긴다 — `withOptimisticRetry`의
@@ -119,7 +119,8 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   | `log_coupon` | `redeem` | code, usageId, attachments(지급된 첨부) | 구현됨 |
   | `log_attendance` | `attend` | defId, type, day, attachments(지급된 첨부) | 구현됨 |
   | `log_attendance` | `catchup_purchase` | defId, type, day, price, attachments(지급된 첨부) | 구현됨 |
-  | `log_attendance` | `issue` | defId, type, startDate, endDate(신규 발급/GENERAL 로테이션) | 구현됨 |
+  | `log_attendance` | `issue` | defId, type, startDate, endDate(최초 발급 1회만) | 구현됨 |
+  | `log_attendance` | `reset` | defId, type, rotationCount, startDate, endDate, attendedDays, catchupPurchaseCount(로테이션 시 문서를 in-place로 리셋하기 직전, 덮어써지는 옛 사이클의 최종 상태) | 구현됨 |
   | `stats_daily_active_players` | (감사 로그 아님, DAU 전용) | {playerId, date} 유니크 인덱스, 하루 1건 | 구현됨 |
   | `attempts_battle_stage` | `attempt` | (감사 로그 아님, 통계 전용) stageId, squadCardIds, squadTemplateIds, won, clearedStage — 승패 무관 매 시도 | 구현됨 |
 
@@ -188,7 +189,7 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   자체가 안 맞음, 학습 목적 특수 케이스). 프로필도 원본 필드명이 달라도(`sub`/`id`,
   `picture` 중첩 객체 등) 각 infra 모듈이 `SocialProfile`(`{sub, name?, email?,
   picture?}`) 공통 형태로 변환해 반환한다
-- `Player.playerId`(`players._id`)는 구글 `sub`/페이스북 `id` 같은 프로바이더 값을 그대로
+- `Player.playerId`(`player._id`)는 구글 `sub`/페이스북 `id` 같은 프로바이더 값을 그대로
   쓰지 않고 `randomUUID()`로 발급하는 내부 전용 식별자다. 대신 `platformType`(예: "google",
   "facebook")과 `platformUserId`(프로바이더별 고유 ID) 필드를 별도로 두고, 이 둘의 조합에
   MongoDB 복합 unique 인덱스를 건다(MySQL로 치면 `(platform_type, platform_user_id)` UK와
@@ -292,7 +293,7 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   중복 발송을 막는다(SendMail 멱등 처리 재활용). 패배 시 상태 변경 없이 저장 생략), Mailbox
   도메인(`sendMail()` — (sourceType, sourceId) 유니크 인덱스로 멱등 발송, HTTP API 없이
   다른 Use-case가 내부 호출(스테이지 클리어가 첫 실사용 사례); `POST /mailbox/:mailId/claim`
-  — mailbox+players 두 컬렉션을 세션 기반 멀티도큐먼트 트랜잭션으로 묶어 우편 상태 변경과
+  — player_mailbox+player 두 컬렉션을 세션 기반 멀티도큐먼트 트랜잭션으로 묶어 우편 상태 변경과
   Economy/Inventory 첨부물 지급을 원자적으로 처리; `GET /mailbox` — 만료되지 않은 목록
   조회; 발송 트리거(컨텐츠)별 제목/만료일은 `mailContent.ts`의 `MAIL_CONTENTS`
   레지스트리로 관리 — 트리거마다 정책이 달라질 수 있어 전역 고정값 대신 컨텐츠별로
@@ -308,7 +309,7 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   정지)까지 구현됨. Redis 분산락(강화/합성/전투-스테이지 대상, 우편(Mailbox)의
   `claimMail()`은 대상 아님 — `$inc` 원자 증가만 써서 애초에 재시도 루프 자체가 없어
   락이 불필요)도 위 문단에 통합해 구현됨
-- 우편 삭제(숨김) API(`DELETE /mailbox/:mailId`) 추가 — `mailbox` 문서에 `deletedAt`
+- 우편 삭제(숨김) API(`DELETE /mailbox/:mailId`) 추가 — `player_mailbox` 문서에 `deletedAt`
   플래그를 두고, `GET /mailbox` 조회 쿼리 자체가 `deletedAt: null`을 조건에 포함해 삭제된
   건은 select도 하지 않는다(실제 문서 삭제 아님). **수령(claimedAt)한 우편만 삭제 가능** —
   미수령 우편을 삭제하면 첨부물을 잃을 수 있어 `MAILBOX.NOT_CLAIMED`(7005)로 거부한다. 위
@@ -481,8 +482,8 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
     `"coupon"`/`reserve()`가 반환한 `coupon_code_usage_id`(coupon_platform 쪽에서 같은 소모 건에
     항상 동일하게 반환되는 값)를 그대로 써서, 이 레포의 SendMail 멱등 처리가 재시도로 인한 중복
     지급도 막는다
-  - **`coupon_redemptions` 컬렉션(메인 게임 DB, players/mailbox와 동일하게 프리픽스 없는 런타임
-    쓰기 컬렉션) — `reserve()` 성공 응답을 받는 그 즉시 상태를 기록한다**(`couponRedemptionStore.ts`,
+  - **`player_coupon` 컬렉션(메인 게임 DB, player/player_mailbox와 동일하게 player_ 프리픽스가 붙은
+    런타임 쓰기 컬렉션) — `reserve()` 성공 응답을 받는 그 즉시 상태를 기록한다**(`couponRedemptionStore.ts`,
     `_id`는 `coupon_code_usage_id`). `redeemCoupon()`은 reserve 성공 직후 가장 먼저
     `recordReserved()`로 이 레코드부터 남긴 뒤에야 우편 발송(`mailGrantedAt`) → confirm 보고
     (`confirmedAt`) 순으로 진행한다. 이렇게 하는 이유: coupon_platform이 "사용됨"으로 확정한
@@ -497,7 +498,7 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
     결과 보고일 뿐이라 실패해도 이미 보낸 우편에는 영향이 없다. ①`redeemCoupon()` 안에서
     `confirmWithRetry()`가 짧은 백오프(1초→3초, 최초 포함 총 3회)로 즉시 재시도한다 — 그마저
     실패해도 요청 자체는 성공으로 끝낸다. ②그 이후는 `reconcileUnconfirmedCoupons()`가
-    `COUPON_RECONCILE_CRON`(기본 매일 새벽 4시) 주기로 `coupon_redemptions`에서
+    `COUPON_RECONCILE_CRON`(기본 매일 새벽 4시) 주기로 `player_coupon`에서
     `confirmedAt: null`인 레코드를 조회해 처리한다 — `mailGrantedAt`이 비어있으면(크래시로
     미지급) 먼저 `sendMail()`로 보정 지급하고 나서 confirm을 보고한다. confirm/sendMail 둘 다
     멱등이라 — ClaimMail의 `$inc` 원자 증가와 같은 이유로 — 여러 인스턴스가 동시에 이 배치를
@@ -511,7 +512,7 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
 
 원칙: 같이 원자적으로 바뀌어야 하는 필드는 같은 문서에 묶고, 독립적으로 바뀌는 것은 분리한다.
 
-### players 컬렉션 (단일 문서, 낙관적 락 — 트랜잭션 없음)
+### player 컬렉션 (단일 문서, 낙관적 락 — 트랜잭션 없음)
 
 플레이어 하나의 상태를 문서 하나에 통합. `version` 필드로 낙관적 동시성 제어
 (조건부 업데이트 실패 시 재시도).
@@ -526,20 +527,20 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
 - **Battle-Stage**: `clearedStage` 필드만 저장. 판정(카드 스탯 합산 vs 필요 전투력
   비교) 자체는 저장 없는 순수 계산 로직
 
-### mailbox 컬렉션 (별도 컬렉션)
+### player_mailbox 컬렉션 (별도 컬렉션)
 
 **수령(ClaimMail)**: 우편 상태 변경 + Economy/Inventory 지급을 세션 기반
-멀티도큐먼트 트랜잭션으로 묶음. players 컬렉션과 분리되어 있으므로 이 케이스는
+멀티도큐먼트 트랜잭션으로 묶음. player 컬렉션과 분리되어 있으므로 이 케이스는
 트랜잭션이 필요.
 
-**발송(SendMail — 스테이지 클리어 보상, 강화 파괴 환급 등)**: players + mailbox
+**발송(SendMail — 스테이지 클리어 보상, 강화 파괴 환급 등)**: player + player_mailbox
 두 컬렉션에 걸친 쓰기이지만 트랜잭션으로 묶지 않고 멱등키 방식으로 처리.
 
-- mailbox 문서에 `sourceType` + `sourceId` 조합 유니크 인덱스로 중복 발송 차단
+- player_mailbox 문서에 `sourceType` + `sourceId` 조합 유니크 인덱스로 중복 발송 차단
   (예: `sourceType: "stage_clear"`, `sourceId: "{playerId}:{stageId}:{clearedAt}"`)
-- 쓰기 순서: players update 먼저 → 성공 시 mailbox insert. 재시도 시 유니크
+- 쓰기 순서: player update 먼저 → 성공 시 player_mailbox insert. 재시도 시 유니크
   인덱스 충돌로 중복 삽입 방지
-- players 컨텍스트는 원래 원칙(트랜잭션 없이 낙관적 락)을 그대로 유지 — mailbox
+- player 컨텍스트는 원래 원칙(트랜잭션 없이 낙관적 락)을 그대로 유지 — player_mailbox
   insert만 멱등 처리로 안전성 확보
 
 ## Inventory 슬롯 상한 구현 노트
@@ -547,7 +548,7 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
 정책(상한 존재 여부, 차단/무조건지급 원칙)은 `docs/01_GAME_DESIGN.md`의
 "인벤토리 슬롯 정책" 절이 원본이다. 여기는 구현 방식만 다룬다.
 
-- players 문서에 카드를 배열로 embedding하는 구조라 MongoDB 문서 16MB 제한과
+- player 문서에 카드를 배열로 embedding하는 구조라 MongoDB 문서 16MB 제한과
   직결됨 — 슬롯 상한은 이 리스크에 대한 방어이기도 함
 - 상한 수치는 `INVENTORY_SLOT_CAP` 환경변수로 관리(기본값 200) —
   `src/config/env.ts`의 `config.inventorySlotCap`
@@ -572,7 +573,8 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
 - 컨텐츠별 별도 컬렉션 분리: `master_card_templates`, `master_grade_configs`,
   `master_enhancement_rules`, `master_synthesis_rules`, `master_stage_configs`,
   `master_stage_card_drops` 등(컨텐츠 종류 증가를 전제) — `master_` 프리픽스로 런타임
-  쓰기 컬렉션(players, mailbox)과 구분한다. 게임 콘텐츠도 플레이어 데이터도 아닌 서버
+  쓰기 컬렉션(`player`, `player_mailbox`, `player_coupon`, `player_attendance` — 전부
+  `player`/`player_*`)과 구분한다. 게임 콘텐츠도 플레이어 데이터도 아닌 서버
   내부 운영 상태(Change Stream resume token, 배치 중복실행 방지 마커 등)는 `system_`
   프리픽스로 별도 구분한다(`system_change_stream_state`, `system_batch_runs`) — 세
   카테고리(콘텐츠/플레이어/시스템)를 프리픽스만 보고 바로 구분할 수 있게 하기 위함

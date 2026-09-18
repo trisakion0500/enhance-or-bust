@@ -91,6 +91,7 @@ async function loginOrRegister(
  *   비어있거나 너무 길면 AUTH.VALIDATION_FAILED
  * @author trisakion
  * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
+ * @modified 2026-09-17 trisakion Player 생성 시 createdAt/lastLoginAt을 가입 시각으로 명시 설정
  */
 export async function completeRegistration(token: string, nickname: string, playerRepository: PlayerRepository): Promise<string> {
   const pending = await resolvePendingRegistration(token);
@@ -102,6 +103,7 @@ export async function completeRegistration(token: string, nickname: string, play
 
   const { platformType, platformUserId, email, picture } = pending;
   const starterCard = pickStarterCard();
+  const now = new Date();
   const player = new Player(
     randomUUID(),
     0,
@@ -112,6 +114,9 @@ export async function completeRegistration(token: string, nickname: string, play
     picture,
     new Inventory([starterCard]),
     new Economy(INITIAL_GOLD),
+    0,
+    now,
+    now,
   );
   await playerRepository.create(player);
   await deletePendingRegistration(token);

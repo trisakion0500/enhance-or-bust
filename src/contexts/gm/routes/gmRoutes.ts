@@ -7,6 +7,7 @@ import type { PlayerRepository } from "../../player/domain/playerRepository.js";
 import {
   getAttendanceCatchupPricesForGm,
   getAttendanceDefsForGm,
+  getAttendanceLogsForGm,
   getAttendanceRewardsForGm,
   getAuthLogsForGm,
   getBattleStageLogsForGm,
@@ -164,6 +165,11 @@ export function createGmRoutes(playerRepository: PlayerRepository): Router {
   router.post("/gm/get-mailbox-logs", gmApiKeyAuth, asyncHandler(async (req, res) => {
     const { playerId, fromDate, toDate } = parseGmLogQuery(req.body);
     res.json({ result: 0, message: "OK", data: await getMailboxLogsForGm(playerId, playerRepository, fromDate, toDate) });
+  }));
+
+  router.post("/gm/get-attendance-logs", gmApiKeyAuth, asyncHandler(async (req, res) => {
+    const { playerId, fromDate, toDate } = parseGmLogQuery(req.body);
+    res.json({ result: 0, message: "OK", data: await getAttendanceLogsForGm(playerId, playerRepository, fromDate, toDate) });
   }));
 
   return router;

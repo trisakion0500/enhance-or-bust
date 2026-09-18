@@ -17,7 +17,7 @@ S2S API(reserve/confirm)를 호출한다.
 ```
 
 **처리 흐름**: coupon_platform에 `reserve()` 호출 → 성공하면 즉시 이 서버 DB
-(`coupon_redemptions`)에 상태를 기록 → 응답의 `reward_data`를 `gold`/`enhancementStone`/
+(`player_coupon`)에 상태를 기록 → 응답의 `reward_data`를 `gold`/`enhancementStone`/
 `diamond`/`cardTemplateIds`로 매핑해 **우편(Mailbox)으로 발송** → coupon_platform에
 `confirm()` 보고. 다른 보상(스테이지 클리어 등)과 동일하게, 실제 지급은 플레이어가
 `GET /mailbox` → `POST /mailbox/:mailId/claim`으로 수령해야 인벤토리/재화에 반영된다.

@@ -21,8 +21,12 @@ export type AttendanceInstanceStatus = "ACTIVE" | "COMPLETED";
 /**
  * 플레이어별 출석부 발급 인스턴스(`attendance_instances` 컬렉션). GENERAL 1개 + EVENT N개를
  * 동시에 보유할 수 있어 Player 애그리게잇에 embedding하지 않고 Mailbox와 동일하게 별도
- * 컬렉션으로 둔다.
+ * 컬렉션으로 둔다. `(playerId, defId)`당 문서가 정확히 1개만 존재하며(완전 unique 인덱스),
+ * 로테이션마다 새 문서를 발급하지 않고 이 문서를 in-place로 리셋해 재사용한다 — 컬렉션이
+ * 무한히 커지는 것을 막기 위한 설계이며, 리셋 직전 옛 사이클의 최종 상태는 `log_attendance`의
+ * `action:"reset"` 감사 로그에 남는다(`attendanceService.ts`의 `issueInstanceIfRotationAllowed()` 참고).
  * @author trisakion
+ * @modified 2026-09-18 trisakion 로테이션을 새 문서 발급에서 문서 1개 in-place 리셋으로 변경, rotationCount 필드 추가
  */
 export interface AttendanceInstance {
   _id: string;
@@ -30,6 +34,9 @@ export interface AttendanceInstance {
   defId: string;
   type: AttendanceBookType;
   snapshot: AttendanceInstanceSnapshot;
+  /** 지금까지 이 defId로 발급된 횟수(최초 발급=1, 리셋마다 +1) — 문서를 재사용하는 방식이라
+   * 컬렉션에 과거 이력이 남지 않아 카운트 쿼리로 대체할 수 없다(별도 필드로 저장). */
+  rotationCount: number;
   /** 캐치업 구매 횟수 — 인스턴스 필드라 로테이션/재발급 시 자동 리셋 */
   catchupPurchaseCount: number;
   /** 발급일(로컬 YYYY-MM-DD, `dailyActive.ts`의 `todayDateString()`과 동일 형식) */

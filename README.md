@@ -56,7 +56,7 @@ MongoDB의 낙관적 락/트랜잭션/Change Streams를 실전처럼 써볼 핑�
   컨텍스트는 항상 같은 플레이어 문서 안에서 낙관적 락 하나로 원자적으로 바뀐다. DDD
   관점에서 이 넷은 이미 하나의 애그리게잇(`Player`)이라는 판단으로 Repository도 하나로
   둔다.
-- **우편(Mailbox) 경유 멱등 지급** — 두 컬렉션(players/mailbox)에 걸친 쓰기는
+- **우편(Mailbox) 경유 멱등 지급** — 두 컬렉션(player/player_mailbox)에 걸친 쓰기는
   트랜잭션 대신 `(sourceType, sourceId)` 유니크 인덱스 멱등키로 처리한다. 재시도가
   일어나도 같은 보상이 두 번 발송되지 않는다.
 
@@ -80,19 +80,19 @@ MongoDB의 낙관적 락/트랜잭션/Change Streams를 실전처럼 써볼 핑�
 
 ### 2. 두 컬렉션에 걸친 쓰기를 트랜잭션 없이 멱등하게
 
-- **문제**: 스테이지 클리어 보상(골드/강화석/카드 드랍)은 players 문서 갱신과 별개로
-  mailbox 문서를 새로 만든다. Battle-Stage는 낙관적 락 재시도 구조라, 재시도가 여러 번
+- **문제**: 스테이지 클리어 보상(골드/강화석/카드 드랍)은 player 문서 갱신과 별개로
+  player_mailbox 문서를 새로 만든다. Battle-Stage는 낙관적 락 재시도 구조라, 재시도가 여러 번
   일어나면 우편도 여러 번 발송될 위험이 있다.
-- **왜 어려웠는가**: MongoDB 트랜잭션으로 묶으면 간단하지만, players 컨텍스트는 원래
+- **왜 어려웠는가**: MongoDB 트랜잭션으로 묶으면 간단하지만, player 컨텍스트는 원래
   "트랜잭션 없이 낙관적 락"이라는 원칙을 지키고 있다 — 이 케이스 하나 때문에 그 원칙을
   깨고 싶지 않았다.
   - `sourceId`를 `"{playerId}:{stageId}:{clearedAt}"`처럼 매 시도마다 새로 만들면
     재시도 때마다 값이 달라져 멱등키가 무력화된다.
-- **어떻게 해결했는가**: `mailbox` 문서에 `(sourceType, sourceId)` 유니크 인덱스를 걸고,
-  **재시도 루프 전체에서 같은 `sourceId`를 재사용**한다. 쓰기 순서도 players update →
-  성공 시에만 mailbox insert로 고정해, 재시도 시 유니크 인덱스 충돌이 중복 삽입을
+- **어떻게 해결했는가**: `player_mailbox` 문서에 `(sourceType, sourceId)` 유니크 인덱스를 걸고,
+  **재시도 루프 전체에서 같은 `sourceId`를 재사용**한다. 쓰기 순서도 player update →
+  성공 시에만 player_mailbox insert로 고정해, 재시도 시 유니크 인덱스 충돌이 중복 삽입을
   막는다.
-- **결과**: players 컨텍스트는 트랜잭션 없이 낙관적 락 원칙을 그대로 유지하면서도,
+- **결과**: player 컨텍스트는 트랜잭션 없이 낙관적 락 원칙을 그대로 유지하면서도,
   재시도가 몇 번 일어나든 우편은 정확히 한 번만 생성된다. 상세: [`docs/07_BATTLE_MAILBOX_SCENARIO.md`](docs/07_BATTLE_MAILBOX_SCENARIO.md)
 
 ### 3. 마스터 데이터 리로드 — Change Streams만 믿지 않기
@@ -133,7 +133,7 @@ graph LR
         services["애플리케이션 서비스"]
     end
 
-    mongo[("MongoDB\nenhance_or_bust\n(players/mailbox/coupon_redemptions/master_*)")]
+    mongo[("MongoDB\nenhance_or_bust\n(player/player_mailbox/player_coupon/master_*)")]
     mongoLog[("MongoDB\nenhance_or_bust_log\n(log_*/stats_*/attempts_*)")]
     redis[("Redis\n세션 · 분산 락 · 가입 보류")]
 
@@ -290,7 +290,7 @@ MongoDB는 반드시 **replica set**으로 띄워야 한다(Change Streams/우�
 - [x] gm_platform 연동(X-API-Key 인증) — 플레이어/마스터데이터/감사로그 조회
 - [x] 클러스터(다중 인스턴스) 구동 대비 로그 파일 인스턴스 suffix
 - [x] coupon_platform 연동(API Key+HMAC 서명, 발신 방향) — 쿠폰 사용(reserve/confirm),
-      크래시 복구용 상태 추적(`coupon_redemptions`), 매일 새벽 4시 재처리 배치
+      크래시 복구용 상태 추적(`player_coupon`), 매일 새벽 4시 재처리 배치
 
 세부 구현 내역은 [`docs/09_AUTH_SECURITY.md`](docs/09_AUTH_SECURITY.md),
 [`docs/18_GM_PLATFORM_INTEGRATION.md`](docs/18_GM_PLATFORM_INTEGRATION.md),

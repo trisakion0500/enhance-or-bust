@@ -39,7 +39,7 @@ npm install
 두 가지 이유로 standalone이 아니라 반드시 replica set이어야 한다:
 
 1. 마스터 데이터 리로드가 Change Streams를 쓴다(`src/shared-kernel/masterData/masterDataWatcher.ts`) — Change Streams는 replica set(또는 샤드 클러스터)에서만 동작한다.
-2. 우편 수령(`ClaimMail`)이 `mailbox`+`players` 두 컬렉션에 걸친 멀티도큐먼트 트랜잭션을 쓴다 — MongoDB 트랜잭션도 replica set 전제다.
+2. 우편 수령(`ClaimMail`)이 `player_mailbox`+`player` 두 컬렉션에 걸친 멀티도큐먼트 트랜잭션을 쓴다 — MongoDB 트랜잭션도 replica set 전제다.
 
 단일 노드를 replica set + 인증 활성화로 초기화하는 방법(참고용):
 

@@ -21,10 +21,9 @@ import {
   findActiveGeneralInstance,
   findActiveInstances,
   findInstanceAnyStatus,
-  hasAnyInstanceForDef,
   incrementCatchupCount,
-  insertInstance,
   markInstanceCompleted,
+  upsertInstanceForCycle,
 } from "../infrastructure/attendanceStore.js";
 
 /** 로그인 처리 흐름에서 오늘 자동 지급된 보상 한 건(프론트 토스트 안내용).
@@ -125,6 +124,25 @@ function attendanceSourceType(type: AttendanceBookType): string {
 }
 
 /**
+ * 발동 타입(targetAudience) 대상자 조건을 판정한다(23_GAME_DESIGN_ATTENDANCE.md "발동 타입"
+ * 절). 발동가능 기간(enrollableStart~enrollableEnd) 체크는 `masterDataCache`의
+ * `getActiveGeneralDef`/`getActiveEventDefs`가 이미 끝낸 뒤 호출된다는 전제 하에, 대상자
+ * 조건만 추가로 본다. `previousLastLoginAt`은 이번 로그인으로 갱신되기 *전* 값이어야
+ * 한다 — 호출부가 갱신 순서를 지킨다(player.ts 참고).
+ * @param def 판정 대상 출석부 정의
+ * @param playerCreatedAt 플레이어 가입일시
+ * @param previousLastLoginAt 이전 로그인일시(이번 로그인으로 갱신되기 전 값)
+ * @param today 오늘 날짜(YYYY-MM-DD, 로컬 타임존)
+ * @returns 이 플레이어가 이 def의 대상자 조건을 만족하면 true
+ */
+function isEligibleForDef(def: AttendanceBookDef, playerCreatedAt: Date, previousLastLoginAt: Date, today: string): boolean {
+  if (def.targetAudience === "NEW_USER") return playerCreatedAt >= def.enrollableStart;
+  if (def.targetAudience === "RETURNING_USER")
+    return daysBetweenDateStrings(todayDateString(previousLastLoginAt), today) >= (def.returningInactiveDays ?? Infinity);
+  return true;
+}
+
+/**
  * 인스턴스 하나에 대해 "오늘" 보상을 아직 못 받았으면 지급한다. 순서 고정: Mailbox 발송이
  * 반드시 먼저, `$addToSet` 출석 마킹이 반드시 나중 — 순서를 바꾸면 지급 직후 크래시 시 다음
  * 로그인이 "이미 출석했다"고 오인해 그 날짜 보상이 영구 유실된다(설계 문서 "로그인 시 처리
@@ -155,27 +173,58 @@ async function grantTodayIfNeeded(
   return currentDay;
 }
 
-/** 새 인스턴스를 발급하고 감사 로그를 남긴다. 동시 로그인 레이스로 이미 발급돼 있으면 null. */
-async function issueInstance(db: Db, playerId: string, def: AttendanceBookDef, today: string): Promise<AttendanceInstance | null> {
-  const instance = await insertInstance(db, {
-    playerId,
-    defId: def.defId,
-    type: def.type,
-    snapshot: buildSnapshot(def),
-    catchupPurchaseCount: 0,
-    startDate: today,
-    endDate: addDaysToDateString(today, def.durationDays),
-    attendedDays: [],
-    status: "ACTIVE",
-    issuedAt: new Date(),
-  });
-  if (instance)
+/**
+ * 이 defId로 발급(최초) 또는 재발급(로테이션)이 가능한지 판정하고, 가능하면 기존 문서를
+ * 발급/리셋하고 감사 로그를 남긴다 — GENERAL/EVENT 공통 로직(23_GAME_DESIGN_ATTENDANCE.md
+ * "로테이션 가능 횟수"/"유저 데이터 누적 방식" 절). `(playerId, defId)`당 문서를 1개만
+ * 유지하는 `upsertInstanceForCycle()`에 실제 판정(로테이션 소진/이미 ACTIVE/동시 로그인
+ * 레이스)을 위임한다 — 최초 발급이면 `action:"issue"`, 기존 COMPLETED 문서를 리셋한
+ * 거면 **덮어써지기 직전 옛 사이클의 최종 상태**를 `action:"reset"`으로 남긴다(리셋 후엔
+ * 그 상태가 컬렉션에서 사라지므로, 이 로그가 유일한 흔적이 된다).
+ * @returns 새로 발급/리셋된 인스턴스, 로테이션 횟수 소진/이미 진행 중/동시 로그인 레이스로
+ *   처리되지 않았으면 null
+ */
+async function issueInstanceIfRotationAllowed(db: Db, playerId: string, def: AttendanceBookDef, today: string): Promise<AttendanceInstance | null> {
+  const result = await upsertInstanceForCycle(
+    db,
+    {
+      playerId,
+      defId: def.defId,
+      type: def.type,
+      snapshot: buildSnapshot(def),
+      catchupPurchaseCount: 0,
+      startDate: today,
+      endDate: addDaysToDateString(today, def.durationDays),
+      attendedDays: [],
+      status: "ACTIVE",
+      issuedAt: new Date(),
+    },
+    def.maxRotationCount,
+  );
+  if (!result) return null;
+
+  if (result.previous)
+    await writeAuditLog(COLLECTIONS.LOG_ATTENDANCE, {
+      actorId: playerId,
+      action: "reset",
+      changes: {
+        defId: def.defId,
+        type: def.type,
+        rotationCount: result.previous.rotationCount,
+        startDate: result.previous.startDate,
+        endDate: result.previous.endDate,
+        attendedDays: result.previous.attendedDays,
+        catchupPurchaseCount: result.previous.catchupPurchaseCount,
+      },
+    });
+  else
     await writeAuditLog(COLLECTIONS.LOG_ATTENDANCE, {
       actorId: playerId,
       action: "issue",
-      changes: { defId: def.defId, type: def.type, startDate: instance.startDate, endDate: instance.endDate },
+      changes: { defId: def.defId, type: def.type, startDate: result.instance.startDate, endDate: result.instance.endDate },
     });
-  return instance;
+
+  return result.instance;
 }
 
 /**
@@ -190,12 +239,21 @@ async function issueInstance(db: Db, playerId: string, def: AttendanceBookDef, t
  * 인스턴스는 그 자리에서 곧바로 오늘자(1일차) 보상까지 지급해, "발급 자체는 이번 로그인에
  * 됐는데 1일차 보상은 다음 로그인에야 나간다"는 어색한 지연이 없게 한다.
  * @param playerId 로그인한 플레이어
+ * @param playerCreatedAt 플레이어 가입일시 — targetAudience=NEW_USER 판정용
+ * @param previousLastLoginAt 이전 로그인일시(이번 로그인으로 갱신되기 전 값) — targetAudience=RETURNING_USER 판정용
  * @param db 메인 앱 DB 핸들
  * @param mailboxRepository Mailbox 영속성 포트
  * @returns 오늘 새로 지급된 보상 목록과 GENERAL 신규발급/로테이션 여부
  * @author trisakion
+ * @modified 2026-09-17 trisakion 발동 타입(targetAudience) 대상자 필터링을 위해 playerCreatedAt/previousLastLoginAt 파라미터 추가
  */
-export async function processLoginAttendance(playerId: string, db: Db, mailboxRepository: MailboxRepository): Promise<AttendanceLoginResult> {
+export async function processLoginAttendance(
+  playerId: string,
+  playerCreatedAt: Date,
+  previousLastLoginAt: Date,
+  db: Db,
+  mailboxRepository: MailboxRepository,
+): Promise<AttendanceLoginResult> {
   const today = todayDateString();
   const granted: AttendanceGrantNotice[] = [];
   let generalStarted = false;
@@ -209,8 +267,12 @@ export async function processLoginAttendance(playerId: string, db: Db, mailboxRe
   }
 
   const generalDef = masterDataCache.getActiveGeneralDef();
-  if (generalDef && !(await findActiveGeneralInstance(db, playerId))) {
-    const issued = await issueInstance(db, playerId, generalDef, today);
+  if (
+    generalDef &&
+    isEligibleForDef(generalDef, playerCreatedAt, previousLastLoginAt, today) &&
+    !(await findActiveGeneralInstance(db, playerId))
+  ) {
+    const issued = await issueInstanceIfRotationAllowed(db, playerId, generalDef, today);
     if (issued) {
       generalStarted = true;
       const day = await grantTodayIfNeeded(db, mailboxRepository, playerId, issued, today);
@@ -219,8 +281,8 @@ export async function processLoginAttendance(playerId: string, db: Db, mailboxRe
   }
 
   for (const def of masterDataCache.getActiveEventDefs()) {
-    if (await hasAnyInstanceForDef(db, playerId, def.defId)) continue;
-    const issued = await issueInstance(db, playerId, def, today);
+    if (!isEligibleForDef(def, playerCreatedAt, previousLastLoginAt, today)) continue;
+    const issued = await issueInstanceIfRotationAllowed(db, playerId, def, today);
     if (issued) {
       const day = await grantTodayIfNeeded(db, mailboxRepository, playerId, issued, today);
       if (day !== null) granted.push({ defId: issued.defId, type: issued.type, day });

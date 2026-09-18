@@ -6,20 +6,21 @@
  * 먼저 추가하고 재사용한다.
  *
  * 그룹 구분은 CLAUDE.md "마스터 데이터 로딩/리로드 전략"의 프리픽스 원칙과 동일하다:
- * 런타임 쓰기(프리픽스 없음) / `master_`(컨텐츠) / `system_`(서버 내부 운영 상태)은
- * 메인 게임 DB(`enhance_or_bust`), `log_`/`stats_`/`attempts_`는 물리적으로 분리된
- * 로그 DB(`enhance_or_bust_log`)에 있다.
+ * 런타임 쓰기 `player`/`player_*`(플레이어 데이터) / `master_`(컨텐츠) / `system_`(서버 내부
+ * 운영 상태)은 메인 게임 DB(`enhance_or_bust`), `log_`/`stats_`/`attempts_`는 물리적으로
+ * 분리된 로그 DB(`enhance_or_bust_log`)에 있다.
  * @author trisakion
  * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
+ * @modified 2026-09-18 trisakion 런타임 쓰기 컬렉션에 player_ 프리픽스 부여(콘텐츠/플레이어/시스템 세 카테고리를 프리픽스만으로 구분한다는 설계 의도에 맞춤) — players→player, mailbox→player_mailbox, coupon_redemptions→player_coupon, attendance_instances→player_attendance
  */
 export const COLLECTIONS = {
-  // 메인 게임 DB — 런타임 쓰기 컬렉션
-  PLAYERS: "players",
-  MAILBOX: "mailbox",
-  COUPON_REDEMPTIONS: "coupon_redemptions",
+  // 메인 게임 DB — 런타임 쓰기 컬렉션(player 프리픽스)
+  PLAYERS: "player",
+  MAILBOX: "player_mailbox",
+  COUPON_REDEMPTIONS: "player_coupon",
   // 유저별 출석부 발급 인스턴스(23_GAME_DESIGN_ATTENDANCE.md) — GENERAL 1개+EVENT N개를
   // 동시 보유해 Player 애그리게잇에 embedding하지 않고 Mailbox와 동일하게 별도 컬렉션.
-  ATTENDANCE_INSTANCES: "attendance_instances",
+  ATTENDANCE_INSTANCES: "player_attendance",
 
   // 메인 게임 DB — 마스터 데이터(컨텐츠) 컬렉션. 컨텐츠 단위 취급이 필요한 9개는
   // masterDataContent.ts의 MasterDataContent 타입/MASTER_DATA_CONTENTS 목록이 이 값을 그대로 가져다 쓴다.

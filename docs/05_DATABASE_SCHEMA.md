@@ -4,7 +4,7 @@
 
 ## enhance_or_bust (앱 DB)
 
-### `players`
+### `player`
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
@@ -22,7 +22,7 @@
 
 **인덱스**: `(platformType, platformUserId)` unique.
 
-### `mailbox`
+### `player_mailbox`
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
@@ -40,7 +40,7 @@
 **인덱스**: `(sourceType, sourceId)` unique(멱등 발송). `GET /mailbox` 조회는
 `(playerId, deletedAt, expiresAt)` 조건으로 필터링.
 
-### `coupon_redemptions`
+### `player_coupon`
 
 | 필드 | 타입 | 설명 |
 |---|---|---|

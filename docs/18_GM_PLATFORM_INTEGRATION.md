@@ -40,10 +40,10 @@ gm_platform의 apiExecution은 등록된 API를 항상 `POST {api_base_url}{endp
   지원하고 수정/삭제는 아직 없다** — 마스터데이터는 잘못 저장되면 게임 전체 밸런스에
   영향을 줘서, 저장 기능은 컬렉션별 값 검증(확률 0~1, 음수 불가 등) 설계를 먼저 한 뒤
   별도로 추가하기로 함.
-- **유저고유번호(playerId)별 감사 로그 조회**: 감사 로그 5종을 컬렉션당 엔드포인트로
+- **유저고유번호(playerId)별 감사 로그 조회**: 감사 로그 6종을 컬렉션당 엔드포인트로
   분리(`get-auth-logs`/`get-enhancement-logs`/`get-synthesis-logs`/
-  `get-battle-stage-logs`/`get-mailbox-logs`). `playerId` 필수, `fromDate`/`toDate`로
-  기간 필터.
+  `get-battle-stage-logs`/`get-mailbox-logs`/`get-attendance-logs`). `playerId` 필수,
+  `fromDate`/`toDate`로 기간 필터.
 
 ## 왜 컬렉션당 엔드포인트를 따로 두는가
 

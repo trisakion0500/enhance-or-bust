@@ -65,7 +65,10 @@ export interface PlayerSummary {
  * 별도 마스터 데이터 엔드포인트 없이 이 응답 하나로 인벤토리 화면을 그릴 수 있게 하기 위함.
  * 조회에 앞서 `processLoginAttendance()`를 먼저 호출한다 — 이 엔드포인트가 곧 "로그인/새로고침
  * 시 진입점"이라 출석 처리와 상태 조회를 별도 API로 나누지 않고 여기서 함께 처리한다
- * (23_GAME_DESIGN_ATTENDANCE.md "로그인 시 처리 흐름" 절).
+ * (23_GAME_DESIGN_ATTENDANCE.md "로그인 시 처리 흐름" 절). `player.lastLoginAt`은
+ * `processLoginAttendance()`(targetAudience=RETURNING_USER 판정에 이전 값이 필요)가 끝난
+ * 뒤에야 지금 시각으로 갱신한다 — 순서를 바꾸면 "마지막 로그인으로부터 며칠 지났는가"를
+ * 항상 0일로 잘못 계산하게 된다(23_GAME_DESIGN_ATTENDANCE.md "발동 타입" 절).
  * @param playerId 조회할 플레이어(세션에서 이미 검증된 값)
  * @param playerRepository Player 영속성 포트
  * @param db 메인 앱 DB 핸들(출석 인스턴스 조회/갱신용)
@@ -74,6 +77,7 @@ export interface PlayerSummary {
  * @throws {BusinessException} 세션은 유효한데 플레이어 문서가 없는 이례적 상황이면 COMMON.NOT_FOUND
  * @author trisakion
  * @modified 2026-09-17 trisakion 출석보상 로그인 처리(processLoginAttendance) 연동, db/mailboxRepository 파라미터와 attendanceNotice 응답 필드 추가
+ * @modified 2026-09-17 trisakion 출석부 발동 타입(targetAudience) 판정을 위해 player를 먼저 조회하도록 순서 변경, 처리 후 lastLoginAt 갱신 추가
  */
 export async function getPlayerSummary(
   playerId: string,
@@ -81,10 +85,11 @@ export async function getPlayerSummary(
   db: Db,
   mailboxRepository: MailboxRepository,
 ): Promise<PlayerSummary> {
-  const attendanceNotice = await processLoginAttendance(playerId, db, mailboxRepository);
-
   const player = await playerRepository.findById(playerId);
   if (!player) throw new BusinessException(ERROR_MAP.COMMON.NOT_FOUND, { playerId });
+
+  const attendanceNotice = await processLoginAttendance(playerId, player.createdAt, player.lastLoginAt, db, mailboxRepository);
+  await playerRepository.updateLastLoginAt(playerId, new Date());
 
   const inventory = player.inventory.getCards().map(card => {
     const template = masterDataCache.getCardTemplate(card.templateId);

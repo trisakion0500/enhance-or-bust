@@ -6,7 +6,7 @@
 
 ## 왜 이렇게 설계했는가
 
-- **낙관적 락(`players.version`)만으로는 충분하지 않다** — 같은 플레이어가 강화 버튼을
+- **낙관적 락(`player.version`)만으로는 충분하지 않다** — 같은 플레이어가 강화 버튼을
   연타하면 매 요청이 낙관적 락 충돌 → 재조회 → 재시도를 반복해, 요청이 몰릴수록 DB
   부하가 기하급수적으로 늘어난다(재시도 폭주).
 - **해결**: Redis 짧은 TTL 락(`redisLock.ts`의 `withPlayerLock()`, 플레이어 단위, TTL
@@ -23,7 +23,7 @@ sequenceDiagram
     participant R as enhancementRoutes
     participant L as redisLock (withPlayerLock)
     participant O as withOptimisticRetry
-    participant P as players 컬렉션
+    participant P as player 컬렉션
 
     C->>R: POST /enhancement/:cardId
     R->>L: 락 획득 시도(TTL 5s, 3회 재시도)

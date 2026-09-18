@@ -18,15 +18,11 @@ export async function ensureAttendanceIndexes(db: Db): Promise<void> {
   await db.collection(COLLECTIONS.MASTER_ATTENDANCE_DEFS).createIndex({ type: 1, enrollableStart: 1, enrollableEnd: 1 });
   await db.collection(COLLECTIONS.MASTER_ATTENDANCE_REWARDS).createIndex({ defId: 1, day: 1 });
   await db.collection(COLLECTIONS.MASTER_ATTENDANCE_CATCHUP_PRICES).createIndex({ defId: 1, purchaseIndex: 1 }, { unique: true });
-  // GENERAL은 같은 defId를 영구히 재사용하며 로테이션마다 새 인스턴스를 발급할 수 있어(완료된
-  // 과거 인스턴스는 컬렉션에 그대로 남음), 유니크 제약을 전체 문서가 아니라 "현재 ACTIVE인
-  // 문서"에만 걸어야 한다 — partial index. 이래야 "동시 로그인 레이스로 같은 순간에 발급이
-  // 두 번 시도되는 것"만 막고, 정상적인 순차 로테이션(1회차 COMPLETED 후 2회차 발급)은 막지
-  // 않는다.
-  await db.collection(COLLECTIONS.ATTENDANCE_INSTANCES).createIndex(
-    { playerId: 1, defId: 1 },
-    { unique: true, partialFilterExpression: { status: "ACTIVE" } },
-  );
+  // (playerId, defId)당 문서를 정확히 1개만 허용하는 완전 unique 인덱스 — 로테이션마다
+  // 새 문서를 쌓지 않고 기존 문서를 in-place로 리셋해 재사용하기 때문에(컬렉션이 무한히
+  // 커지는 것을 막기 위한 설계, `upsertInstanceForCycle()` 참고) partial 조건이 필요 없다.
+  // 동시 로그인 레이스로 같은 순간에 최초 발급이 두 번 시도되는 경우도 이 인덱스 하나로 막힌다.
+  await db.collection(COLLECTIONS.ATTENDANCE_INSTANCES).createIndex({ playerId: 1, defId: 1 }, { unique: true });
   await db.collection(COLLECTIONS.ATTENDANCE_INSTANCES).createIndex({ playerId: 1, type: 1, status: 1 });
 }
 
@@ -91,27 +87,60 @@ export async function replaceCatchupPriceRows(db: Db, defId: string, rows: Array
 
 // ── 유저 발급 인스턴스 (런타임 데이터) ───────────────────────────
 
-/**
- * 인스턴스를 발급한다. `(playerId, defId)` partial 유니크 인덱스(ACTIVE 상태에만 적용)로
- * 중복 발급을 막는다 — 동시 로그인 레이스로 같은 순간에 발급이 두 번 시도돼도 두 번째는
- * 중복 키(11000)로 조용히 무시된다(`insertMail()`/`PlayerRepository.create()`와 동일
- * 패턴). GENERAL 로테이션처럼 이미 완료된 인스턴스가 있는 상태에서 새로 발급하는 정상
- * 흐름은 partial 조건(ACTIVE만) 덕분에 막히지 않는다.
- * @param db 메인 앱 DB 핸들
- * @param instance 발급할 인스턴스(내부 PK 제외)
- * @returns 실제로 새로 발급된 인스턴스(호출부가 곧바로 오늘자 보상 지급에 이어 쓸 수 있도록
- *   `_id`까지 채워 반환), 이미 존재해 무시됐으면 null
+/** {@link upsertInstanceForCycle}의 결과 — `previous`가 있으면 리셋(재사용), 없으면 최초 발급.
  * @author trisakion
  */
-export async function insertInstance(db: Db, instance: Omit<AttendanceInstance, "_id">): Promise<AttendanceInstance | null> {
-  const doc: AttendanceInstance = { ...instance, _id: randomUUID() };
-  try {
-    await db.collection<AttendanceInstance>(COLLECTIONS.ATTENDANCE_INSTANCES).insertOne(doc);
-    return doc;
-  } catch (err) {
-    if ((err as MongoServerError).code !== 11000) throw err;
-    return null;
+export interface CycleUpsertResult {
+  /** 새로 발급되었거나 리셋된 인스턴스(`_id`까지 채워짐) */
+  instance: AttendanceInstance;
+  /** 리셋인 경우에만 존재 — 덮어써지기 직전 옛 사이클의 최종 상태(감사 로그 `action:"reset"`용) */
+  previous: AttendanceInstance | null;
+}
+
+/**
+ * 이 defId의 인스턴스 문서를 찾아 없으면 최초 발급(insert)하고, 있고 `COMPLETED` 상태에
+ * 로테이션 여유가 있으면 같은 문서를 in-place로 리셋해 재사용한다 — `(playerId, defId)`당
+ * 문서를 정확히 1개만 유지하기 위함(도메인 JSDoc 참고). 동시성은 두 경로 모두 조건부
+ * 쓰기로 방어한다: 최초 발급은 완전 unique 인덱스(11000 중복 키를 무해 무시), 리셋은
+ * `updateOne`의 필터에 `rotationCount`를 포함시켜(낙관적 락과 동일 원리) 동시 로그인
+ * 레이스로 다른 요청이 먼저 처리했으면 `matchedCount === 0`으로 감지해 무시한다.
+ * @param db 메인 앱 DB 핸들
+ * @param cycle 이번 사이클에 채울 값(내부 PK/`rotationCount` 제외 — 둘 다 이 함수가 관리)
+ * @param maxRotationCount 이 defId의 최대 로테이션 가능 횟수(`AttendanceBookDef.maxRotationCount`)
+ * @returns 최초 발급/리셋 결과(`previous`로 신규 발급과 리셋을 구분), 이미 ACTIVE거나
+ *   로테이션을 소진했거나 동시 로그인 레이스로 다른 요청이 먼저 처리했으면 null
+ * @author trisakion
+ */
+export async function upsertInstanceForCycle(
+  db: Db,
+  cycle: Omit<AttendanceInstance, "_id" | "rotationCount">,
+  maxRotationCount: number,
+): Promise<CycleUpsertResult | null> {
+  const collection = db.collection<AttendanceInstance>(COLLECTIONS.ATTENDANCE_INSTANCES);
+  const existing = await collection.findOne({ playerId: cycle.playerId, defId: cycle.defId });
+
+  if (!existing) {
+    const doc: AttendanceInstance = { ...cycle, _id: randomUUID(), rotationCount: 1 };
+    try {
+      await collection.insertOne(doc);
+      return { instance: doc, previous: null };
+    } catch (err) {
+      if ((err as MongoServerError).code !== 11000) throw err;
+      return null;
+    }
   }
+
+  if (existing.status !== "COMPLETED") return null;
+  if (existing.rotationCount > maxRotationCount) return null;
+
+  const rotationCount = existing.rotationCount + 1;
+  const update = await collection.updateOne(
+    { _id: existing._id, status: "COMPLETED", rotationCount: existing.rotationCount },
+    { $set: { snapshot: cycle.snapshot, catchupPurchaseCount: 0, startDate: cycle.startDate, endDate: cycle.endDate, attendedDays: [], status: "ACTIVE", issuedAt: cycle.issuedAt, rotationCount } },
+  );
+  if (update.matchedCount === 0) return null;
+
+  return { instance: { ...existing, snapshot: cycle.snapshot, catchupPurchaseCount: 0, startDate: cycle.startDate, endDate: cycle.endDate, attendedDays: [], status: "ACTIVE", issuedAt: cycle.issuedAt, rotationCount }, previous: existing };
 }
 
 /**
@@ -136,40 +165,23 @@ export async function findActiveGeneralInstance(db: Db, playerId: string): Promi
 }
 
 /**
- * 상태와 무관하게 해당 defId의 가장 최근 인스턴스를 찾는다(캐치업 구매 시 "존재하지 않음"과
- * "존재하지만 이미 종료됨"을 구분해서 에러 응답하기 위한 조회 — ACTIVE만 보는 `findActiveInstances`류와
- * 달리 여기선 COMPLETED도 봐야 한다). GENERAL은 같은 defId로 여러 번 로테이션되어 완료된 과거
- * 인스턴스가 여러 건 있을 수 있어 `issuedAt` 내림차순으로 가장 최근 것 하나만 반환한다.
+ * 상태와 무관하게 해당 defId의 인스턴스를 찾는다(캐치업 구매 시 "존재하지 않음"과 "존재하지만
+ * 이미 종료됨"을 구분해서 에러 응답하기 위한 조회 — ACTIVE만 보는 `findActiveInstances`류와
+ * 달리 여기선 COMPLETED도 봐야 한다). `(playerId, defId)`당 문서가 정확히 1개만 존재하므로
+ * (로테이션은 문서 재사용, `upsertInstanceForCycle()` 참고) 정렬 없이 단건 조회로 충분하다.
  * @param db 메인 앱 DB 핸들
  * @param playerId 조회할 플레이어
  * @param defId 대상 출석부
  * @param session 캐치업 구매 트랜잭션 안에서 호출할 때만 전달(mailbox `claimMail()`과 동일
  *   패턴) — 트랜잭션 밖 일반 조회는 생략
- * @returns defId의 가장 최근 인스턴스(상태 무관), 발급된 적 없으면 null
+ * @returns defId의 인스턴스(상태 무관), 발급된 적 없으면 null
  * @author trisakion
+ * @modified 2026-09-18 trisakion 문서 1개 재사용 방식으로 바뀌며 issuedAt 정렬 불필요해짐(JSDoc만 갱신, 동작은 동일)
  */
 export async function findInstanceAnyStatus(db: Db, playerId: string, defId: string, session?: ClientSession): Promise<AttendanceInstance | null> {
   return db
     .collection<AttendanceInstance>(COLLECTIONS.ATTENDANCE_INSTANCES)
     .findOne({ playerId, defId }, { session, sort: { issuedAt: -1 } });
-}
-
-/**
- * 해당 defId로 발급된 인스턴스가(상태 무관) 한 번이라도 있는지 확인한다 — EVENT는 재오픈이
- * 없으므로(23_GAME_DESIGN_ATTENDANCE.md "개요" 절), 로그인 처리 흐름이 신규 발급 대상을
- * 고를 때 "완료된 적 있는 EVENT를 다시 발급"하는 사고를 막는 가드로 쓴다. GENERAL은 이 함수를
- * 쓰지 않는다(로테이션이 정상 동작이라 `findActiveGeneralInstance`의 ACTIVE 여부만 본다).
- * @param db 메인 앱 DB 핸들
- * @param playerId 조회할 플레이어
- * @param defId 대상 출석부
- * @returns 상태 무관 발급 이력이 한 번이라도 있으면 true
- * @author trisakion
- */
-export async function hasAnyInstanceForDef(db: Db, playerId: string, defId: string): Promise<boolean> {
-  const doc = await db
-    .collection<AttendanceInstance>(COLLECTIONS.ATTENDANCE_INSTANCES)
-    .findOne({ playerId, defId }, { projection: { _id: 1 } });
-  return doc !== null;
 }
 
 /**

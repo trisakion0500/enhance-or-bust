@@ -99,8 +99,8 @@ gm_platform의 외부 API 규약(`{ result, message, data: [...] }`, `data`는 �
 
 ### 유저고유번호(playerId)별 감사 로그 조회
 
-감사 로그 5종(`log_auth`/`log_enhancement`/`log_synthesis`/`log_battle_stage`/
-`log_mailbox`, `08_AUDIT_LOG_POLICY.md` 참고)을 컬렉션당 엔드포인트 하나씩 `playerId`로
+감사 로그 6종(`log_auth`/`log_enhancement`/`log_synthesis`/`log_battle_stage`/
+`log_mailbox`/`log_attendance`, `08_AUDIT_LOG_POLICY.md` 참고)을 컬렉션당 엔드포인트 하나씩 `playerId`로
 필터해 조회한다. `playerId`는 **필수**다(오타로 조회 대상이 잘못돼도 "로그 없음"과
 "플레이어 없음"을 구분하도록, 로그 조회 전에 플레이어 존재를 먼저 확인한다). `fromDate`/
 `toDate`(ISO 8601 문자열, 둘 다 선택)로 기간을 좁힐 수 있다 — 둘 다 없으면 최근
@@ -117,6 +117,7 @@ gradeUpgrade/enhanceMaterial) 필드가 달라, gm_platform 그리드가 1차원
 | `POST /gm/get-synthesis-logs` | `log_synthesis` | `materialCardIds`, `success`, `resultCardId`/`resultTemplateId`(gradeUpgrade만), `targetCardId`/`enhancementLevel`(enhanceMaterial만) |
 | `POST /gm/get-battle-stage-logs` | `log_battle_stage` | `stageId`, `clearedStage`, `rewardGold`, `rewardEnhancementStone`, `rewardCardTemplateId`, `mailSourceId` |
 | `POST /gm/get-mailbox-logs` | `log_mailbox` | `mailId`, `title`/`sourceType`/`sourceId`(send만), `attachments.gold`/`attachments.enhancementStone`/`attachments.diamond`/`attachments.cardTemplateIds`(send/claim만), `cutoff`/`deletedCount`(cleanupBatch만) |
+| `POST /gm/get-attendance-logs` | `log_attendance` | `defId`, `type`, `day`/`attachments.*`(attend/catchup_purchase만), `price`(catchup_purchase만), `startDate`/`endDate`(issue만), `rotationCount`/`startDate`/`endDate`/`attendedDays`/`catchupPurchaseCount`(reset만 — 리셋 직전 옛 사이클 최종 상태) |
 
 **요청 body**
 ```json

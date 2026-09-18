@@ -32,7 +32,7 @@
 
 ### `POST /mailbox/:mailId/claim`
 
-우편 첨부물(골드/강화석/다이아/카드)을 수령한다. mailbox+players 컬렉션을 트랜잭션으로
+우편 첨부물(골드/강화석/다이아/카드)을 수령한다. player_mailbox+player 컬렉션을 트랜잭션으로
 묶어 우편 상태 변경과 재화/인벤토리 지급을 원자적으로 처리한다. **인증 필요.**
 
 **Path 파라미터**: `mailId` — 수령할 우편 ID

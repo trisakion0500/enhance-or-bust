@@ -4,6 +4,7 @@ import type { Player } from "./player.js";
  * `Player` 애그리게잇의 영속성 포트. 구현체(Mongo)는 인프라 레이어에 둔다.
  * @author trisakion
  * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
+ * @modified 2026-09-17 trisakion updateLastLoginAt() 추가
  */
 export interface PlayerRepository {
   /**
@@ -44,4 +45,13 @@ export interface PlayerRepository {
    * @returns 플레이어 목록(정렬 순서 보장 없음)
    */
   findAll(limit: number): Promise<Player[]>;
+
+  /**
+   * 마지막 로그인일시만 갱신한다 — Inventory/Economy 등 애그리게잇 원자성 경계에 속한 필드가
+   * 아니라(CLAUDE.md "바운디드 컨텍스트" 절), `save()`의 낙관적 락(version) 없이 무조건
+   * `$set`한다. 동시 요청끼리 값이 살짝 엇갈려도(둘 다 "지금") 실사용에 문제가 없다.
+   * @param playerId 대상 플레이어
+   * @param lastLoginAt 갱신할 시각
+   */
+  updateLastLoginAt(playerId: string, lastLoginAt: Date): Promise<void>;
 }

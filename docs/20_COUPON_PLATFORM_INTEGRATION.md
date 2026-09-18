@@ -46,9 +46,9 @@ coupon_platform은 내용을 모른다 — 이 프로젝트가 스스로 스키�
 반환한 `coupon_code_usage_id`(coupon_platform 쪽에서 같은 소모 건에 항상 동일하게
 반환되는 값)를 그대로 써서, 재시도로 인한 중복 지급을 막는다.
 
-## `coupon_redemptions` — 상태 추적과 크래시 복구
+## `player_coupon` — 상태 추적과 크래시 복구
 
-메인 게임 DB의 `coupon_redemptions` 컬렉션(players/mailbox와 동일한 프리픽스 없는 런타임
+메인 게임 DB의 `player_coupon` 컬렉션(player/player_mailbox와 동일한 player_ 프리픽스가 붙은 런타임
 쓰기 컬렉션, `couponRedemptionStore.ts`)에 `reserve()` 성공 응답을 받는 즉시 상태를
 기록한다(`_id`는 `coupon_code_usage_id`, 필드: `reservedAt`/`mailGrantedAt`/`confirmedAt`).
 
@@ -70,7 +70,7 @@ coupon_platform 관리 콘솔의 집계와 대조해 불일치를 찾는 운영 
 1. `redeemCoupon()` 안에서 `confirmWithRetry()`가 짧은 백오프(1초→3초, 최초 포함 총
    3회)로 즉시 재시도한다 — 그마저 실패해도 요청 자체는 성공으로 끝난다.
 2. `reconcileUnconfirmedCoupons()`가 `COUPON_RECONCILE_CRON`(기본 매일 새벽 4시) 주기로
-   `coupon_redemptions`에서 `confirmedAt: null`인 레코드를 조회해 처리한다 —
+   `player_coupon`에서 `confirmedAt: null`인 레코드를 조회해 처리한다 —
    `mailGrantedAt`이 비어있으면(크래시로 미지급) 먼저 `sendMail()`로 보정 지급하고 나서
    confirm을 보고한다.
 

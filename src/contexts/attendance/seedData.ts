@@ -6,6 +6,10 @@ import type { AttendanceReward } from "./domain/attendanceReward.js";
 export const GENERAL_LAUNCH_DEF_ID = "general_launch";
 /** 신규가입 대상 EVENT 출석부 defId — EVENT라 로테이션 없음(1회성). */
 export const EVENT_NEWBIE_DEF_ID = "event_newbie_attendance";
+/** targetAudience=NEW_USER EVENT 출석부 defId. */
+export const EVENT_NEW_USER_DEF_ID = "event_new_user_welcome";
+/** targetAudience=RETURNING_USER EVENT 출석부 defId — 마지막 로그인 후 7일 이상 미접속이 대상. */
+export const EVENT_RETURNING_USER_DEF_ID = "event_returning_user_comeback";
 
 type AttendanceBookSeed = Omit<AttendanceBookDef, "_id" | "createdAt" | "updatedAt">;
 
@@ -20,6 +24,10 @@ export const ATTENDANCE_BOOK_SEEDS: readonly AttendanceBookSeed[] = [
   {
     defId: GENERAL_LAUNCH_DEF_ID,
     type: "GENERAL",
+    targetAudience: "ALL_USERS",
+    // GENERAL은 상시 라인이라 사실상 무제한 로테이션이 필요 — 무제한 sentinel이 없어 충분히
+    // 큰 수로 대체한다(도메인 필드 JSDoc 참고).
+    maxRotationCount: 999999,
     enrollableStart: new Date("1970-01-01T00:00:00Z"),
     enrollableEnd: new Date("9998-12-31T23:59:59Z"),
     durationDays: 30,
@@ -28,6 +36,29 @@ export const ATTENDANCE_BOOK_SEEDS: readonly AttendanceBookSeed[] = [
   {
     defId: EVENT_NEWBIE_DEF_ID,
     type: "EVENT",
+    targetAudience: "ALL_USERS",
+    maxRotationCount: 0,
+    enrollableStart: new Date("1970-01-01T00:00:00Z"),
+    enrollableEnd: new Date("9998-12-31T23:59:59Z"),
+    durationDays: 7,
+    catchupMaxCount: 3,
+  },
+  {
+    defId: EVENT_NEW_USER_DEF_ID,
+    type: "EVENT",
+    targetAudience: "NEW_USER",
+    maxRotationCount: 0,
+    enrollableStart: new Date("1970-01-01T00:00:00Z"),
+    enrollableEnd: new Date("9998-12-31T23:59:59Z"),
+    durationDays: 7,
+    catchupMaxCount: 3,
+  },
+  {
+    defId: EVENT_RETURNING_USER_DEF_ID,
+    type: "EVENT",
+    targetAudience: "RETURNING_USER",
+    returningInactiveDays: 7,
+    maxRotationCount: 0,
     enrollableStart: new Date("1970-01-01T00:00:00Z"),
     enrollableEnd: new Date("9998-12-31T23:59:59Z"),
     durationDays: 7,

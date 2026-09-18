@@ -7,6 +7,7 @@ import type { Inventory } from "./inventory.js";
  * 경계) 기준으로 이 넷은 이미 하나의 애그리게잇이다 — 그래서 Repository도 컨텍스트별로 쪼개지
  * 않고 `PlayerRepository` 하나로 둔다. 상세는 CLAUDE.md의 바운디드 컨텍스트 절 참고.
  * @author trisakion
+ * @modified 2026-09-17 trisakion 출석부 발동 타입 판정용 createdAt/lastLoginAt 필드 추가
  */
 export class Player {
   /**
@@ -22,6 +23,11 @@ export class Player {
    * @param inventory 보유 카드 목록
    * @param economy 보유 재화
    * @param clearedStage 클리어한 최대 스테이지(기본 0)
+   * @param createdAt 가입일시(`completeRegistration()` 시점 고정, 이후 불변) — 출석부
+   *   `targetAudience=NEW_USER` 판정에 쓰인다(23_GAME_DESIGN_ATTENDANCE.md "발동 타입" 절)
+   * @param lastLoginAt 마지막 로그인일시 — `GET /player/me` 처리마다 갱신된다. 출석부
+   *   `targetAudience=RETURNING_USER` 판정은 이 값이 갱신되기 *전* 시점을 읽어야 하므로,
+   *   호출부(`playerService.ts`)가 갱신 순서를 반드시 지킨다
    */
   constructor(
     public readonly playerId: string,
@@ -34,5 +40,7 @@ export class Player {
     public readonly inventory: Inventory,
     public readonly economy: Economy,
     public clearedStage: number = 0,
+    public readonly createdAt: Date = new Date(),
+    public lastLoginAt: Date = new Date(),
   ) {}
 }
