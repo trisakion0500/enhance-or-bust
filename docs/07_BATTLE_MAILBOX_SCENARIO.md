@@ -21,7 +21,7 @@ sequenceDiagram
     participant B as battleStageRoutes
     participant O as withOptimisticRetry
     participant P as player
-    participant M as player_mailbox (sendMail)
+    participant M as player_mailbox
     participant A as attempts_battle_stage (로그 DB)
 
     C->>B: POST /battle-stage/:stageId/clear
@@ -38,13 +38,13 @@ sequenceDiagram
     O->>A: 승패 무관 매 시도 기록(withOptimisticRetry 결과 이후, 별도 통계 컬렉션)
     O-->>C: 응답(won, rounds, rewardGold 등 — 재화/카드는 아직 지갑에 미반영)
 
-    C->>+M2: GET /mailbox (수령 전 목록 확인)
-    C->>M2: POST /mailbox/:mailId/claim
-    M2->>P: 트랜잭션(player_mailbox 상태 변경 + Economy/Inventory 지급)
+    C->>M: GET /mailbox (수령 전 목록 확인)
+    C->>M: POST /mailbox/:mailId/claim
+    M->>P: 트랜잭션(player_mailbox 상태 변경 + Economy/Inventory 지급)
     alt 인벤토리 슬롯 초과(카드 첨부물 있음)
-        M2-->>C: 7004 INVENTORY_FULL — 우편 미수령 상태로 남음(all-or-nothing)
+        M-->>C: 7004 INVENTORY_FULL — 우편 미수령 상태로 남음(all-or-nothing)
     else
-        M2-->>C: 지급 완료
+        M-->>C: 지급 완료
     end
 ```
 
