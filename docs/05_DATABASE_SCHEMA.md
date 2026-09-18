@@ -54,6 +54,26 @@
 
 **인덱스**: `confirmedAt: 1`(재처리 배치의 `confirmedAt: null` 조회용).
 
+### `player_attendance`
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `_id` (`instanceId`) | string (UUID) | — |
+| `playerId`, `defId` | string | `master_attendance_defs.defId` 참조(FK 없음) |
+| `type` | string | `"GENERAL"` \| `"EVENT"` |
+| `rotationCount` | number | 최초 발급 1, 로테이션마다 +1 |
+| `catchupPurchaseCount` | number | — |
+| `startDate` / `endDate` | string (YYYY-MM-DD) | 발급/종료 기준일(로컬 타임존) |
+| `attendedDays` | number[] | 출석 처리된 일차(1-based), `$addToSet`으로만 추가 |
+| `status` | string | `"ACTIVE"` \| `"COMPLETED"` |
+| `snapshot.durationDays` / `.catchupMaxCount` | number | 발급 시점 def 스냅샷 |
+| `snapshot.rewards[].day` / `.itemType` / `.amount` / `.cardTemplateId` | — | 발급 시점 보상 스냅샷 |
+| `snapshot.catchupPrices[].purchaseIndex` / `.price` | — | 발급 시점 캐치업 가격 스냅샷 |
+| `issuedAt` | Date | — |
+
+**인덱스**: `(playerId, defId)` unique(문서 재사용 — 로테이션마다 새 문서를 쌓지 않음),
+`(playerId, type, status)`.
+
 ### `master_card_templates`
 
 | 필드 | 설명 |
@@ -109,6 +129,42 @@
 | `stageId`, `templateId` | 자연키(문서당 스테이지-카드원형 조합 1개) |
 | `weight` | 가중치 추첨용 |
 
+### `master_attendance_defs`
+
+| 필드 | 설명 |
+|---|---|
+| `_id` | 내부 PK(`defId`와 분리 — `defId`는 gm_platform이 아직 시작 전인 def에 한해 수정 가능) |
+| `defId` | 비즈니스 키 |
+| `type` | `"GENERAL"` \| `"EVENT"` |
+| `targetAudience` | `"ALL_USERS"` \| `"NEW_USER"` \| `"RETURNING_USER"` |
+| `returningInactiveDays` | `RETURNING_USER` 전용(마지막 로그인 후 최소 경과일) |
+| `maxRotationCount` | 재발급(로테이션) 가능 횟수, 0이면 1회성(EVENT 기본) |
+| `enrollableStart` / `enrollableEnd` | 발급 가능 기간 |
+| `durationDays` | 발급 후 진행 일수 |
+| `catchupMaxCount` | 캐치업 최대 구매 가능 횟수 |
+
+**인덱스**: `defId` unique, `(type, enrollableStart, enrollableEnd)`.
+
+### `master_attendance_rewards`
+
+| 필드 | 설명 |
+|---|---|
+| `defId`, `day` | 자연키(문서당 defId-일차-아이템종류 조합 1개, flat row) |
+| `itemType` | `"gold"` \| `"enhancementStone"` \| `"diamond"` \| `"card"` |
+| `amount` | gold/enhancementStone/diamond는 수량, card는 장수 |
+| `cardTemplateId` | `itemType === "card"`일 때만 값 |
+
+**인덱스**: `(defId, day)`.
+
+### `master_attendance_catchup_prices`
+
+| 필드 | 설명 |
+|---|---|
+| `defId`, `purchaseIndex` | 자연키(1부터 시작하는 구매 회차) |
+| `price` | 골드 가격 |
+
+**인덱스**: `(defId, purchaseIndex)` unique.
+
 ### `master_data_meta`
 
 | 필드 | 설명 |
@@ -129,7 +185,7 @@
 
 ## enhance_or_bust_log (로그 DB)
 
-### `log_auth` / `log_enhancement` / `log_synthesis` / `log_battle_stage` / `log_mailbox` / `log_coupon`
+### `log_auth` / `log_enhancement` / `log_synthesis` / `log_battle_stage` / `log_mailbox` / `log_coupon` / `log_attendance`
 
 공통 스키마: `{ actorId, action, changes, occurredAt }` — `changes`는 액션별 자유 형식
 객체(필드 목록은 `08_AUDIT_LOG_POLICY.md`의 액션 표 참고).

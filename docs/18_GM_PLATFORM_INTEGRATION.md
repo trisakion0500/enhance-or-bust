@@ -33,9 +33,10 @@ gm_platform의 apiExecution은 등록된 API를 항상 `POST {api_base_url}{endp
 
 - **플레이어 조회**: `POST /gm/get-player`(단건/전체, 최대 200명), `POST
   /gm/get-player-cards`(보유 카드, playerId 필수)
-- **시드데이터(마스터데이터) 조회**: `master_*` 컬렉션 6종, 컬렉션당 엔드포인트 하나씩
+- **시드데이터(마스터데이터) 조회**: `master_*` 컬렉션 9종, 컬렉션당 엔드포인트 하나씩
   (`get-card-templates`/`get-grade-configs`/`get-enhancement-rules`/
-  `get-synthesis-rules`/`get-stage-configs`/`get-stage-card-drops`) — 서버가 이미 적재해둔
+  `get-synthesis-rules`/`get-stage-configs`/`get-stage-card-drops`/`get-attendance-defs`/
+  `get-attendance-rewards`/`get-attendance-catchup-prices`) — 서버가 이미 적재해둔
   `masterDataCache` 싱글톤을 그대로 읽어 반환한다(DB 재조회 없음). **1차는 조회만
   지원하고 수정/삭제는 아직 없다** — 마스터데이터는 잘못 저장되면 게임 전체 밸런스에
   영향을 줘서, 저장 기능은 컬렉션별 값 검증(확률 0~1, 음수 불가 등) 설계를 먼저 한 뒤

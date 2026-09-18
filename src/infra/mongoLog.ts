@@ -42,6 +42,7 @@ export async function ensureLogIndexes(logDb: Db): Promise<void> {
   await logDb.collection(COLLECTIONS.ATTEMPTS_BATTLE_STAGE).createIndex({ actorId: 1, occurredAt: -1 });
   await logDb.collection(COLLECTIONS.LOG_MAILBOX).createIndex({ actorId: 1, occurredAt: -1 });
   await logDb.collection(COLLECTIONS.LOG_COUPON).createIndex({ actorId: 1, occurredAt: -1 });
+  await logDb.collection(COLLECTIONS.LOG_ATTENDANCE).createIndex({ actorId: 1, occurredAt: -1 });
   // DAU 집계용 — 플레이어당 하루 1건만 남도록 강제(dailyActive.ts의 멱등 삽입이 기대는 제약).
   await logDb.collection(COLLECTIONS.STATS_DAILY_ACTIVE_PLAYERS).createIndex({ playerId: 1, date: 1 }, { unique: true });
 }

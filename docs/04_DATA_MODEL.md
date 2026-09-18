@@ -15,7 +15,9 @@ graph TB
         players["player\n(Player 애그리게잇, 낙관적 락)"]
         mailbox["player_mailbox"]
         couponRedemptions["player_coupon"]
+        attendance["player_attendance"]
         masterData["master_card_templates\nmaster_grade_configs\nmaster_enhancement_rules\nmaster_synthesis_rules\nmaster_stage_configs\nmaster_stage_card_drops"]
+        masterAttendance["master_attendance_defs\nmaster_attendance_rewards\nmaster_attendance_catchup_prices"]
         masterMeta["master_data_meta"]
         systemState["system_change_stream_state\nsystem_batch_runs"]
     end
@@ -26,6 +28,7 @@ graph TB
         logBattle["log_battle_stage"]
         logMail["log_mailbox"]
         logCoupon["log_coupon"]
+        logAttendance["log_attendance"]
         stats["stats_daily_active_players"]
         attempts["attempts_battle_stage"]
     end
@@ -33,7 +36,10 @@ graph TB
     players -. "ClaimMail 트랜잭션" .- mailbox
     players -. "sendMail (멱등, sourceType+sourceId)" .- mailbox
     couponRedemptions -. "reserve 성공 직후 상태 기록 → sendMail(sourceId=usageId)" .- mailbox
+    players -. "GET /player/me 로그인 처리(processLoginAttendance)" .- attendance
+    attendance -. "sendMail(sourceType=attendance/attendance_event)" .- mailbox
     masterData -. "버전 비교" .- masterMeta
+    masterAttendance -. "버전 비교" .- masterMeta
 ```
 
 메인 트랜잭션(player/player_mailbox)은 로그 DB 쓰기 실패와 절대 묶이지 않는다 — 로그 기록은
@@ -90,13 +96,40 @@ player_coupon/{usageId}    (_id = coupon_platform의 coupon_code_usage_id)
   정확히 이어서 처리할 수 있다. 우편의 `sourceId`로 `_id`(usageId)를 그대로 써서 SendMail의
   멱등 발송과 사슬로 엮인다. 상세는 `20_COUPON_PLATFORM_INTEGRATION.md` 참고.
 
+## player_attendance 컬렉션 (별도 컬렉션)
+
+```
+player_attendance/{instanceId}
+├─ playerId, defId                 (복합 unique 인덱스 — (playerId, defId)당 문서 1개만 유지)
+├─ type                            (GENERAL | EVENT)
+├─ snapshot: { durationDays, catchupMaxCount, rewards[], catchupPrices[] }   (발급 시점 스냅샷)
+├─ rotationCount                   (로테이션마다 +1, 최초 발급 1)
+├─ catchupPurchaseCount
+├─ startDate, endDate              (로컬 YYYY-MM-DD)
+├─ attendedDays: number[]          ($addToSet으로만 추가)
+└─ status                          (ACTIVE | COMPLETED)
+```
+
+- 로테이션(GENERAL 재발급, `maxRotationCount` 이내)마다 새 문서를 쌓지 않고 **같은 문서를
+  in-place로 리셋**해 재사용한다 — 컬렉션이 무한히 커지는 것을 막기 위한 설계. 리셋 직전
+  옛 사이클의 최종 상태는 `log_attendance`의 `action:"reset"`에 남는다.
+- 보상 지급(`GET /player/me` 로그인 처리 중 자동 지급, 또는 캐치업 구매)은 player_mailbox로
+  발송한다 — SendMail 멱등키(`sourceType: "attendance"|"attendance_event"`, `sourceId:
+  "{playerId}_{defId}_{day}"`)로 중복 지급을 막는다. 캐치업 구매만 player(골드 차감)+
+  player_mailbox(보상)+player_attendance(출석 처리) 3개 컬렉션을 세션 트랜잭션으로 묶는다.
+- 상세는 `23_GAME_DESIGN_ATTENDANCE.md`.
+
 ## 마스터 데이터 (콘텐츠, `master_` 프리픽스)
 
 `master_card_templates`/`master_grade_configs`/`master_enhancement_rules`/
-`master_synthesis_rules`/`master_stage_configs`/`master_stage_card_drops` — 컨텐츠별 별도
-컬렉션. 각 문서는 독립적인 `version` 필드를 갖고, DB 버전은 `master_data_meta`
+`master_synthesis_rules`/`master_stage_configs`/`master_stage_card_drops`/
+`master_attendance_defs`/`master_attendance_rewards`/`master_attendance_catchup_prices` —
+컨텐츠별 별도 컬렉션. 각 문서는 독립적인 `version` 필드를 갖고, DB 버전은 `master_data_meta`
 (`{content, version}` 1문서씩)에서 관리한다. 서버는 전체를 메모리 싱글톤 캐시로
-로드하고, Change Stream(주 채널) + 주기적 폴링(fallback)으로 리로드한다.
+로드하고, Change Stream(주 채널) + 주기적 폴링(fallback)으로 리로드한다. 출석 정의 3종은
+현재 `npm run seed`(`seedMasterData.ts`)로만 적재된다 — gm_platform 쪽은 조회 API
+(`get-attendance-defs`/`-rewards`/`-catchup-prices`)만 구현되어 있고 저장(쓰기) API는
+아직 없다(`17_GM_API.md`).
 
 ## 시스템 상태 (`system_` 프리픽스, 콘텐츠도 플레이어 데이터도 아님)
 
@@ -107,7 +140,7 @@ player_coupon/{usageId}    (_id = coupon_platform의 coupon_code_usage_id)
 ## 로그 DB (`enhance_or_bust_log`)
 
 - **감사 로그**(상태 변경 액션 추적): `log_auth`/`log_enhancement`/`log_synthesis`/
-  `log_battle_stage`/`log_mailbox`/`log_coupon` — 공통 스키마
+  `log_battle_stage`/`log_mailbox`/`log_coupon`/`log_attendance` — 공통 스키마
   `{actorId, action, changes, occurredAt}`. 상세 정책은 `08_AUDIT_LOG_POLICY.md`.
 - **DAU**: `stats_daily_active_players` — `(playerId, date)` unique, 감사 로그와 무관한
   별도 집계.
