@@ -85,7 +85,7 @@ gm_platform의 외부 API 규약(`{ result, message, data: [...] }`, `data`는 �
 | `POST /gm/get-synthesis-rules` | `master_synthesis_rules` | 없음 | `{ type, sourceGrade?, resultGrade?, materialCount, successRate?, goldCost? }` (`type`에 따라 필드 일부만 채워짐) |
 | `POST /gm/get-stage-configs` | `master_stage_configs` | 없음 | `{ stageId, monsterHp, monsterAttack, monsterDefense, monsterElement, rewardGold, rewardExp, enhancementStoneDropRate, enhancementStoneMin, enhancementStoneMax, farmRewardRate, cardDropRateFirstClear, cardDropRateFarm }` |
 | `POST /gm/get-stage-card-drops` | `master_stage_card_drops` | 없음 | `{ stageId, templateId, weight }` |
-| `POST /gm/get-attendance-defs` | `master_attendance_defs` | 없음 | `{ defId, type, targetAudience, returningInactiveDays?, maxRotationCount, enrollableStart, enrollableEnd, durationDays, catchupMaxCount }` |
+| `POST /gm/get-attendance-defs` | `master_attendance_defs` | 없음 | `{ defId, name, type, targetAudience, returningInactiveDays?, maxRotationCount, enrollableStart, enrollableEnd, durationDays, catchupMaxCount }` |
 | `POST /gm/get-attendance-rewards` | `master_attendance_rewards` | `{ defId? }` | `{ defId, day, itemType, amount, cardTemplateId }` |
 | `POST /gm/get-attendance-catchup-prices` | `master_attendance_catchup_prices` | `{ defId? }` | `{ defId, purchaseIndex, price }` |
 

@@ -5,6 +5,7 @@ import { renderSynthesis } from "./synthesis.js";
 import { renderBattle } from "./battle.js";
 import { renderMailbox } from "./mailbox.js";
 import { renderCoupon } from "./coupon.js";
+import { renderAttendance } from "./attendance.js";
 
 /** 앱 전역 공유 상태 — 각 탭 렌더 함수가 이 하나를 읽는다. */
 const state = { player: null };
@@ -39,6 +40,7 @@ async function refreshPlayer() {
   renderSynthesis(state, refreshPlayer);
   renderBattle(state, refreshPlayer);
   await renderMailbox(state, refreshPlayer);
+  await renderAttendance(state, refreshPlayer);
   renderCoupon(state, refreshPlayer);
 }
 
@@ -140,6 +142,13 @@ async function enterGame() {
   await refreshPlayer();
   showScreen("game");
   document.getElementById("logoutButton").addEventListener("click", onLogout);
+
+  // attendanceNotice는 그날 첫 GET /player/me에서만 채워진다(이후 호출은 멱등 스킵) — 한 번만 안내됨.
+  const { granted, generalStarted } = state.player.attendanceNotice;
+  const lines = [];
+  if (generalStarted) lines.push("새로운 출석부가 시작됐습니다!");
+  if (granted.length) lines.push(`출석 보상이 우편함으로 지급됐습니다 (${granted.length}건)`);
+  if (lines.length) alert(lines.join("\n"));
 }
 
 /** 페이지 진입점 — 가입 보류/로그인 여부를 확인해 닉네임 입력/게임/로그인 화면으로 분기한다. */

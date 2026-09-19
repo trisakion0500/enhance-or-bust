@@ -13,8 +13,8 @@ loginScreen     구글/페이스북 로그인 버튼
 registerScreen  닉네임 입력 폼(신규 가입, 디폴트는 플랫폼 제공 닉네임)
 gameScreen
   header        닉네임/골드/강화석/다이아/clearedStage/로그아웃
-  nav (탭)      인벤토리 / 강화 / 합성 / 전투 / 우편함 / 쿠폰
-  tabPanel × 6  선택된 탭만 보이고 나머지는 hidden
+  nav (탭)      인벤토리 / 강화 / 합성 / 전투 / 우편함 / 출석 / 쿠폰
+  tabPanel × 7  선택된 탭만 보이고 나머지는 hidden
 ```
 
 `GET /player/me` 하나로 로그인 여부 확인과 게임 화면 초기 데이터(재화/clearedStage/
@@ -31,11 +31,15 @@ gameScreen
 | `public/js/synthesis.js` | Synthesis — 등급 승급 합성 + 강화 재료 합성 두 폼(체크박스 선택 시 남은 장수/성공률/비용 힌트 갱신) |
 | `public/js/battle.js` | Battle-Stage — 스테이지 번호 입력 + 인벤토리에서 최대 `squadMaxSize`장 체크박스 스쿼드 선택 + 도전 버튼 → 라운드 로그/승패/보상 텍스트 표시 |
 | `public/js/mailbox.js` | Mailbox — 목록 + 수령/삭제 버튼, 실패(특히 7004 인벤토리 초과) 메시지 표시 |
+| `public/js/attendance.js` | Attendance — `GET /attendance`로 일반/이벤트 안쪽 탭 + 출석 달력(날짜 상태·보상은 서버 계산 결과를 그대로 렌더, 프론트 직접 계산 없음) + 놓친 날짜 캐치업 구매 버튼(이번 가격/남은 횟수/골드 부족 시 비활성). 구매 후 결과 메시지는 재렌더 뒤에 채운다 |
 | `public/js/coupon.js` | Coupon — 쿠폰 코드 입력 폼, 사용 결과 메시지 표시(보상은 우편 경유 지급이라 수령은 우편함 탭에서) |
 
 - 상태를 바꾸는 액션(강화/합성/전투 도전/우편 수령) 뒤에는 `app.js`의
   `refreshPlayer()` 하나가 헤더/인벤토리/전투/우편함 패널을 전부 다시 그린다 — 각
   패널이 따로 로컬 상태를 들고 있지 않다.
+- 로그인 직후 `app.js`의 `enterGame()`이 `GET /player/me` 응답의 `attendanceNotice`를 보고
+  자동 지급된 출석 보상/"새로운 출석부가 시작됐습니다" 안내를 `alert()`로 한 번 띄운다
+  (그날 첫 호출에서만 값이 채워짐 — `25_ATTENDANCE_API.md`).
 - 합성 규칙(소재 장수/성공률/골드)은 프론트에 하드코딩하지 않고 `GET /player/me`
   응답의 `synthesisRules`(마스터 데이터, `squadMaxSize`와 동일 패턴)를 그대로 쓴다 —
   최종 검증은 항상 서버가 한다(서버 권위 원칙).

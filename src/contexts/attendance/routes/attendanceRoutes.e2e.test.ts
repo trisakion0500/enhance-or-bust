@@ -158,6 +158,7 @@ test("GET /attendance는 오늘 상태와 캐치업 구매 정보를 함께 보�
     const { body } = await getAttendanceStatus(cookie);
 
     assert.equal(body.general.defId, GENERAL_LAUNCH_DEF_ID);
+    assert.equal(body.general.name, "일일 출석");
     assert.equal(body.general.days.length, 30);
     assert.equal(body.general.days[0].state, "TODAY"); // 1일차, 오늘 출석 처리됨
     assert.deepEqual(body.general.catchup, { remainingPurchases: 3, nextPrice: 200, canAfford: true });
@@ -182,8 +183,9 @@ test("캐치업 구매에 성공하면 골드가 차감되고 보상이 우편�
     assert.equal(player!.economy.gold, 10000 - 200); // 캐치업 가격만 즉시 차감, 보상은 우편으로 별도 수령
 
     const { body: mailBody } = await listMails(cookie);
-    const catchupMail = mailBody.mails.find((m: { title: string }) => m.title === "출석 보상(캐치업)");
+    const catchupMail = mailBody.mails.find((m: { title: string }) => m.title.includes("(캐치업)"));
     assert.ok(catchupMail);
+    assert.equal(catchupMail.title, "[일일 출석] 1회차 2일차 출석 보상(캐치업)");
     assert.deepEqual(catchupMail.attachments, { gold: 200 });
 
     const { body: statusBody } = await getAttendanceStatus(cookie);

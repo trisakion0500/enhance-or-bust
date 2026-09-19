@@ -23,6 +23,7 @@ type AttendanceBookSeed = Omit<AttendanceBookDef, "_id" | "createdAt" | "updated
 export const ATTENDANCE_BOOK_SEEDS: readonly AttendanceBookSeed[] = [
   {
     defId: GENERAL_LAUNCH_DEF_ID,
+    name: "일일 출석",
     type: "GENERAL",
     targetAudience: "ALL_USERS",
     // GENERAL은 상시 라인이라 사실상 무제한 로테이션이 필요 — 무제한 sentinel이 없어 충분히
@@ -35,6 +36,7 @@ export const ATTENDANCE_BOOK_SEEDS: readonly AttendanceBookSeed[] = [
   },
   {
     defId: EVENT_NEWBIE_DEF_ID,
+    name: "신규 가입 출석 이벤트",
     type: "EVENT",
     targetAudience: "ALL_USERS",
     maxRotationCount: 0,
@@ -45,6 +47,7 @@ export const ATTENDANCE_BOOK_SEEDS: readonly AttendanceBookSeed[] = [
   },
   {
     defId: EVENT_NEW_USER_DEF_ID,
+    name: "신규 유저 환영 출석",
     type: "EVENT",
     targetAudience: "NEW_USER",
     maxRotationCount: 0,
@@ -55,6 +58,7 @@ export const ATTENDANCE_BOOK_SEEDS: readonly AttendanceBookSeed[] = [
   },
   {
     defId: EVENT_RETURNING_USER_DEF_ID,
+    name: "복귀 유저 출석",
     type: "EVENT",
     targetAudience: "RETURNING_USER",
     returningInactiveDays: 7,

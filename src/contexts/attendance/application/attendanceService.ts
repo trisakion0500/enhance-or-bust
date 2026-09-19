@@ -76,6 +76,8 @@ export interface AttendanceCatchupView {
  */
 export interface AttendanceBookView {
   defId: string;
+  /** 표시용 출석부 이름(발급 시점 스냅샷, 없으면 defId) */
+  name: string;
   type: AttendanceBookType;
   startDate: string;
   endDate: string;
@@ -96,6 +98,7 @@ export interface AttendanceStatusView {
 /** 발급 시점 def/보상/캐치업가격을 스냅샷으로 굳힌다(시드 스냅샷 원칙 — def 원본이 나중에 바뀌어도 무관). */
 function buildSnapshot(def: AttendanceBookDef): AttendanceInstanceSnapshot {
   return {
+    name: def.name,
     durationDays: def.durationDays,
     catchupMaxCount: def.catchupMaxCount,
     rewards: masterDataCache
@@ -116,6 +119,16 @@ function toAttachments(rows: AttendanceInstanceSnapshot["rewards"]): MailAttachm
       attachments.cardTemplateIds = [...(attachments.cardTemplateIds ?? []), ...Array<string>(row.amount).fill(row.cardTemplateId)];
   }
   return attachments;
+}
+
+/** 표시용 출석부 이름 — 발급 스냅샷 우선, 이름 추가 전 발급분은 현재 마스터 def의 이름, 그것도 없으면 defId. */
+function bookName(instance: AttendanceInstance): string {
+  return instance.snapshot.name ?? masterDataCache.getAllAttendanceBookDefs().find(d => d.defId === instance.defId)?.name ?? instance.defId;
+}
+
+/** 출석 우편 제목 — 어떤 출석부의 몇 회차 며칠차 보상인지 드러낸다. */
+function mailTitle(instance: AttendanceInstance, day: number, suffix = ""): string {
+  return `[${bookName(instance)}] ${instance.rotationCount}회차 ${day}일차 출석 보상${suffix}`;
 }
 
 /** Mailbox 멱등키의 sourceType — GENERAL/EVENT 구분(23_GAME_DESIGN_ATTENDANCE.md "원자성/트랜잭션 전략" 표). */
@@ -162,7 +175,7 @@ async function grantTodayIfNeeded(
 
   const attachments = toAttachments(instance.snapshot.rewards.filter(r => r.day === currentDay));
   const sourceId = `${playerId}_${instance.defId}_${currentDay}`;
-  const inserted = await sendMail(playerId, "출석 보상", attachments, attendanceSourceType(instance.type), sourceId, mailboxRepository);
+  const inserted = await sendMail(playerId, mailTitle(instance, currentDay), attachments, attendanceSourceType(instance.type), sourceId, mailboxRepository);
   await addAttendedDay(db, instance._id, currentDay);
   if (inserted)
     await writeAuditLog(COLLECTIONS.LOG_ATTENDANCE, {
@@ -316,6 +329,7 @@ function buildBookView(instance: AttendanceInstance, today: string, gold: number
 
   return {
     defId: instance.defId,
+    name: bookName(instance),
     type: instance.type,
     startDate: instance.startDate,
     endDate: instance.endDate,
@@ -381,7 +395,7 @@ export async function purchaseCatchup(
 ): Promise<{ attachments: MailAttachments; price: number }> {
   const today = todayDateString();
   const session = mongoClient.startSession();
-  let result: { attachments: MailAttachments; price: number; type: AttendanceBookType } | undefined;
+  let result: { attachments: MailAttachments; price: number; type: AttendanceBookType; title: string } | undefined;
 
   try {
     await session.withTransaction(async () => {
@@ -411,10 +425,11 @@ export async function purchaseCatchup(
       const attachments = toAttachments(instance.snapshot.rewards.filter(r => r.day === day));
       const sourceId = `${playerId}_${defId}_${day}`;
       const createdAt = new Date();
+      const title = mailTitle(instance, day, "(캐치업)");
       const mail = new Mail(
         randomUUID(),
         playerId,
-        "출석 보상(캐치업)",
+        title,
         attachments,
         attendanceSourceType(instance.type),
         sourceId,
@@ -429,7 +444,7 @@ export async function purchaseCatchup(
       await addAttendedDay(db, instance._id, day, session);
       await incrementCatchupCount(db, instance._id, session);
 
-      result = { attachments, price, type: instance.type };
+      result = { attachments, price, type: instance.type, title };
     });
   } finally {
     await session.endSession();
@@ -443,7 +458,7 @@ export async function purchaseCatchup(
   await writeAuditLog(COLLECTIONS.LOG_MAILBOX, {
     actorId: playerId,
     action: "send",
-    changes: { title: "출석 보상(캐치업)", attachments: result!.attachments, sourceType: attendanceSourceType(result!.type), sourceId: `${playerId}_${defId}_${day}` },
+    changes: { title: result!.title, attachments: result!.attachments, sourceType: attendanceSourceType(result!.type), sourceId: `${playerId}_${defId}_${day}` },
   });
 
   return { attachments: result!.attachments, price: result!.price };

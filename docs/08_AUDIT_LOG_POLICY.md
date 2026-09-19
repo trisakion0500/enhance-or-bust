@@ -8,7 +8,7 @@
 상태를 바꾸는 모든 액션에 대해 "언제/누가/어떤 액션/어떤 내용이 추가·수정·삭제됐는지"를
 남긴다. 로그 DB(`enhance_or_bust_log`, 앱 DB와 물리 분리 — `04_DATA_MODEL.md`)에
 컨텐츠(도메인)별 컬렉션을 분리해서 둔다: `log_auth`/`log_enhancement`/`log_synthesis`/
-`log_battle_stage`/`log_mailbox`/`log_coupon`.
+`log_battle_stage`/`log_mailbox`/`log_coupon`/`log_attendance`.
 
 ## 공통 스키마
 
@@ -63,10 +63,15 @@
 | `log_mailbox` | `delete` | mailId | 구현됨 |
 | `log_mailbox` | `cleanupBatch` | actorId="SYSTEM", cutoff, deletedCount(0건이면 로그도 생략) | 구현됨 |
 | `log_coupon` | `redeem` | code, usageId, attachments(지급된 첨부) — 정상 플로우와 재처리 배치의 크래시 보정 지급 둘 다 이 액션으로 기록 | 구현됨 |
+| `log_attendance` | `attend` | defId, type, day, attachments(지급된 첨부) — 로그인 시 자동 지급, 멱등 스킵은 기록 안 함 | 구현됨 |
+| `log_attendance` | `catchup_purchase` | defId, day, price, attachments(지급된 첨부) | 구현됨 |
+| `log_attendance` | `issue` | defId, type, startDate, endDate(최초 발급 1회만) | 구현됨 |
+| `log_attendance` | `reset` | defId, type, rotationCount, startDate, endDate, attendedDays, catchupPurchaseCount(로테이션 시 문서를 in-place로 리셋하기 직전, 덮어써지는 옛 사이클의 최종 상태) | 구현됨 |
 | `stats_daily_active_players` | (감사 로그 아님, DAU 전용) | {playerId, date} 유니크 인덱스, 하루 1건 | 구현됨 |
 | `attempts_battle_stage` | `attempt` | (감사 로그 아님, 통계 전용) stageId, squadCardIds, squadTemplateIds, won, clearedStage | 구현됨 |
 
 ## gm_platform에서의 조회
 
-playerId별로 위 5개 감사 로그 컬렉션을 각각 조회하는 API가 있다 —
+playerId별로 위 감사 로그 컬렉션(`log_auth`/`log_enhancement`/`log_synthesis`/
+`log_battle_stage`/`log_mailbox`/`log_attendance`)을 각각 조회하는 API가 있다 —
 `18_GM_PLATFORM_INTEGRATION.md`와 `17_GM_API.md` 참고.

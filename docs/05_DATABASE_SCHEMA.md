@@ -66,6 +66,7 @@
 | `startDate` / `endDate` | string (YYYY-MM-DD) | 발급/종료 기준일(로컬 타임존) |
 | `attendedDays` | number[] | 출석 처리된 일차(1-based), `$addToSet`으로만 추가 |
 | `status` | string | `"ACTIVE"` \| `"COMPLETED"` |
+| `snapshot.name` | string? | 발급 시점 출석부 이름(이름 추가 이전 발급분엔 없음 — 표시 시 현재 마스터 def 이름 → defId 순 폴백) |
 | `snapshot.durationDays` / `.catchupMaxCount` | number | 발급 시점 def 스냅샷 |
 | `snapshot.rewards[].day` / `.itemType` / `.amount` / `.cardTemplateId` | — | 발급 시점 보상 스냅샷 |
 | `snapshot.catchupPrices[].purchaseIndex` / `.price` | — | 발급 시점 캐치업 가격 스냅샷 |
@@ -135,6 +136,7 @@
 |---|---|
 | `_id` | 내부 PK(`defId`와 분리 — `defId`는 gm_platform이 아직 시작 전인 def에 한해 수정 가능) |
 | `defId` | 비즈니스 키 |
+| `name` | 표시용 출석부 이름(우편 제목/출석 화면 — 키가 아니라 중복/수정 가능) |
 | `type` | `"GENERAL"` \| `"EVENT"` |
 | `targetAudience` | `"ALL_USERS"` \| `"NEW_USER"` \| `"RETURNING_USER"` |
 | `returningInactiveDays` | `RETURNING_USER` 전용(마지막 로그인 후 최소 경과일) |

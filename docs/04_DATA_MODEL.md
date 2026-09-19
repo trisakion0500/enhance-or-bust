@@ -102,7 +102,7 @@ player_coupon/{usageId}    (_id = coupon_platform의 coupon_code_usage_id)
 player_attendance/{instanceId}
 ├─ playerId, defId                 (복합 unique 인덱스 — (playerId, defId)당 문서 1개만 유지)
 ├─ type                            (GENERAL | EVENT)
-├─ snapshot: { durationDays, catchupMaxCount, rewards[], catchupPrices[] }   (발급 시점 스냅샷)
+├─ snapshot: { name, durationDays, catchupMaxCount, rewards[], catchupPrices[] }   (발급 시점 스냅샷)
 ├─ rotationCount                   (로테이션마다 +1, 최초 발급 1)
 ├─ catchupPurchaseCount
 ├─ startDate, endDate              (로컬 YYYY-MM-DD)

@@ -23,6 +23,9 @@ export interface AttendanceBookDef {
   _id: string;
   /** 비즈니스 키 — DB 레벨 unique 인덱스 */
   defId: string;
+  /** 표시용 출석부 이름(우편 제목/출석 화면) — defId는 보상 구성이 바뀔 때마다 새로 발급하는 키라
+   * 사람이 읽는 이름을 별도로 둔다. 키가 아니므로 중복/수정 가능. */
+  name: string;
   type: AttendanceBookType;
   /** 발동 타입(대상자 조건) — 기본 ALL_USERS */
   targetAudience: AttendanceTargetAudience;

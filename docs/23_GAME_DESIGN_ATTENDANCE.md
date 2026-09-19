@@ -40,10 +40,19 @@ defId를 반복 재발급"하는 것이지 "새 defId를 여는" 기능이 아�
 
 ### 출석부 정의(시드데이터)
 
-**헤더**: `defId`(비즈니스 키), `type`(GENERAL/EVENT), `targetAudience`(발동 타입 —
+**헤더**: `defId`(비즈니스 키), `name`(표시용 이름 — 아래 참고), `type`(GENERAL/EVENT), `targetAudience`(발동 타입 —
 아래 절 참고), `returningInactiveDays`(선택, `targetAudience=RETURNING_USER`일 때만
 사용), `maxRotationCount`(로테이션 가능 횟수 — 아래 절 참고), `enrollableStart`,
 `enrollableEnd`, `durationDays`, 캐치업 정책.
+
+### 표시용 이름(`name`)
+
+`defId`는 키이고, 운영 중 보상 구성이 바뀌면 새 출석부(새 defId)를 발급하는 식으로
+쓰므로 사람이 읽는 이름을 별도 필드로 둔다(예: defId `general_launch` → name "일일 출석").
+키가 아니라서 중복돼도 무방하다. 발급 시점에 인스턴스 `snapshot.name`으로 복사되어 이후
+def 이름이 바뀌어도 이미 발급된 인스턴스/우편은 영향받지 않는다(이름 추가 이전에 발급된
+인스턴스는 표시할 때 현재 마스터 def의 이름 → defId 순으로 폴백). 출석 화면 제목과 우편 제목에 쓰인다:
+`[{name}] {rotationCount}회차 {day}일차 출석 보상` (캐치업 구매는 끝에 `(캐치업)`).
 
 ### 로테이션 가능 횟수(`maxRotationCount`)
 
@@ -150,8 +159,8 @@ defId로 지금까지 발급된 횟수, 최초 발급=1, 리셋마다 +1), 캐�
 `durationDays`가 관리자가 자유롭게 정하는 값이라 상한을 미리 못 박기 애매해(상한 없이
 가려면 BigInt 처리 필요) 기각했다.
 
-`durationDays`는 `attendance_book_defs`에 명시 필드로 유지하되, gm_platform 저장
-시점에 `attendance_rewards`의 해당 `defId` 최대 `day` 값과 일치하는지 검증한다
+`durationDays`는 `master_attendance_defs`에 명시 필드로 유지하되, gm_platform 저장
+시점에 `master_attendance_rewards`의 해당 `defId` 최대 `day` 값과 일치하는지 검증한다
 (불일치 시 저장 거부) — `catchupMaxCount` ↔ 캐치업 가격 row 개수 검증과 동일한 패턴.
 
 ## 캐치업(놓친 날짜 구매) 기능
@@ -169,7 +178,7 @@ defId로 지금까지 발급된 횟수, 최초 발급=1, 리셋마다 +1), 캐�
 - 재화는 골드만 사용(유무료 구분 없음).
 - 가격은 "몇 일차를 사는지"가 아니라 **몇 번째 구매인지**에 붙는다 — 회차별
   flat row로 별도 컬렉션에 명시 등록(`defId` + `purchaseIndex`당 가격 하나).
-- `attendance_book_defs.catchupMaxCount`와 가격 row 개수가 항상 일치해야 한다 —
+- `master_attendance_defs.catchupMaxCount`와 가격 row 개수가 항상 일치해야 한다 —
   gm_platform 저장 시점에 검증(불일치 시 거부), 발급 로직에서도 방어적으로
   `min(catchupMaxCount, 실제 row 개수)` 처리를 권장.
 - GENERAL 로테이션/EVENT 종료로 새 인스턴스가 발급되면 구매 횟수도 자동 리셋(인스턴스
@@ -325,7 +334,7 @@ GENERAL/EVENT 별도 탭. EVENT 다건 진행 시 정렬은 `endDate` 오름차�
 ### API
 
 최소 2개: 인스턴스별 날짜 상태/보상/캐치업 정보 조회용 1개, 캐치업 구매 처리용
-1개. 상세 스펙은 구현 착수 시 별도 API 문서(`24_ATTENDANCE_API.md` 등)로 확정한다.
+1개. 상세 스펙은 `25_ATTENDANCE_API.md` 참고.
 
 ## gm_platform 관리 규칙 요약
 
@@ -352,5 +361,5 @@ GENERAL/EVENT 별도 탭. EVENT 다건 진행 시 정렬은 `endDate` 오름차�
 - [ ] 날짜별 보상 아이템/수량 실제 값(밸런싱)
 - [ ] GENERAL 최초 시드 데이터(첫 라인) 실제 값
 - [ ] gm_platform 관리화면 상세 UI 스펙
-- [ ] 실제 컬렉션 스키마(필드 BSON 타입, 인덱스 설계)
-- [ ] 감사 로그 정책 반영 여부(`08_AUDIT_LOG_POLICY.md`)
+- [x] 실제 컬렉션 스키마(필드 BSON 타입, 인덱스 설계) — `05_DATABASE_SCHEMA.md`
+- [x] 감사 로그 정책 반영 여부 — `08_AUDIT_LOG_POLICY.md`

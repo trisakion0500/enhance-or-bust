@@ -7,6 +7,8 @@ import type { AttendanceRewardItemType } from "./attendanceReward.js";
  * @author trisakion
  */
 export interface AttendanceInstanceSnapshot {
+  /** 발급 시점 출석부 이름 — 이름 추가 이전에 발급된 인스턴스엔 없을 수 있어 표시할 때 현재 마스터 def 이름 → defId 순으로 폴백한다. */
+  name?: string;
   durationDays: number;
   catchupMaxCount: number;
   rewards: Array<{ day: number; itemType: AttendanceRewardItemType; amount: number; cardTemplateId: string | null }>;
