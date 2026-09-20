@@ -8,10 +8,15 @@ import { COLLECTIONS } from "../shared-kernel/collectionNames.js";
  * 계정/커넥션을 쓴다 — 로그 기록 실패가 메인 트랜잭션에 영향을 주지 않게 하기 위함.
  * @author trisakion
  * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
+ * @modified 2026-09-20 trisakion 드라이버 기본 serverSelectionTimeoutMS(30초)를 12초로
+ *   단축(mongo.ts와 동일 이유) — 이 클라이언트는 dbHealthGate 대상이 아니라 상태 추적은
+ *   추가하지 않는다
  */
 export const mongoLogClient = new MongoClient(config.mongoUri, {
   auth: { username: config.mongoAppUsernameLog, password: config.mongoAppPasswordLog },
   authSource: config.mongoAppDatabaseLog,
+  // mongo.ts와 동일한 이유·동일 기준(12초)으로 줄인다.
+  serverSelectionTimeoutMS: 12000,
 });
 
 /**

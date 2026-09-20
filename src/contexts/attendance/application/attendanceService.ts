@@ -385,6 +385,8 @@ export async function getAttendanceStatus(playerId: string, db: Db, playerReposi
  *   구매 횟수를 소진했으면 ATTENDANCE.CATCHUP_LIMIT_EXCEEDED, 골드가 부족하면
  *   ATTENDANCE.GOLD_INSUFFICIENT
  * @author trisakion
+ * @modified 2026-09-20 trisakion catchup_purchase 감사 로그의 changes에 type 필드 추가
+ *   — CLAUDE.md 감사 로그 표 및 attend/issue/reset 등 다른 출석 액션과 정합
  */
 export async function purchaseCatchup(
   playerId: string,
@@ -453,7 +455,7 @@ export async function purchaseCatchup(
   await writeAuditLog(COLLECTIONS.LOG_ATTENDANCE, {
     actorId: playerId,
     action: "catchup_purchase",
-    changes: { defId, day, price: result!.price, attachments: result!.attachments },
+    changes: { defId, type: result!.type, day, price: result!.price, attachments: result!.attachments },
   });
   await writeAuditLog(COLLECTIONS.LOG_MAILBOX, {
     actorId: playerId,

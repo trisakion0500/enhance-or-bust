@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { redisClient } from "../../../infra/redis.js";
+import { redisCall, redisClient } from "../../../infra/redis.js";
 import { redisPendingRegistrationKey } from "../../../shared-kernel/redisKeys.js";
 
 /** 가입 보류 상태가 유지되는 시간(초) — CSRF state 쿠키(5분)보다 넉넉하게, 닉네임 입력에 걸리는 시간을 감안해 10분. */
@@ -23,10 +23,12 @@ export interface PendingRegistration {
  * @param profile Player 생성에 필요한 소셜 프로필
  * @returns 발급된 가입 보류 토큰
  * @author trisakion
+ * @modified 2026-09-20 trisakion Redis 명령을 `redisCall()`로 감싸 다운 상태에서 무기한
+ *   대기하지 않도록 수정
  */
 export async function createPendingRegistration(profile: PendingRegistration): Promise<string> {
   const token = randomUUID();
-  await redisClient.set(redisPendingRegistrationKey(token), JSON.stringify(profile), { EX: PENDING_REGISTRATION_TTL_SEC });
+  await redisCall(redisClient.set(redisPendingRegistrationKey(token), JSON.stringify(profile), { EX: PENDING_REGISTRATION_TTL_SEC }));
   return token;
 }
 
@@ -35,9 +37,11 @@ export async function createPendingRegistration(profile: PendingRegistration): P
  * @param token 가입 보류 토큰
  * @returns 저장된 프로필, 없거나 만료됐으면 undefined
  * @author trisakion
+ * @modified 2026-09-20 trisakion Redis 명령을 `redisCall()`로 감싸 다운 상태에서 무기한
+ *   대기하지 않도록 수정
  */
 export async function resolvePendingRegistration(token: string): Promise<PendingRegistration | undefined> {
-  const raw = await redisClient.get(redisPendingRegistrationKey(token));
+  const raw = await redisCall(redisClient.get(redisPendingRegistrationKey(token)));
   return raw ? (JSON.parse(raw) as PendingRegistration) : undefined;
 }
 
@@ -45,7 +49,9 @@ export async function resolvePendingRegistration(token: string): Promise<Pending
  * 가입 보류 토큰을 지운다(가입 완료 또는 포기). 존재하지 않아도 무해하게 넘어간다(멱등).
  * @param token 가입 보류 토큰
  * @author trisakion
+ * @modified 2026-09-20 trisakion Redis 명령을 `redisCall()`로 감싸 다운 상태에서 무기한
+ *   대기하지 않도록 수정
  */
 export async function deletePendingRegistration(token: string): Promise<void> {
-  await redisClient.del(redisPendingRegistrationKey(token));
+  await redisCall(redisClient.del(redisPendingRegistrationKey(token)));
 }

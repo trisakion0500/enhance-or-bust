@@ -507,6 +507,23 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
     대역(11000번대, `COUPON_ERROR_MAP`)으로 옮겨서 응답한다 — gm_platform(10000번대)과 동일하게
     새 연동마다 새 대역을 하나씩 쓴다(`errorEntry.ts` 대역 목록 참고)
   - `log_coupon`(감사 로그, action=`redeem`)도 구현됨 — "감사 로그 / DAU 정책" 절 표 참고
+- MongoDB/Redis 다운 상황에 대한 회복력 보강 — 기존엔 Redis 연결이 끊긴 동안 들어온 명령이 재연결까지
+  기본적으로 무기한 큐잉 대기했고(node-redis 기본 동작), MongoDB도 드라이버 기본
+  `serverSelectionTimeoutMS`(30초)만큼 요청 하나가 걸려있었다. 이제 두 클라이언트 다 "다운 판정"
+  개념을 도입했다(`src/infra/redis.ts`의 `isRedisHealthy()`/`src/infra/mongo.ts`의
+  `isMongoHealthy()`) — 연결이 끊긴 뒤 12초(VM 재부팅처럼 오래 걸리는 다운과 수 초짜리 네트워크
+  순단 사이의 절충값)를 넘기면 다운으로 판정하고, 그 안에 복구되면 순단을 버틴 것으로 보고 그대로
+  처리를 이어간다. `src/shared-kernel/dbHealthGate.ts` 미들웨어가 이 판정을 보고 다운 중엔 라우트
+  핸들러까지 보내지 않고 즉시 503(`COMMON.SERVICE_UNAVAILABLE`, 신규 에러코드 1004)으로 거부한다
+  (circuit breaker) — 다운 중 들어오는 모든 신규 요청이 개별적으로 타임아웃을 기다리며 자원을
+  붙들고 있는 것을 막기 위함. Redis 쪽은 재연결 전략(`reconnectStrategy`)이 절대 포기하지 않고
+  계속 재시도하도록 했다(포기(Error 반환) 시 node-redis가 재연결을 영구 중단해 자동 복구가 안
+  되는 것을 실제로 재현해서 확인함) — 그래서 복구되면 사람 개입 없이 자동으로 다시 열린다. Redis
+  명령 자체도 무기한 대기하지 않도록 `redisCall()`(같은 12초 상한)로 모든 호출부
+  (`sessionStore.ts`/`pendingRegistrationStore.ts`/`redisLock.ts`)를 감쌌다. 로그 DB
+  (`mongoLogClient`)는 이 다운 판정/서킷브레이커 대상이 아니다 — 로그 DB 장애가 메인 흐름을
+  막으면 안 된다는 기존 로깅 원칙과 상충하기 때문. 실제로 Docker 컨테이너를 내렸다 올려
+  검증함(다운 판정 후 즉시 503, 복구 후 수 초 내 자동으로 다시 열림)
 
 ## MongoDB 데이터 모델링 / 원자성 전략 (확정)
 

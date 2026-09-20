@@ -1,5 +1,6 @@
 import express from "express";
 import type { Db } from "mongodb";
+import { dbHealthGate } from "./shared-kernel/dbHealthGate.js";
 import { errorHandler } from "./shared-kernel/errorHandler.js";
 import { requestId, requestLogger } from "./shared-kernel/requestLogger.js";
 import type { PlayerRepository } from "./contexts/player/domain/playerRepository.js";
@@ -23,6 +24,9 @@ import { createSynthesisRoutes } from "./contexts/synthesis/routes/synthesisRout
  * @returns 설정이 끝난 Express `app` 인스턴스
  * @author trisakion
  * @modified 2026-09-17 trisakion 출석보상 연동 — createPlayerRoutes 호출부에 mailboxRepository/db 전달, createAttendanceRoutes 라우터 등록 추가
+ * @modified 2026-09-20 trisakion DB/Redis 다운 시 신규 요청을 즉시 503으로 거부하는
+ *   `dbHealthGate` 미들웨어 등록(circuit breaker) — /health와 정적 파일보다는 뒤,
+ *   실제 API 라우터 전부보다는 앞에 위치
  */
 export function createServer(playerRepository: PlayerRepository, mailboxRepository: MailboxRepository, db: Db) {
   const app = express();
@@ -34,6 +38,11 @@ export function createServer(playerRepository: PlayerRepository, mailboxReposito
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
   });
+
+  // 정적 파일/liveness 체크(/health)는 DB/Redis 상태와 무관하게 항상 응답해야 해서 이 위에
+  // 둔다 — 그 아래(실제 API 라우터 전부)는 DB/Redis가 다운으로 판단되면 여기서 즉시 503으로
+  // 막는다(circuit breaker, dbHealthGate.ts 참고).
+  app.use(dbHealthGate);
 
   app.use(createAuthRoutes(playerRepository));
   // enhancement/synthesis/battleStage/mailbox/player/attendance 라우터는 전부 router.use(requireAuth)를

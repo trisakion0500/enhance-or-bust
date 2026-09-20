@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { config } from "../../../config/env.js";
-import { redisClient } from "../../../infra/redis.js";
+import { redisCall, redisClient } from "../../../infra/redis.js";
 import { redisPlayerSessionKey, redisSessionKey } from "../../../shared-kernel/redisKeys.js";
 
 /**
@@ -12,15 +12,17 @@ import { redisPlayerSessionKey, redisSessionKey } from "../../../shared-kernel/r
  * @returns 발급된 세션 토큰
  * @author trisakion
  * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
+ * @modified 2026-09-20 trisakion Redis 명령을 전부 `redisCall()`로 감싸 다운 상태에서
+ *   무기한 대기하지 않도록 수정
  */
 export async function createSession(playerId: string): Promise<string> {
-  const oldToken = await redisClient.get(redisPlayerSessionKey(playerId));
+  const oldToken = await redisCall(redisClient.get(redisPlayerSessionKey(playerId)));
   if (oldToken)
-    await redisClient.del(redisSessionKey(oldToken));
+    await redisCall(redisClient.del(redisSessionKey(oldToken)));
 
   const token = randomUUID();
-  await redisClient.set(redisSessionKey(token), playerId, { EX: config.sessionTtlSec });
-  await redisClient.set(redisPlayerSessionKey(playerId), token, { EX: config.sessionTtlSec });
+  await redisCall(redisClient.set(redisSessionKey(token), playerId, { EX: config.sessionTtlSec }));
+  await redisCall(redisClient.set(redisPlayerSessionKey(playerId), token, { EX: config.sessionTtlSec }));
   return token;
 }
 
@@ -29,9 +31,11 @@ export async function createSession(playerId: string): Promise<string> {
  * @param token 세션 토큰
  * @returns 해당 세션의 playerId, 없거나 만료됐으면 undefined
  * @author trisakion
+ * @modified 2026-09-20 trisakion Redis 명령을 `redisCall()`로 감싸 다운 상태에서 무기한
+ *   대기하지 않도록 수정 — `requireAuth` 공용 진입점이 매 요청 이 함수를 거치므로 영향 범위가 큼
  */
 export async function resolveSession(token: string): Promise<string | undefined> {
-  const playerId = await redisClient.get(redisSessionKey(token));
+  const playerId = await redisCall(redisClient.get(redisSessionKey(token)));
   return playerId ?? undefined;
 }
 
@@ -42,10 +46,12 @@ export async function resolveSession(token: string): Promise<string | undefined>
  * @param token 세션 토큰
  * @author trisakion
  * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
+ * @modified 2026-09-20 trisakion Redis 명령을 전부 `redisCall()`로 감싸 다운 상태에서
+ *   무기한 대기하지 않도록 수정
  */
 export async function deleteSession(token: string): Promise<void> {
-  const playerId = await redisClient.get(redisSessionKey(token));
-  await redisClient.del(redisSessionKey(token));
+  const playerId = await redisCall(redisClient.get(redisSessionKey(token)));
+  await redisCall(redisClient.del(redisSessionKey(token)));
   if (playerId)
-    await redisClient.del(redisPlayerSessionKey(playerId));
+    await redisCall(redisClient.del(redisPlayerSessionKey(playerId)));
 }

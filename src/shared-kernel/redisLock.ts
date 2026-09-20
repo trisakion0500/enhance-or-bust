@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { redisClient } from "../infra/redis.js";
+import { redisCall, redisClient } from "../infra/redis.js";
 import { BusinessException } from "./businessException.js";
 import { ERROR_MAP } from "./errorMap.js";
 import { redisLockKey } from "./redisKeys.js";
@@ -38,6 +38,10 @@ function sleep(ms: number): Promise<void> {
  * @throws {BusinessException} 짧은 재시도 안에 락을 못 잡으면 COMMON.LOCKED(429)
  * @author trisakion
  * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
+ * @modified 2026-09-20 trisakion Redis 명령 두 곳(락 획득/해제)을 `redisCall()`로 감싸
+ *   다운 상태에서도 무기한 대기하지 않도록 수정 — 이 감쌈이 없으면 "Redis 오류도 fail-fast로
+ *   거부한다"는 위 설계 의도가 실제로는 지켜지지 않는다(오류가 아니라 응답 없는 대기라
+ *   catch가 아예 발동하지 않음)
  */
 export async function withPlayerLock<T>(playerId: string, fn: () => Promise<T>): Promise<T> {
   const key = redisLockKey(playerId);
@@ -46,7 +50,7 @@ export async function withPlayerLock<T>(playerId: string, fn: () => Promise<T>):
 
   try {
     for (let i = 0; i < ACQUIRE_RETRIES && !acquired; i++) {
-      acquired = (await redisClient.set(key, token, { NX: true, PX: LOCK_TTL_MS })) === "OK";
+      acquired = (await redisCall(redisClient.set(key, token, { NX: true, PX: LOCK_TTL_MS }))) === "OK";
       if (!acquired) await sleep(ACQUIRE_INTERVAL_MS);
     }
   } catch {
@@ -59,6 +63,6 @@ export async function withPlayerLock<T>(playerId: string, fn: () => Promise<T>):
     return await fn();
   } finally {
     // 해제 실패는 무해하게 무시 — 최악의 경우 TTL(5초) 만료로 자연히 풀린다.
-    await redisClient.eval(RELEASE_SCRIPT, { keys: [key], arguments: [token] }).catch(() => {});
+    await redisCall(redisClient.eval(RELEASE_SCRIPT, { keys: [key], arguments: [token] })).catch(() => {});
   }
 }
