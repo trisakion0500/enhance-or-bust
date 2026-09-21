@@ -433,7 +433,10 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   `POST /gm/get-stage-card-drops` — 전부 요청 파라미터 없이 컬렉션 전체를 반환한다. **1차는
   조회만 지원하고 수정/삭제는 아직 없다** — 플레이어 개인 재화와 달리 마스터데이터는 잘못
   저장되면 게임 전체 밸런스에 영향을 줘서, 저장 기능은 컬렉션별 값 검증(확률 0~1, 음수 불가
-  등) 설계를 먼저 한 뒤 별도로 추가하기로 함. 이어서 유저고유번호(playerId)별 감사 로그
+  등) 설계를 먼저 한 뒤 별도로 추가하기로 함. 단, 출석부 정의 3종(`master_attendance_defs`/
+  `_rewards`/`_catchup_prices`)은 예외 — 애초에 gm_platform이 운영 중 실시간으로 쓰도록
+  설계된 컬렉션이라 값 검증 규칙이 처음부터 확정돼 있었고, 아래 문단에서 저장 API를 실제로
+  구현했다. 이어서 유저고유번호(playerId)별 감사 로그
   조회도 추가했다 — 감사 로그 5종(`log_auth`/`log_enhancement`/`log_synthesis`/
   `log_battle_stage`/`log_mailbox`, "감사 로그 / DAU 정책" 절 참고)을 컬렉션당 엔드포인트로
   분리한 것도 시드데이터와 동일한 이유(컬렉션마다 `changes` 필드 모양이 달라 그리드 컬럼
@@ -524,6 +527,28 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   (`mongoLogClient`)는 이 다운 판정/서킷브레이커 대상이 아니다 — 로그 DB 장애가 메인 흐름을
   막으면 안 된다는 기존 로깅 원칙과 상충하기 때문. 실제로 Docker 컨테이너를 내렸다 올려
   검증함(다운 판정 후 즉시 503, 복구 후 수 초 내 자동으로 다시 열림)
+- 출석부 저장 API 3종(`POST /gm/save-attendance-def` → `save-attendance-rewards` →
+  `save-attendance-catchup-prices`) 추가 — `attendanceStore.ts`에 쓰기 함수(`upsertBookDef`/
+  `replaceRewardRows`/`replaceCatchupPriceRows`)만 미리 있고 실제 gm_platform 호출 경로(라우트)가
+  없던 상태를 메웠다(`attendanceStore.ts`의 낡은 주석이 "gm_platform이 실시간으로 쓴다"고 앞서가
+  있던 걸 재현 중 발견). gm_platform 화면에서 메뉴를 나눠 쓰도록 정의 → 날짜별 보상 → 캐치업
+  가격 3단계로 분리했다. gm_platform 입력칸은 배열/JSON을 다루지 못해 2·3단계는 값별 입력칸으로
+  받는다: 보상은 하루 단위(`day` + `gold`/`enhancementStone`/`diamond` 수량 + 카드 원형·장수 — 하루
+  카드 1종, 그 일차 행만 통째로 교체하고 전부 비우면 그 일차 보상 삭제), 캐치업 가격은 회차 단위
+  (`purchaseIndex` + `price`, 없으면 생성/있으면 가격만 수정). `id`(내부 PK) 유무로 정의의
+  신규/수정을 구분하고(defId는 수정 중 바뀔 수 있어 식별자로 못 씀), 이미 시작된 출석부는 3종 모두
+  거부(DEF_LOCKED), defId 중복(DEF_DUPLICATE), GENERAL 기간 겹침(DEF_OVERLAP — 문서는 "현재 활성
+  def와만 비교"라 썼지만 구현은 모든 GENERAL def와 비교하는 쪽으로 단순화, 취지는 동일하게
+  만족)은 1단계에서 검증한다. 2·3단계는 저장하는 `day`/`purchaseIndex`가 그 출석부의
+  `durationDays`/`catchupMaxCount` 범위 안인지(DEF_MISMATCH), 수량·가격이 0 이상 정수이고 카드
+  원형이 마스터에 있는지(VALIDATION_FAILED)를 본다(에러코드 12006~12009, 이미 예약돼 있던 코드를
+  처음으로 실사용). 하루/한 회차씩 저장하는 구조라 "보상 최대 day = durationDays", "캐치업 행 개수 =
+  catchupMaxCount" 같은 전체 일치 검증은 저장 시점에 할 수 없어 포기했다 — 정의만 저장했거나
+  일부 일차/회차만 채운 출석부가 남을 수 있고 서버가 이를 강제하는 게이트는 없다(시작 전까지
+  운영자가 조회 그리드로 확인하고 마쳐야 함). 1단계에서도 일치 검증을 안 한다: 행이 이미 있는
+  def의 `durationDays`를 바꾸는 수정까지 막으면 "def를 먼저 고쳐야 행을 저장할 수 있는" 순환이
+  되기 때문. defId를 바꾸는 수정이면 기존 보상/캐치업 행의 defId도 함께 바꿔 고아 행을 방지한다.
+  `createGmRoutes()`가 이제 `db`를 받는다(저장 검증/쓰기에 필요).
 
 ## MongoDB 데이터 모델링 / 원자성 전략 (확정)
 

@@ -1,9 +1,12 @@
 import { Router } from "express";
+import type { Db } from "mongodb";
 import { asyncHandler } from "../../../shared-kernel/errorHandler.js";
 import { BusinessException } from "../../../shared-kernel/businessException.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
 import { gmApiKeyAuth } from "../../../shared-kernel/gmApiKeyAuth.js";
+import type { AttendanceBookType, AttendanceTargetAudience } from "../../attendance/domain/attendanceBookDef.js";
 import type { PlayerRepository } from "../../player/domain/playerRepository.js";
+import type { AttendanceBookDefSaveInput, AttendanceDayRewardInput } from "../application/gmService.js";
 import {
   getAttendanceCatchupPricesForGm,
   getAttendanceDefsForGm,
@@ -23,7 +26,114 @@ import {
   getSynthesisLogsForGm,
   getSynthesisRulesForGm,
   listPlayersForGm,
+  saveAttendanceBookDefForGm,
+  saveAttendanceCatchupPricesForGm,
+  saveAttendanceRewardsForGm,
 } from "../application/gmService.js";
+
+const ATTENDANCE_BOOK_TYPES: AttendanceBookType[] = ["GENERAL", "EVENT"];
+const ATTENDANCE_TARGET_AUDIENCES: AttendanceTargetAudience[] = ["ALL_USERS", "NEW_USER", "RETURNING_USER"];
+
+/**
+ * `POST /gm/save-attendance-def` 요청 바디를 검증된 형태로 파싱한다 — 형식 검증만 담당하고
+ * (필수 필드/타입/enum 값), defId 중복·기간 겹침 등 비즈니스 검증은
+ * `saveAttendanceBookDefForGm()`의 책임이다.
+ * @param body 요청 바디
+ * @returns 파싱된 저장 요청
+ * @throws {BusinessException} 필수 필드 누락, 타입 불일치, ISO 날짜 파싱 실패 시 GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+function parseAttendanceBookDefSave(body: unknown): AttendanceBookDefSaveInput {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const fail = (): never => {
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { body });
+  };
+
+  if (b.id !== undefined && typeof b.id !== "string") fail();
+  if (typeof b.defId !== "string" || !b.defId) fail();
+  if (typeof b.name !== "string" || !b.name) fail();
+  if (typeof b.type !== "string" || !ATTENDANCE_BOOK_TYPES.includes(b.type as AttendanceBookType)) fail();
+  if (typeof b.targetAudience !== "string" || !ATTENDANCE_TARGET_AUDIENCES.includes(b.targetAudience as AttendanceTargetAudience)) fail();
+  if (b.returningInactiveDays !== undefined && typeof b.returningInactiveDays !== "number") fail();
+  if (typeof b.maxRotationCount !== "number") fail();
+  if (typeof b.durationDays !== "number") fail();
+  if (typeof b.catchupMaxCount !== "number") fail();
+  if (typeof b.enrollableStart !== "string" || typeof b.enrollableEnd !== "string") fail();
+
+  const enrollableStart = new Date(b.enrollableStart as string);
+  const enrollableEnd = new Date(b.enrollableEnd as string);
+  if (Number.isNaN(enrollableStart.getTime()) || Number.isNaN(enrollableEnd.getTime())) fail();
+
+  return {
+    id: b.id as string | undefined,
+    defId: b.defId as string,
+    name: b.name as string,
+    type: b.type as AttendanceBookType,
+    targetAudience: b.targetAudience as AttendanceTargetAudience,
+    returningInactiveDays: b.returningInactiveDays as number | undefined,
+    maxRotationCount: b.maxRotationCount as number,
+    enrollableStart,
+    enrollableEnd,
+    durationDays: b.durationDays as number,
+    catchupMaxCount: b.catchupMaxCount as number,
+  };
+}
+
+/**
+ * 선택 수량 입력칸 파싱 — gm_platform 화면에서 비워두면 값이 아예 안 오거나 null/빈 문자열로 올 수 있어
+ * 전부 0(해당 아이템 없음)으로 취급한다.
+ * @param value 요청 바디의 해당 필드 값
+ * @returns 숫자면 그 값, 비어있으면 0
+ * @throws {BusinessException} 숫자도 비어있음도 아니면 GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+function parseOptionalCount(value: unknown): number {
+  if (value === undefined || value === null || value === "") return 0;
+  if (typeof value !== "number") throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { value });
+  return value;
+}
+
+/**
+ * `POST /gm/save-attendance-rewards` 요청 바디 파싱 — defId/day(필수) + 아이템별 수량 입력칸(선택).
+ * 값 범위/카드 원형 존재 여부 등 비즈니스 검증은 서비스 책임이다.
+ * @param body 요청 바디
+ * @returns 파싱된 defId와 하루치 보상 입력
+ * @throws {BusinessException} 필수 값 누락이나 타입 불일치 시 GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+function parseAttendanceRewardsSave(body: unknown): { defId: string; input: AttendanceDayRewardInput } {
+  const b = (body ?? {}) as Record<string, unknown>;
+  if (typeof b.defId !== "string" || !b.defId) throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { body });
+  if (typeof b.day !== "number") throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { body });
+  if (b.cardTemplateId !== undefined && b.cardTemplateId !== null && typeof b.cardTemplateId !== "string")
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { body });
+
+  return {
+    defId: b.defId,
+    input: {
+      day: b.day,
+      gold: parseOptionalCount(b.gold),
+      enhancementStone: parseOptionalCount(b.enhancementStone),
+      diamond: parseOptionalCount(b.diamond),
+      cardTemplateId: (b.cardTemplateId as string | null | undefined) || undefined,
+      cardCount: parseOptionalCount(b.cardCount),
+    },
+  };
+}
+
+/**
+ * `POST /gm/save-attendance-catchup-prices` 요청 바디 파싱 — defId/purchaseIndex/price(전부 필수).
+ * @param body 요청 바디
+ * @returns 파싱된 defId/purchaseIndex/price
+ * @throws {BusinessException} 필수 값 누락이나 타입 불일치 시 GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+function parseAttendanceCatchupPriceSave(body: unknown): { defId: string; purchaseIndex: number; price: number } {
+  const b = (body ?? {}) as Record<string, unknown>;
+  if (typeof b.defId !== "string" || !b.defId || typeof b.purchaseIndex !== "number" || typeof b.price !== "number")
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { body });
+  return { defId: b.defId, purchaseIndex: b.purchaseIndex, price: b.price };
+}
 
 /**
  * 로그 조회 라우트 5개가 공통으로 쓰는 요청 파라미터 파싱 — playerId(필수 문자열),
@@ -69,12 +179,16 @@ function parseOptionalDefId(body: unknown): string | undefined {
  * 라우터보다 먼저 마운트되면 세션 기반 라우트까지 X-API-Key를 요구하게 됨). 라우트별로 붙이면
  * Express가 경로+메서드가 실제로 일치할 때만 이 미들웨어를 태우므로 서로 간섭하지 않는다.
  * @param playerRepository Player 영속성 포트(DI)
+ * @param db 메인 앱 DB 핸들(출석부 정의 저장 라우트가 사용)
  * @returns 등록된 Express Router
  * @author trisakion
  * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  * @modified 2026-09-17 trisakion 출석부 정의/보상/캐치업가격 GM 조회 라우트 3종 추가
+ * @modified 2026-09-21 trisakion 출석부 정의/보상/캐치업가격 저장 라우트 3종(POST
+ *   /gm/save-attendance-def, save-attendance-rewards, save-attendance-catchup-prices) 추가,
+ *   db 파라미터 신규(저장 검증/쓰기가 DB 접근 필요)
  */
-export function createGmRoutes(playerRepository: PlayerRepository): Router {
+export function createGmRoutes(playerRepository: PlayerRepository, db: Db): Router {
   const router = Router();
 
   router.post("/gm/get-player", gmApiKeyAuth, asyncHandler(async (req, res) => {
@@ -139,6 +253,22 @@ export function createGmRoutes(playerRepository: PlayerRepository): Router {
   router.post("/gm/get-attendance-catchup-prices", gmApiKeyAuth, asyncHandler(async (req, res) => {
     const defId = parseOptionalDefId(req.body);
     res.json({ result: 0, message: "OK", data: getAttendanceCatchupPricesForGm(defId) });
+  }));
+
+  router.post("/gm/save-attendance-def", gmApiKeyAuth, asyncHandler(async (req, res) => {
+    const input = parseAttendanceBookDefSave(req.body);
+    const saved = await saveAttendanceBookDefForGm(db, input);
+    res.json({ result: 0, message: "OK", data: [saved] });
+  }));
+
+  router.post("/gm/save-attendance-rewards", gmApiKeyAuth, asyncHandler(async (req, res) => {
+    const { defId, input } = parseAttendanceRewardsSave(req.body);
+    res.json({ result: 0, message: "OK", data: await saveAttendanceRewardsForGm(db, defId, input) });
+  }));
+
+  router.post("/gm/save-attendance-catchup-prices", gmApiKeyAuth, asyncHandler(async (req, res) => {
+    const { defId, purchaseIndex, price } = parseAttendanceCatchupPriceSave(req.body);
+    res.json({ result: 0, message: "OK", data: await saveAttendanceCatchupPricesForGm(db, defId, purchaseIndex, price) });
   }));
 
   // 유저고유번호(playerId)별 감사 로그 조회 5종 — playerId 필수, fromDate/toDate 선택.

@@ -159,9 +159,11 @@ defId로 지금까지 발급된 횟수, 최초 발급=1, 리셋마다 +1), 캐�
 `durationDays`가 관리자가 자유롭게 정하는 값이라 상한을 미리 못 박기 애매해(상한 없이
 가려면 BigInt 처리 필요) 기각했다.
 
-`durationDays`는 `master_attendance_defs`에 명시 필드로 유지하되, gm_platform 저장
-시점에 `master_attendance_rewards`의 해당 `defId` 최대 `day` 값과 일치하는지 검증한다
-(불일치 시 저장 거부) — `catchupMaxCount` ↔ 캐치업 가격 row 개수 검증과 동일한 패턴.
+`durationDays`는 `master_attendance_defs`에 명시 필드로 유지한다. gm_platform 저장은 정의 →
+날짜별 보상(하루 단위) → 캐치업 가격(회차 단위) 3개 API로 나뉘어 있어(`17_GM_API.md`) 저장
+시점에 "보상 최대 `day` = `durationDays`" 같은 전체 일치는 검증하지 못하고, 보상 저장 시 `day`가
+1~`durationDays` 범위 안인지만 검증한다(범위 밖이면 거부) — `catchupMaxCount`와 캐치업 회차도
+동일. 나머지 일치는 운영자가 조회 그리드로 확인한다.
 
 ## 캐치업(놓친 날짜 구매) 기능
 
@@ -178,8 +180,9 @@ defId로 지금까지 발급된 횟수, 최초 발급=1, 리셋마다 +1), 캐�
 - 재화는 골드만 사용(유무료 구분 없음).
 - 가격은 "몇 일차를 사는지"가 아니라 **몇 번째 구매인지**에 붙는다 — 회차별
   flat row로 별도 컬렉션에 명시 등록(`defId` + `purchaseIndex`당 가격 하나).
-- `master_attendance_defs.catchupMaxCount`와 가격 row 개수가 항상 일치해야 한다 —
-  gm_platform 저장 시점에 검증(불일치 시 거부), 발급 로직에서도 방어적으로
+- `master_attendance_defs.catchupMaxCount`와 가격 row 개수는 일치하는 게 정상이다 —
+  gm_platform은 회차 1건씩 저장하므로 저장 시점엔 `purchaseIndex`가 1~`catchupMaxCount` 범위인지만
+  검증하고(범위 밖이면 거부) 개수 일치는 강제하지 못한다. 그래서 발급 로직에서도 방어적으로
   `min(catchupMaxCount, 실제 row 개수)` 처리를 권장.
 - GENERAL 로테이션/EVENT 종료로 새 인스턴스가 발급되면 구매 횟수도 자동 리셋(인스턴스
   필드이므로).
@@ -345,9 +348,12 @@ GENERAL/EVENT 별도 탭. EVENT 다건 진행 시 정렬은 `endDate` 오름차�
   신규 등록으로만
 - defId 수정(아직 시작 전 def에 한해 허용) 시 보상 row/캐치업 가격 row 참조도 함께
   일괄 update
-- 캐치업 가격 row 개수와 `catchupMaxCount` 필드값 일치 검증(저장 시점)
-- `durationDays` 필드값과 보상 row의 해당 defId 최대 `day`값 일치 검증(저장 시점)
-- `targetAudience=RETURNING_USER`면 `returningInactiveDays` 필수(저장 시점 검증)
+- 캐치업 가격 저장 시 `purchaseIndex`가 1~`catchupMaxCount` 범위 안인지 검증(회차 단위 저장이라
+  row 개수 전체 일치는 저장 시점에 검증할 수 없음)
+- 보상 저장 시 `day`가 1~`durationDays` 범위 안인지 검증(하루 단위 저장이라 최대 `day` = `durationDays`
+  전체 일치는 저장 시점에 검증할 수 없음)
+- `targetAudience=RETURNING_USER`면 `returningInactiveDays` 필수(저장 시점 검증) — 그 외 타입에서
+  값이 오면 저장 시 무시하기로 확정(위 "구현 시 택일"의 결론)
 
 ## 재사용 vs 신규
 

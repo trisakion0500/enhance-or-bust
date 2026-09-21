@@ -28,8 +28,12 @@ export async function ensureAttendanceIndexes(db: Db): Promise<void> {
 
 // ── 출석부 정의 / 날짜별 보상 / 캐치업 가격 (마스터 데이터 — 조회는 masterDataCache 경유) ──
 //
-// 이 세 컬렉션은 시드 스크립트가 아니라 gm_platform이 실시간으로 쓰기 때문에 여기 쓰기
-// 함수만 둔다. 읽기는 매 요청 DB를 조회하지 않고 masterDataCache의 getter(getAttendanceBookDef/
+// 이 세 컬렉션은 gm_platform이 실시간으로 쓰도록 설계된 컬렉션이라(비즈니스 키/내부 PK
+// 분리, DEF_OVERLAP/DEF_DUPLICATE/DEF_LOCKED/DEF_MISMATCH 에러코드 예약 등)
+// 여기 쓰기 함수만 두고 시드 스크립트(seedMasterData.ts)도 같은 함수를 재사용한다.
+// 2026-09-20까지는 실제 gm_platform 쓰기 라우트(POST /gm/save-attendance-def)가 없어
+// 시드 스크립트만 이 함수들을 호출했으나, 이제 gmService.ts의 saveAttendanceBookDefForGm()도
+// 이 함수들을 호출한다. 읽기는 매 요청 DB를 조회하지 않고 masterDataCache의 getter(getAttendanceBookDef/
 // getActiveGeneralDef/getActiveEventDefs/getAttendanceRewards/getAttendanceCatchupPrices)를
 // 쓴다 — Change Stream/폴링이 이 쓰기를 자동으로 캐시에 반영한다(masterDataWatcher.ts는
 // 쓰기 주체와 무관하게 event.ns.coll만 본다). 쓰기 후에는 반드시 `bumpMasterDataVersion()`도
@@ -82,6 +86,141 @@ export async function replaceCatchupPriceRows(db: Db, defId: string, rows: Array
   const collection = db.collection<AttendanceCatchupPrice>(COLLECTIONS.MASTER_ATTENDANCE_CATCHUP_PRICES);
   await collection.deleteMany({ defId });
   if (rows.length > 0) await collection.insertMany(rows.map(row => ({ ...row, _id: randomUUID(), defId })));
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_ATTENDANCE_CATCHUP_PRICES);
+}
+
+/**
+ * 한 출석부의 특정 일차 보상 행만 교체한다(gm_platform이 하루 단위 입력칸으로 저장하는 경로 —
+ * 다른 일차 행은 건드리지 않는다). 삭제+삽입이라 원자적이진 않지만 저빈도 쓰기라 트랜잭션을
+ * 쓰지 않는다(`replaceRewardRows()`와 동일 사유).
+ * @param db 메인 앱 DB 핸들
+ * @param defId 대상 출석부
+ * @param day 교체할 일차(1-based)
+ * @param rows 그 일차의 새 보상 행 전체(빈 배열이면 그 일차 보상 삭제)
+ * @author trisakion
+ */
+export async function replaceRewardRowsForDay(db: Db, defId: string, day: number, rows: Array<Omit<AttendanceReward, "_id" | "defId" | "day">>): Promise<void> {
+  const collection = db.collection<AttendanceReward>(COLLECTIONS.MASTER_ATTENDANCE_REWARDS);
+  await collection.deleteMany({ defId, day });
+  if (rows.length > 0) await collection.insertMany(rows.map(row => ({ ...row, _id: randomUUID(), defId, day })));
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_ATTENDANCE_REWARDS);
+}
+
+/**
+ * 한 출석부의 특정 구매 회차 가격 행 1건만 저장한다(없으면 삽입, 있으면 가격만 수정 —
+ * `(defId, purchaseIndex)` unique 인덱스가 키).
+ * @param db 메인 앱 DB 핸들
+ * @param defId 대상 출석부
+ * @param purchaseIndex 구매 회차(1-based)
+ * @param price 골드 가격
+ * @author trisakion
+ */
+export async function upsertCatchupPriceRow(db: Db, defId: string, purchaseIndex: number, price: number): Promise<void> {
+  await db.collection<AttendanceCatchupPrice>(COLLECTIONS.MASTER_ATTENDANCE_CATCHUP_PRICES).updateOne(
+    { defId, purchaseIndex },
+    { $set: { price }, $setOnInsert: { _id: randomUUID() } },
+    { upsert: true },
+  );
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_ATTENDANCE_CATCHUP_PRICES);
+}
+
+/**
+ * 저장 직후 응답용으로 DB에서 직접 보상 행을 읽는다(`masterDataCache`는 Change Stream으로 비동기 갱신돼
+ * 방금 쓴 값이 아직 없을 수 있다).
+ * @param db 메인 앱 DB 핸들
+ * @param defId 대상 출석부
+ * @returns 그 출석부의 보상 행 전체(day 오름차순)
+ * @author trisakion
+ */
+export async function findRewardRows(db: Db, defId: string): Promise<AttendanceReward[]> {
+  return db.collection<AttendanceReward>(COLLECTIONS.MASTER_ATTENDANCE_REWARDS).find({ defId }).sort({ day: 1 }).toArray();
+}
+
+/**
+ * @see findRewardRows 동일 사유(저장 직후 응답용 DB 직접 조회)
+ * @param db 메인 앱 DB 핸들
+ * @param defId 대상 출석부
+ * @returns 그 출석부의 캐치업 가격 행 전체(purchaseIndex 오름차순)
+ * @author trisakion
+ */
+export async function findCatchupPriceRows(db: Db, defId: string): Promise<AttendanceCatchupPrice[]> {
+  return db.collection<AttendanceCatchupPrice>(COLLECTIONS.MASTER_ATTENDANCE_CATCHUP_PRICES).find({ defId }).sort({ purchaseIndex: 1 }).toArray();
+}
+
+/**
+ * 내부 PK로 출석부 정의를 조회한다(gm_platform 저장 API가 "수정" 대상을 식별할 때 사용 —
+ * defId는 수정 중 바뀔 수 있어 식별자로 못 쓴다, "비즈니스 키 vs 내부 PK" 절 참고).
+ * @param db 메인 앱 DB 핸들
+ * @param id 내부 PK(`_id`)
+ * @author trisakion
+ */
+export async function findBookDefById(db: Db, id: string): Promise<AttendanceBookDef | null> {
+  return db.collection<AttendanceBookDef>(COLLECTIONS.MASTER_ATTENDANCE_DEFS).findOne({ _id: id });
+}
+
+/**
+ * 비즈니스 키로 출석부 정의를 조회한다(gm_platform 저장 API의 신규/중복 defId 판정용).
+ * @param db 메인 앱 DB 핸들
+ * @param defId 비즈니스 키
+ * @author trisakion
+ */
+export async function findBookDefByDefId(db: Db, defId: string): Promise<AttendanceBookDef | null> {
+  return db.collection<AttendanceBookDef>(COLLECTIONS.MASTER_ATTENDANCE_DEFS).findOne({ defId });
+}
+
+/**
+ * 이 기간과 겹치는 다른 GENERAL 출석부 정의가 있는지 찾는다(gm_platform 저장 API의
+ * DEF_OVERLAP 검증용). "현재 활성 def와만 비교"가 아니라 모든 GENERAL def와 비교한다 —
+ * 과거/미래 def까지 포함해 겹침을 막는 쪽이 더 단순하고 더 안전하기 때문(구현 시 단순화한
+ * 지점, 정책 문서의 취지는 동일하게 만족).
+ * @param db 메인 앱 DB 핸들
+ * @param enrollableStart 검사할 기간 시작
+ * @param enrollableEnd 검사할 기간 끝
+ * @param excludeId 수정 중인 def 자기 자신은 비교 대상에서 제외(내부 PK)
+ * @author trisakion
+ */
+export async function findOverlappingGeneralDef(
+  db: Db,
+  enrollableStart: Date,
+  enrollableEnd: Date,
+  excludeId?: string,
+): Promise<AttendanceBookDef | null> {
+  return db.collection<AttendanceBookDef>(COLLECTIONS.MASTER_ATTENDANCE_DEFS).findOne({
+    type: "GENERAL",
+    ...(excludeId ? { _id: { $ne: excludeId } } : {}),
+    enrollableStart: { $lt: enrollableEnd },
+    enrollableEnd: { $gt: enrollableStart },
+  });
+}
+
+/**
+ * 기존 출석부 정의를 내부 PK로 수정한다(`upsertBookDef()`는 defId로 매칭해 신규 등록 전용으로
+ * 쓰고, defId 자체를 바꾸는 수정은 내부 PK로 찾아야 해서 별도 함수로 분리). 호출부(gmService.ts의
+ * saveAttendanceBookDefForGm())가 "아직 시작 전인 def만 수정 가능" 등 정책 검증을 먼저 마친
+ * 뒤에만 호출해야 한다.
+ * @param db 메인 앱 DB 핸들
+ * @param id 수정할 정의의 내부 PK
+ * @param input 새로 저장할 필드 전체
+ * @author trisakion
+ */
+export async function updateBookDefById(db: Db, id: string, input: Omit<AttendanceBookDef, "_id" | "createdAt" | "updatedAt">): Promise<void> {
+  await db.collection<AttendanceBookDef>(COLLECTIONS.MASTER_ATTENDANCE_DEFS).updateOne({ _id: id }, { $set: { ...input, updatedAt: new Date() } });
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_ATTENDANCE_DEFS);
+}
+
+/**
+ * defId를 바꾸는 수정 시, 옛 defId를 참조하던 보상/캐치업 행의 defId도 함께 바꾼다 — 출석부
+ * 정의 저장과 보상/캐치업 저장이 별개 API라 정의만 바뀌면 기존 행이 고아가 되기 때문
+ * (23_GAME_DESIGN_ATTENDANCE.md "비즈니스 키 vs 내부 PK" 절 — 구현 시 누락 주의 항목).
+ * @param db 메인 앱 DB 핸들
+ * @param oldDefId 바뀌기 전 비즈니스 키
+ * @param newDefId 바뀐 뒤 비즈니스 키
+ * @author trisakion
+ */
+export async function renameDefIdInRows(db: Db, oldDefId: string, newDefId: string): Promise<void> {
+  await db.collection(COLLECTIONS.MASTER_ATTENDANCE_REWARDS).updateMany({ defId: oldDefId }, { $set: { defId: newDefId } });
+  await db.collection(COLLECTIONS.MASTER_ATTENDANCE_CATCHUP_PRICES).updateMany({ defId: oldDefId }, { $set: { defId: newDefId } });
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_ATTENDANCE_REWARDS);
   await bumpMasterDataVersion(db, COLLECTIONS.MASTER_ATTENDANCE_CATCHUP_PRICES);
 }
 

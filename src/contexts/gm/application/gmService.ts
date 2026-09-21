@@ -1,3 +1,4 @@
+import type { Db } from "mongodb";
 import { BusinessException } from "../../../shared-kernel/businessException.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
 import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
@@ -9,6 +10,18 @@ import type { GradeConfig } from "../../../shared-kernel/masterData/gradeConfig.
 import type { AttendanceBookDef } from "../../attendance/domain/attendanceBookDef.js";
 import type { AttendanceCatchupPrice } from "../../attendance/domain/attendanceCatchupPrice.js";
 import type { AttendanceReward } from "../../attendance/domain/attendanceReward.js";
+import {
+  findBookDefByDefId,
+  findBookDefById,
+  findCatchupPriceRows,
+  findOverlappingGeneralDef,
+  findRewardRows,
+  renameDefIdInRows,
+  replaceRewardRowsForDay,
+  updateBookDefById,
+  upsertBookDef,
+  upsertCatchupPriceRow,
+} from "../../attendance/infrastructure/attendanceStore.js";
 import type { EnhancementRule } from "../../enhancement/domain/enhancementRule.js";
 import type { SynthesisRule } from "../../synthesis/domain/synthesisRule.js";
 import type { StageConfig } from "../../battleStage/domain/stageConfig.js";
@@ -197,6 +210,184 @@ export function getAttendanceRewardsForGm(defId?: string): AttendanceReward[] {
  */
 export function getAttendanceCatchupPricesForGm(defId?: string): AttendanceCatchupPrice[] {
   return defId ? masterDataCache.getAttendanceCatchupPrices(defId) : masterDataCache.getAllAttendanceCatchupPrices();
+}
+
+/** gm_platform이 `POST /gm/save-attendance-def`로 보내는 저장 요청 — def 본문만 담는다. 날짜별
+ * 보상/캐치업 가격은 별도 API(`save-attendance-rewards`/`save-attendance-catchup-prices`)로
+ * 나눠 저장한다(출석부 저장 → 보상 저장 → 캐치업 가격 저장 순서). `id`가 있으면 수정(내부 PK로
+ * 대상 식별), 없으면 신규 등록.
+ * @author trisakion
+ */
+export interface AttendanceBookDefSaveInput {
+  id?: string;
+  defId: string;
+  name: string;
+  type: AttendanceBookDef["type"];
+  targetAudience: AttendanceBookDef["targetAudience"];
+  returningInactiveDays?: number;
+  maxRotationCount: number;
+  enrollableStart: Date;
+  enrollableEnd: Date;
+  durationDays: number;
+  catchupMaxCount: number;
+}
+
+/**
+ * 출석부 정의 본문만 등록/수정한다(`POST /gm/save-attendance-def`) — 신규 def는 append-only 등록,
+ * 기존 def 수정은 아직 시작 전(`enrollableStart` 이전)인 경우만 허용한다
+ * (23_GAME_DESIGN_ATTENDANCE.md "핵심 원칙 — 시드 스냅샷"/"gm_platform 관리 규칙 요약" 절).
+ * 검증 순서: (1) targetAudience=RETURNING_USER면 returningInactiveDays 필수 → 그 외 값은
+ * 저장 시 무시(정책 문서가 "구현 시 택일"로 열어둔 부분, 무시 쪽으로 결정) (2) 수정인데
+ * 대상 없음 → ATTENDANCE.NOT_FOUND, 이미 시작됨 → DEF_LOCKED (3) defId가 이미 다른 문서에서
+ * 쓰이는 중 → DEF_DUPLICATE (4) GENERAL이면 다른 GENERAL def와 기간 겹침 → DEF_OVERLAP.
+ * 보상/캐치업 행과의 일치 검증(`durationDays`/`catchupMaxCount`)은 여기서 하지 않는다 — 행은
+ * 별도 API로 나중에 저장되므로 이 시점엔 비교할 대상이 없고, 기존 행이 있는 def의
+ * `durationDays`를 바꾸는 수정도 막으면 "def를 먼저 고쳐야 행을 다시 저장할 수 있는" 순환이 된다.
+ * 일치 검증은 행을 저장하는 쪽(`saveAttendanceRewardsForGm`/`saveAttendanceCatchupPricesForGm`)이
+ * 맡는다. defId 자체를 바꾸는 수정이면 기존 보상/캐치업 행의 defId도 함께 바꾼다(고아 행 방지,
+ * `renameDefIdInRows()` 참고).
+ * @param db 메인 앱 DB 핸들
+ * @param input 저장할 출석부 정의
+ * @returns 저장된 출석부 정의(내부 PK 포함)
+ * @throws {BusinessException} 위 검증 순서 참고
+ * @author trisakion
+ */
+export async function saveAttendanceBookDefForGm(db: Db, input: AttendanceBookDefSaveInput): Promise<AttendanceBookDef> {
+  if (input.targetAudience === "RETURNING_USER" && input.returningInactiveDays === undefined)
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { input });
+
+  const existing = input.id ? await findBookDefById(db, input.id) : null;
+  if (input.id && !existing)
+    throw new BusinessException(ERROR_MAP.ATTENDANCE.NOT_FOUND, { input });
+  if (existing && existing.enrollableStart.getTime() <= Date.now())
+    throw new BusinessException(ERROR_MAP.ATTENDANCE.DEF_LOCKED, { input });
+
+  if (!existing || existing.defId !== input.defId) {
+    const conflict = await findBookDefByDefId(db, input.defId);
+    if (conflict)
+      throw new BusinessException(ERROR_MAP.ATTENDANCE.DEF_DUPLICATE, { input });
+  }
+
+  if (input.type === "GENERAL") {
+    const overlap = await findOverlappingGeneralDef(db, input.enrollableStart, input.enrollableEnd, existing?._id);
+    if (overlap)
+      throw new BusinessException(ERROR_MAP.ATTENDANCE.DEF_OVERLAP, { input });
+  }
+
+  const bookDefFields: Omit<AttendanceBookDef, "_id" | "createdAt" | "updatedAt"> = {
+    defId: input.defId,
+    name: input.name,
+    type: input.type,
+    targetAudience: input.targetAudience,
+    maxRotationCount: input.maxRotationCount,
+    enrollableStart: input.enrollableStart,
+    enrollableEnd: input.enrollableEnd,
+    durationDays: input.durationDays,
+    catchupMaxCount: input.catchupMaxCount,
+    ...(input.targetAudience === "RETURNING_USER" ? { returningInactiveDays: input.returningInactiveDays } : {}),
+  };
+
+  if (existing) {
+    await updateBookDefById(db, existing._id, bookDefFields);
+    if (existing.defId !== input.defId)
+      await renameDefIdInRows(db, existing.defId, input.defId);
+  } else {
+    await upsertBookDef(db, bookDefFields);
+  }
+
+  return (await findBookDefByDefId(db, input.defId))!;
+}
+
+/**
+ * 보상/캐치업 행 저장이 공통으로 쓰는 선행 검증 — 출석부가 존재하고 아직 시작 전인지 확인하고
+ * 그 정의를 반환한다.
+ * @param db 메인 앱 DB 핸들
+ * @param defId 대상 출석부 비즈니스 키
+ * @returns 저장 대상 출석부 정의
+ * @throws {BusinessException} 없으면 ATTENDANCE.NOT_FOUND, 이미 시작됐으면 DEF_LOCKED
+ * @author trisakion
+ */
+async function findEditableBookDef(db: Db, defId: string): Promise<AttendanceBookDef> {
+  const def = await findBookDefByDefId(db, defId);
+  if (!def)
+    throw new BusinessException(ERROR_MAP.ATTENDANCE.NOT_FOUND, { defId });
+  if (def.enrollableStart.getTime() <= Date.now())
+    throw new BusinessException(ERROR_MAP.ATTENDANCE.DEF_LOCKED, { defId });
+  return def;
+}
+
+/** `POST /gm/save-attendance-rewards`가 받는 하루치 보상 — gm_platform 입력칸이 배열을 못 다뤄서 아이템
+ * 종류별 수량 칸으로 나눴다. 0/생략은 "그 아이템 없음", 카드는 원형+장수를 함께 준다(하루 카드 1종).
+ * @author trisakion
+ */
+export interface AttendanceDayRewardInput {
+  day: number;
+  gold: number;
+  enhancementStone: number;
+  diamond: number;
+  cardTemplateId?: string;
+  cardCount: number;
+}
+
+/**
+ * 출석부의 한 일차 보상을 통째로 교체 저장한다(`POST /gm/save-attendance-rewards`) — 그 일차의 기존 행은
+ * 전부 지우고 입력값으로 다시 채우며(전부 0이면 그 일차 보상 삭제), 다른 일차는 건드리지 않는다.
+ * 검증: 출석부 존재/시작 전, `day`가 1~`durationDays` 정수(범위 밖은 DEF_MISMATCH), 수량은 0 이상 정수,
+ * 카드는 원형과 장수(1 이상)가 함께 있어야 하고 원형은 실제 카드 마스터에 있어야 함(VALIDATION_FAILED).
+ * 보상 행 전체가 1~`durationDays`를 다 채웠는지는 여기서 강제하지 않는다 — 하루씩 저장하는 구조상
+ * 저장 시점에 알 수 없어, 운영자가 조회 그리드로 확인한다.
+ * @param db 메인 앱 DB 핸들
+ * @param defId 대상 출석부 비즈니스 키
+ * @param input 그 일차의 보상 입력값
+ * @returns 저장 후 그 출석부의 보상 행 전체(day 오름차순)
+ * @throws {BusinessException} NOT_FOUND / DEF_LOCKED / DEF_MISMATCH / VALIDATION_FAILED
+ * @author trisakion
+ */
+export async function saveAttendanceRewardsForGm(db: Db, defId: string, input: AttendanceDayRewardInput): Promise<AttendanceReward[]> {
+  const def = await findEditableBookDef(db, defId);
+
+  if (!Number.isInteger(input.day) || input.day < 1 || input.day > def.durationDays)
+    throw new BusinessException(ERROR_MAP.ATTENDANCE.DEF_MISMATCH, { defId, durationDays: def.durationDays, day: input.day });
+
+  const amounts = [input.gold, input.enhancementStone, input.diamond, input.cardCount];
+  if (amounts.some(amount => !Number.isInteger(amount) || amount < 0))
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { input });
+  if (input.cardTemplateId ? input.cardCount < 1 || !masterDataCache.getCardTemplate(input.cardTemplateId) : input.cardCount > 0)
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { input });
+
+  const rows: Array<Omit<AttendanceReward, "_id" | "defId" | "day">> = [];
+  if (input.gold > 0) rows.push({ itemType: "gold", amount: input.gold, cardTemplateId: null });
+  if (input.enhancementStone > 0) rows.push({ itemType: "enhancementStone", amount: input.enhancementStone, cardTemplateId: null });
+  if (input.diamond > 0) rows.push({ itemType: "diamond", amount: input.diamond, cardTemplateId: null });
+  if (input.cardTemplateId) rows.push({ itemType: "card", amount: input.cardCount, cardTemplateId: input.cardTemplateId });
+
+  await replaceRewardRowsForDay(db, defId, input.day, rows);
+  return findRewardRows(db, defId);
+}
+
+/**
+ * 출석부의 캐치업 가격 1회차분을 저장한다(`POST /gm/save-attendance-catchup-prices`) — 그 회차가 없으면
+ * 만들고 있으면 가격만 바꾼다. 검증: 출석부 존재/시작 전, `purchaseIndex`가 1~`catchupMaxCount` 정수
+ * (범위 밖은 DEF_MISMATCH), `price`는 0 이상 정수(VALIDATION_FAILED). 모든 회차를 다 채웠는지는 여기서
+ * 강제하지 않는다(회차별 저장 구조상 저장 시점에 알 수 없음 — 조회 그리드로 확인).
+ * @param db 메인 앱 DB 핸들
+ * @param defId 대상 출석부 비즈니스 키
+ * @param purchaseIndex 저장할 구매 회차(1-based)
+ * @param price 골드 가격
+ * @returns 저장 후 그 출석부의 캐치업 가격 행 전체(purchaseIndex 오름차순)
+ * @throws {BusinessException} NOT_FOUND / DEF_LOCKED / DEF_MISMATCH / VALIDATION_FAILED
+ * @author trisakion
+ */
+export async function saveAttendanceCatchupPricesForGm(db: Db, defId: string, purchaseIndex: number, price: number): Promise<AttendanceCatchupPrice[]> {
+  const def = await findEditableBookDef(db, defId);
+
+  if (!Number.isInteger(purchaseIndex) || purchaseIndex < 1 || purchaseIndex > def.catchupMaxCount)
+    throw new BusinessException(ERROR_MAP.ATTENDANCE.DEF_MISMATCH, { defId, catchupMaxCount: def.catchupMaxCount, purchaseIndex });
+  if (!Number.isInteger(price) || price < 0)
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { price });
+
+  await upsertCatchupPriceRow(db, defId, purchaseIndex, price);
+  return findCatchupPriceRows(db, defId);
 }
 
 /** gm_platform이 조회할 때 컬렉션 하나에서 한 번에 반환할 최대 로그 건수 — 무제한 스캔 방지. */

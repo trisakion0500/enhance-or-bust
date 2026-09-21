@@ -127,9 +127,9 @@ player_attendance/{instanceId}
 컨텐츠별 별도 컬렉션. 각 문서는 독립적인 `version` 필드를 갖고, DB 버전은 `master_data_meta`
 (`{content, version}` 1문서씩)에서 관리한다. 서버는 전체를 메모리 싱글톤 캐시로
 로드하고, Change Stream(주 채널) + 주기적 폴링(fallback)으로 리로드한다. 출석 정의 3종은
-현재 `npm run seed`(`seedMasterData.ts`)로만 적재된다 — gm_platform 쪽은 조회 API
-(`get-attendance-defs`/`-rewards`/`-catchup-prices`)만 구현되어 있고 저장(쓰기) API는
-아직 없다(`17_GM_API.md`).
+`npm run seed`(`seedMasterData.ts`) 외에 gm_platform 저장 API 3단계(`save-attendance-def` →
+`-rewards` → `-catchup-prices`)로도 쓰인다 — 나머지 6종은 시드로만 적재되고 gm_platform은
+조회만 한다(`17_GM_API.md`).
 
 ## 시스템 상태 (`system_` 프리픽스, 콘텐츠도 플레이어 데이터도 아님)
 

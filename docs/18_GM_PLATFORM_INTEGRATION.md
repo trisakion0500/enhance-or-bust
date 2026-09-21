@@ -37,10 +37,15 @@ gm_platform의 apiExecution은 등록된 API를 항상 `POST {api_base_url}{endp
   (`get-card-templates`/`get-grade-configs`/`get-enhancement-rules`/
   `get-synthesis-rules`/`get-stage-configs`/`get-stage-card-drops`/`get-attendance-defs`/
   `get-attendance-rewards`/`get-attendance-catchup-prices`) — 서버가 이미 적재해둔
-  `masterDataCache` 싱글톤을 그대로 읽어 반환한다(DB 재조회 없음). **1차는 조회만
-  지원하고 수정/삭제는 아직 없다** — 마스터데이터는 잘못 저장되면 게임 전체 밸런스에
-  영향을 줘서, 저장 기능은 컬렉션별 값 검증(확률 0~1, 음수 불가 등) 설계를 먼저 한 뒤
-  별도로 추가하기로 함.
+  `masterDataCache` 싱글톤을 그대로 읽어 반환한다(DB 재조회 없음). **카드/등급/강화/합성/
+  스테이지 6종은 조회만 지원하고 수정/삭제는 아직 없다** — 마스터데이터는 잘못 저장되면
+  게임 전체 밸런스에 영향을 줘서, 저장 기능은 컬렉션별 값 검증(확률 0~1, 음수 불가 등)
+  설계를 먼저 한 뒤 별도로 추가하기로 함. 출석부 3종은 예외로 저장 API가 있다(아래).
+- **출석부 저장**(gm_platform 화면에서 메뉴 3개로 분리): `POST /gm/save-attendance-def`(정의,
+  `id` 유무로 신규/수정) → `POST /gm/save-attendance-rewards`(하루 단위 보상, 수량 입력칸) →
+  `POST /gm/save-attendance-catchup-prices`(회차 단위 가격). 이미 시작된 출석부는 수정 불가,
+  gm_platform에는 3개 모두 승인 필요로 등록했다. 상세는 `17_GM_API.md` "출석부 저장 (3단계)"
+  절과 `23_GAME_DESIGN_ATTENDANCE.md` 참고.
 - **유저고유번호(playerId)별 감사 로그 조회**: 감사 로그 6종을 컬렉션당 엔드포인트로
   분리(`get-auth-logs`/`get-enhancement-logs`/`get-synthesis-logs`/
   `get-battle-stage-logs`/`get-mailbox-logs`/`get-attendance-logs`). `playerId` 필수,
