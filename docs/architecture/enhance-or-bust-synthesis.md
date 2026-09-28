@@ -5,7 +5,7 @@
 - 경계: Synthesis — 합성, 부트스트랩, 공용 인프라 · 외부 연동
 - 노드 6개, 엣지 5개
 
-![architecture](enhance-or-bust-synthesis.light.svg)
+![architecture](enhance-or-bust-synthesis.svg)
 
 ## 노드
 

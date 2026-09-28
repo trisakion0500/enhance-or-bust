@@ -134,8 +134,7 @@ function buildIndexMarkdown(contextNames) {
     );
     lines.push(
         "컨텍스트별 상세 " + ir.boundaries.length + "개로 나눠져 있다(분할 기준은 " +
-        "`.claude/scripts/arch/split-by-context.mjs` 참고). 각 문서는 같은 이름의 `.light.svg`/" +
-        "`.dark.svg`를 함께 갖는다.",
+        "`.claude/scripts/arch/split-by-context.mjs` 참고). 각 문서는 같은 이름의 `.svg`를 함께 갖는다.",
     );
     lines.push("");
     lines.push("## 개요");

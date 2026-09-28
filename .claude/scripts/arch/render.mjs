@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 아키텍처 IR(JSON) -> validate / render(md + light.svg + dark.svg).
+ * 아키텍처 IR(JSON) -> validate / render(md + svg).
  * 사용법:
  *   node .claude/scripts/arch/render.mjs validate <ir.json> [--json]
  *   node .claude/scripts/arch/render.mjs render <ir.json>
@@ -134,19 +134,15 @@ function layout(ir) {
     return { positions, boundaryBoxes, width: maxWidth + PAD, height: y };
 }
 
-function buildSvg(ir, theme) {
-    const isDark = theme === "dark";
-    const colors = isDark
-        ? { bg: "#1e1e2e", boundary: "#2a2a3d", boundaryStroke: "#4a4a63", text: "#e8e8f0",
-            node: "#31314a", nodeStroke: "#6c6ca0", edge: "#8888b0", weak: "#c9a227" }
-        : { bg: "#ffffff", boundary: "#f4f4f8", boundaryStroke: "#c8c8dc", text: "#1a1a2e",
-            node: "#eef0ff", nodeStroke: "#6c6ca0", edge: "#6a6a8a", weak: "#b8860b" };
+function buildSvg(ir) {
+    const colors = { bg: "#ffffff", boundary: "#f4f4f8", boundaryStroke: "#c8c8dc", text: "#1a1a2e",
+        node: "#eef0ff", nodeStroke: "#6c6ca0", edge: "#6a6a8a", weak: "#b8860b" };
 
     const { positions, boundaryBoxes, width, height } = layout(ir);
     const parts = [];
     parts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" font-family="Segoe UI, sans-serif">`);
     parts.push(`<rect x="0" y="0" width="${width}" height="${height}" fill="${colors.bg}"/>`);
-    parts.push(`<defs><marker id="arrow-${theme}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${colors.edge}"/></marker></defs>`);
+    parts.push(`<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${colors.edge}"/></marker></defs>`);
 
     for (const b of boundaryBoxes) {
         parts.push(`<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="8" fill="${colors.boundary}" stroke="${colors.boundaryStroke}"/>`);
@@ -159,7 +155,7 @@ function buildSvg(ir, theme) {
             continue;
         const x1 = from.x + from.w / 2, y1 = from.y + from.h / 2;
         const x2 = to.x + to.w / 2, y2 = to.y + to.h / 2;
-        parts.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${colors.edge}" stroke-width="1.5" marker-end="url(#arrow-${theme})"/>`);
+        parts.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${colors.edge}" stroke-width="1.5" marker-end="url(#arrow)"/>`);
         if (e.label) {
             const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
             parts.push(`<text x="${mx}" y="${my - 4}" fill="${colors.edge}" font-size="11" text-anchor="middle">${esc(e.label)}</text>`);
@@ -189,7 +185,7 @@ function buildMarkdown(ir, name) {
     lines.push(`- 경계: ${ir.boundaries.map((b) => b.label).join(", ")}`);
     lines.push(`- 노드 ${ir.nodes.length}개, 엣지 ${ir.edges.length}개`);
     lines.push("");
-    lines.push(`![architecture](${name}.light.svg)`);
+    lines.push(`![architecture](${name}.svg)`);
     lines.push("");
     lines.push("## 노드");
     lines.push("");
@@ -254,9 +250,8 @@ function main() {
             process.exit(1);
         }
         writeFileSync(join(dir, `${name}.md`), buildMarkdown(ir, name));
-        writeFileSync(join(dir, `${name}.light.svg`), buildSvg(ir, "light"));
-        writeFileSync(join(dir, `${name}.dark.svg`), buildSvg(ir, "dark"));
-        console.log(`생성됨: ${join(dir, name)}.{md,light.svg,dark.svg}`);
+        writeFileSync(join(dir, `${name}.svg`), buildSvg(ir));
+        console.log(`생성됨: ${join(dir, name)}.{md,svg}`);
         process.exit(0);
     }
 

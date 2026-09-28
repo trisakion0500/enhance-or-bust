@@ -5,7 +5,7 @@
 - 경계: Mailbox — 우편, 부트스트랩, 공용 인프라 · 외부 연동
 - 노드 10개, 엣지 10개
 
-![architecture](enhance-or-bust-mailbox.light.svg)
+![architecture](enhance-or-bust-mailbox.svg)
 
 ## 노드
 

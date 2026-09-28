@@ -5,7 +5,7 @@
 - 경계: 부트스트랩, 공용 인프라 · 외부 연동, Player — Inventory/Progression/Economy, Mailbox — 우편, Coupon — 쿠폰 연동, Attendance — 출석보상, Auth — 인증, GM — 운영툴 연동, Enhancement — 강화, Synthesis — 합성, Battle-Stage — 전투 판정
 - 노드 24개, 엣지 23개
 
-![architecture](enhance-or-bust-bootstrap.light.svg)
+![architecture](enhance-or-bust-bootstrap.svg)
 
 ## 노드
 

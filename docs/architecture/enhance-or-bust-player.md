@@ -5,7 +5,7 @@
 - 경계: Player — Inventory/Progression/Economy, 부트스트랩, 공용 인프라 · 외부 연동
 - 노드 10개, 엣지 9개
 
-![architecture](enhance-or-bust-player.light.svg)
+![architecture](enhance-or-bust-player.svg)
 
 ## 노드
 

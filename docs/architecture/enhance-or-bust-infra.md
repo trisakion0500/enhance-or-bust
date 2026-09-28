@@ -5,7 +5,7 @@
 - 경계: 공용 인프라 · 외부 연동, 부트스트랩, GM — 운영툴 연동
 - 노드 19개, 엣지 8개
 
-![architecture](enhance-or-bust-infra.light.svg)
+![architecture](enhance-or-bust-infra.svg)
 
 ## 노드
 

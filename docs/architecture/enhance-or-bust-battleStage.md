@@ -5,7 +5,7 @@
 - 경계: Battle-Stage — 전투 판정, 부트스트랩, 공용 인프라 · 외부 연동
 - 노드 8개, 엣지 7개
 
-![architecture](enhance-or-bust-battleStage.light.svg)
+![architecture](enhance-or-bust-battleStage.svg)
 
 ## 노드
 

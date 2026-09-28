@@ -1,7 +1,7 @@
 # 아키텍처 문서 — enhance-or-bust
 
 기준 커밋 `9c88667` 시점의 서버 구조 스냅샷. 하나의 큰 다이어그램 대신 개요 1개 +
-컨텍스트별 상세 11개로 나눠져 있다(분할 기준은 `.claude/scripts/arch/split-by-context.mjs` 참고). 각 문서는 같은 이름의 `.light.svg`/`.dark.svg`를 함께 갖는다.
+컨텍스트별 상세 11개로 나눠져 있다(분할 기준은 `.claude/scripts/arch/split-by-context.mjs` 참고). 각 문서는 같은 이름의 `.svg`를 함께 갖는다.
 
 ## 개요
 

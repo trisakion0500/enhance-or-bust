@@ -5,7 +5,7 @@
 - 경계: Attendance — 출석보상, 부트스트랩, 공용 인프라 · 외부 연동
 - 노드 8개, 엣지 7개
 
-![architecture](enhance-or-bust-attendance.light.svg)
+![architecture](enhance-or-bust-attendance.svg)
 
 ## 노드
 

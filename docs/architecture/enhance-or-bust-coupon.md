@@ -5,7 +5,7 @@
 - 경계: Coupon — 쿠폰 연동, 부트스트랩, 공용 인프라 · 외부 연동
 - 노드 8개, 엣지 8개
 
-![architecture](enhance-or-bust-coupon.light.svg)
+![architecture](enhance-or-bust-coupon.svg)
 
 ## 노드
 

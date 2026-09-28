@@ -52,7 +52,7 @@ IR 스키마는 기억에 의존하지 말고 매번 이 파일을 읽어서 따
    - 4단계가 만든 `<name>-overview.json`과 `<name>-<boundaryId>.json` 전부에 대해
      `node .claude/scripts/arch/render.mjs validate <file> --json` → 실패 시 diagnostics만
      최대 2라운드 수정 → `node .claude/scripts/arch/render.mjs render <file>` 순으로 처리한다.
-   - 결과: 파일마다 <file 이름>.md, .light.svg, .dark.svg.
+   - 결과: 파일마다 <file 이름>.md, .svg.
    - md/SVG/인덱스 문서는 직접 쓰거나 수정하지 않는다. 수정이 필요하면 원본 IR(3단계
      이전) 또는 분할된 IR을 고치고 4~5단계를 다시 수행한다.
 

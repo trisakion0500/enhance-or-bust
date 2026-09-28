@@ -5,7 +5,7 @@
 - 경계: 기능 컨텍스트, 공용/부트스트랩
 - 노드 11개, 엣지 30개
 
-![architecture](enhance-or-bust-overview.light.svg)
+![architecture](enhance-or-bust-overview.svg)
 
 ## 노드
 

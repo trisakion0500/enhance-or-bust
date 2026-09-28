@@ -5,7 +5,7 @@
 - 경계: Auth — 인증, 부트스트랩, 공용 인프라 · 외부 연동
 - 노드 10개, 엣지 15개
 
-![architecture](enhance-or-bust-auth.light.svg)
+![architecture](enhance-or-bust-auth.svg)
 
 ## 노드
 
