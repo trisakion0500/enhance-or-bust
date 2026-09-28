@@ -1,0 +1,268 @@
+{
+  "name": "enhance-or-bust-overview",
+  "commit": "9c88667",
+  "generatedAt": "2026-09-28T00:00:00Z",
+  "boundaries": [
+    {
+      "id": "features",
+      "label": "기능 컨텍스트"
+    },
+    {
+      "id": "support",
+      "label": "공용/부트스트랩"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "ctx_bootstrap",
+      "label": "부트스트랩",
+      "kind": "context",
+      "boundary": "support",
+      "evidence": {
+        "file": "docs/architecture/enhance-or-bust.json"
+      }
+    },
+    {
+      "id": "ctx_infra",
+      "label": "공용 인프라 · 외부 연동",
+      "kind": "context",
+      "boundary": "support",
+      "evidence": {
+        "file": "docs/architecture/enhance-or-bust.json"
+      }
+    },
+    {
+      "id": "ctx_auth",
+      "label": "Auth — 인증",
+      "kind": "context",
+      "boundary": "features",
+      "evidence": {
+        "file": "docs/architecture/enhance-or-bust.json"
+      }
+    },
+    {
+      "id": "ctx_player",
+      "label": "Player — Inventory/Progression/Economy",
+      "kind": "context",
+      "boundary": "features",
+      "evidence": {
+        "file": "docs/architecture/enhance-or-bust.json"
+      }
+    },
+    {
+      "id": "ctx_enhancement",
+      "label": "Enhancement — 강화",
+      "kind": "context",
+      "boundary": "features",
+      "evidence": {
+        "file": "docs/architecture/enhance-or-bust.json"
+      }
+    },
+    {
+      "id": "ctx_synthesis",
+      "label": "Synthesis — 합성",
+      "kind": "context",
+      "boundary": "features",
+      "evidence": {
+        "file": "docs/architecture/enhance-or-bust.json"
+      }
+    },
+    {
+      "id": "ctx_battleStage",
+      "label": "Battle-Stage — 전투 판정",
+      "kind": "context",
+      "boundary": "features",
+      "evidence": {
+        "file": "docs/architecture/enhance-or-bust.json"
+      }
+    },
+    {
+      "id": "ctx_mailbox",
+      "label": "Mailbox — 우편",
+      "kind": "context",
+      "boundary": "features",
+      "evidence": {
+        "file": "docs/architecture/enhance-or-bust.json"
+      }
+    },
+    {
+      "id": "ctx_coupon",
+      "label": "Coupon — 쿠폰 연동",
+      "kind": "context",
+      "boundary": "features",
+      "evidence": {
+        "file": "docs/architecture/enhance-or-bust.json"
+      }
+    },
+    {
+      "id": "ctx_attendance",
+      "label": "Attendance — 출석보상",
+      "kind": "context",
+      "boundary": "features",
+      "evidence": {
+        "file": "docs/architecture/enhance-or-bust.json"
+      }
+    },
+    {
+      "id": "ctx_gm",
+      "label": "GM — 운영툴 연동",
+      "kind": "context",
+      "boundary": "features",
+      "evidence": {
+        "file": "docs/architecture/enhance-or-bust.json"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "ctx_bootstrap",
+      "to": "ctx_infra",
+      "label": "7개 연결"
+    },
+    {
+      "from": "ctx_bootstrap",
+      "to": "ctx_player",
+      "label": "2개 연결"
+    },
+    {
+      "from": "ctx_bootstrap",
+      "to": "ctx_mailbox",
+      "label": "3개 연결"
+    },
+    {
+      "from": "ctx_bootstrap",
+      "to": "ctx_coupon",
+      "label": "3개 연결"
+    },
+    {
+      "from": "ctx_bootstrap",
+      "to": "ctx_attendance",
+      "label": "2개 연결"
+    },
+    {
+      "from": "ctx_bootstrap",
+      "to": "ctx_auth",
+      "label": "1개 연결"
+    },
+    {
+      "from": "ctx_bootstrap",
+      "to": "ctx_gm",
+      "label": "1개 연결"
+    },
+    {
+      "from": "ctx_bootstrap",
+      "to": "ctx_enhancement",
+      "label": "1개 연결"
+    },
+    {
+      "from": "ctx_bootstrap",
+      "to": "ctx_synthesis",
+      "label": "1개 연결"
+    },
+    {
+      "from": "ctx_bootstrap",
+      "to": "ctx_battleStage",
+      "label": "1개 연결"
+    },
+    {
+      "from": "ctx_auth",
+      "to": "ctx_infra",
+      "label": "9개 연결"
+    },
+    {
+      "from": "ctx_auth",
+      "to": "ctx_player",
+      "label": "1개 연결"
+    },
+    {
+      "from": "ctx_player",
+      "to": "ctx_infra",
+      "label": "2개 연결"
+    },
+    {
+      "from": "ctx_player",
+      "to": "ctx_attendance",
+      "label": "1개 연결"
+    },
+    {
+      "from": "ctx_enhancement",
+      "to": "ctx_infra",
+      "label": "3개 연결"
+    },
+    {
+      "from": "ctx_enhancement",
+      "to": "ctx_player",
+      "label": "2개 연결"
+    },
+    {
+      "from": "ctx_synthesis",
+      "to": "ctx_infra",
+      "label": "3개 연결"
+    },
+    {
+      "from": "ctx_synthesis",
+      "to": "ctx_player",
+      "label": "2개 연결"
+    },
+    {
+      "from": "ctx_battleStage",
+      "to": "ctx_infra",
+      "label": "3개 연결"
+    },
+    {
+      "from": "ctx_battleStage",
+      "to": "ctx_mailbox",
+      "label": "2개 연결"
+    },
+    {
+      "from": "ctx_battleStage",
+      "to": "ctx_player",
+      "label": "2개 연결"
+    },
+    {
+      "from": "ctx_mailbox",
+      "to": "ctx_infra",
+      "label": "3개 연결"
+    },
+    {
+      "from": "ctx_coupon",
+      "to": "ctx_infra",
+      "label": "3개 연결"
+    },
+    {
+      "from": "ctx_coupon",
+      "to": "ctx_mailbox",
+      "label": "1개 연결"
+    },
+    {
+      "from": "ctx_attendance",
+      "to": "ctx_mailbox",
+      "label": "1개 연결"
+    },
+    {
+      "from": "ctx_attendance",
+      "to": "ctx_infra",
+      "label": "3개 연결"
+    },
+    {
+      "from": "ctx_gm",
+      "to": "ctx_player",
+      "label": "1개 연결"
+    },
+    {
+      "from": "ctx_gm",
+      "to": "ctx_infra",
+      "label": "2개 연결"
+    },
+    {
+      "from": "ctx_gm",
+      "to": "ctx_attendance",
+      "label": "1개 연결"
+    },
+    {
+      "from": "ctx_infra",
+      "to": "ctx_gm",
+      "label": "1개 연결"
+    }
+  ]
+}

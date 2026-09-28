@@ -1,0 +1,111 @@
+{
+  "name": "enhance-or-bust-enhancement",
+  "commit": "9c88667",
+  "generatedAt": "2026-09-28T00:00:00Z",
+  "boundaries": [
+    {
+      "id": "enhancement",
+      "label": "Enhancement — 강화"
+    },
+    {
+      "id": "bootstrap",
+      "label": "부트스트랩"
+    },
+    {
+      "id": "infra",
+      "label": "공용 인프라 · 외부 연동"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "srv",
+      "label": "server.ts (createServer, 라우트 조립)",
+      "kind": "entrypoint",
+      "boundary": "bootstrap",
+      "evidence": {
+        "file": "src/server.ts",
+        "lineStart": 33,
+        "lineEnd": 67
+      }
+    },
+    {
+      "id": "infra-masterdata-cache",
+      "label": "마스터데이터 캐시 싱글톤",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/masterData/masterDataCache.ts",
+        "lineStart": 36,
+        "lineEnd": 295
+      }
+    },
+    {
+      "id": "infra-auditlog",
+      "label": "writeAuditLog 공용 헬퍼",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/auditLog.ts",
+        "lineStart": 8,
+        "lineEnd": 32
+      }
+    },
+    {
+      "id": "infra-optimistic-retry",
+      "label": "withOptimisticRetry(재조회·저장·재시도 공용 루프)",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/optimisticPlayerWrite.ts",
+        "lineStart": 39,
+        "lineEnd": 66
+      }
+    },
+    {
+      "id": "enh-route",
+      "label": "enhancementRoutes(POST /enhancement/:cardId)",
+      "kind": "route",
+      "boundary": "enhancement",
+      "evidence": {
+        "file": "src/contexts/enhancement/routes/enhancementRoutes.ts",
+        "lineStart": 13,
+        "lineEnd": 23
+      }
+    },
+    {
+      "id": "enh-service",
+      "label": "enhancementService.enhanceCard",
+      "kind": "service",
+      "boundary": "enhancement",
+      "evidence": {
+        "file": "src/contexts/enhancement/application/enhancementService.ts",
+        "lineStart": 39,
+        "lineEnd": 97
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "srv",
+      "to": "enh-route",
+      "label": "app.use"
+    },
+    {
+      "from": "enh-route",
+      "to": "enh-service"
+    },
+    {
+      "from": "enh-service",
+      "to": "infra-optimistic-retry"
+    },
+    {
+      "from": "enh-service",
+      "to": "infra-masterdata-cache",
+      "label": "강화 규칙/등급 조회"
+    },
+    {
+      "from": "enh-service",
+      "to": "infra-auditlog"
+    }
+  ]
+}

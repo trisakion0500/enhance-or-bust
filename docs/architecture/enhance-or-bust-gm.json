@@ -1,0 +1,113 @@
+{
+  "name": "enhance-or-bust-gm",
+  "commit": "9c88667",
+  "generatedAt": "2026-09-28T00:00:00Z",
+  "boundaries": [
+    {
+      "id": "gm",
+      "label": "GM — 운영툴 연동"
+    },
+    {
+      "id": "bootstrap",
+      "label": "부트스트랩"
+    },
+    {
+      "id": "infra",
+      "label": "공용 인프라 · 외부 연동"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "srv",
+      "label": "server.ts (createServer, 라우트 조립)",
+      "kind": "entrypoint",
+      "boundary": "bootstrap",
+      "evidence": {
+        "file": "src/server.ts",
+        "lineStart": 33,
+        "lineEnd": 67
+      }
+    },
+    {
+      "id": "infra-mongolog",
+      "label": "MongoDB 로그 DB 클라이언트",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/infra/mongoLog.ts",
+        "lineStart": 15,
+        "lineEnd": 41
+      }
+    },
+    {
+      "id": "infra-masterdata-cache",
+      "label": "마스터데이터 캐시 싱글톤",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/masterData/masterDataCache.ts",
+        "lineStart": 36,
+        "lineEnd": 295
+      }
+    },
+    {
+      "id": "ext-gmplatform",
+      "label": "gm_platform(운영 콘솔, X-API-Key로 호출)",
+      "kind": "external",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/contexts/gm/routes/gmRoutes.ts",
+        "lineStart": 172,
+        "lineEnd": 190
+      }
+    },
+    {
+      "id": "gm-route",
+      "label": "gmRoutes(/gm/*, X-API-Key 인증, POST 전용 21개 엔드포인트)",
+      "kind": "route",
+      "boundary": "gm",
+      "evidence": {
+        "file": "src/contexts/gm/routes/gmRoutes.ts",
+        "lineStart": 191,
+        "lineEnd": 306
+      }
+    },
+    {
+      "id": "gm-service",
+      "label": "gmService(플레이어/시드데이터/감사로그/출석부 조회·저장)",
+      "kind": "service",
+      "boundary": "gm",
+      "evidence": {
+        "file": "src/contexts/gm/application/gmService.ts",
+        "lineStart": 74,
+        "lineEnd": 554
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "srv",
+      "to": "gm-route",
+      "label": "app.use"
+    },
+    {
+      "from": "gm-route",
+      "to": "gm-service"
+    },
+    {
+      "from": "gm-service",
+      "to": "infra-masterdata-cache",
+      "label": "시드데이터 9종 조회"
+    },
+    {
+      "from": "gm-service",
+      "to": "infra-mongolog",
+      "label": "get*LogsForGm(로그 DB 직접 조회)"
+    },
+    {
+      "from": "ext-gmplatform",
+      "to": "gm-route",
+      "label": "X-API-Key로 POST /gm/* 호출"
+    }
+  ]
+}

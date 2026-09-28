@@ -1,0 +1,111 @@
+{
+  "name": "enhance-or-bust-synthesis",
+  "commit": "9c88667",
+  "generatedAt": "2026-09-28T00:00:00Z",
+  "boundaries": [
+    {
+      "id": "synthesis",
+      "label": "Synthesis — 합성"
+    },
+    {
+      "id": "bootstrap",
+      "label": "부트스트랩"
+    },
+    {
+      "id": "infra",
+      "label": "공용 인프라 · 외부 연동"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "srv",
+      "label": "server.ts (createServer, 라우트 조립)",
+      "kind": "entrypoint",
+      "boundary": "bootstrap",
+      "evidence": {
+        "file": "src/server.ts",
+        "lineStart": 33,
+        "lineEnd": 67
+      }
+    },
+    {
+      "id": "infra-masterdata-cache",
+      "label": "마스터데이터 캐시 싱글톤",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/masterData/masterDataCache.ts",
+        "lineStart": 36,
+        "lineEnd": 295
+      }
+    },
+    {
+      "id": "infra-auditlog",
+      "label": "writeAuditLog 공용 헬퍼",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/auditLog.ts",
+        "lineStart": 8,
+        "lineEnd": 32
+      }
+    },
+    {
+      "id": "infra-optimistic-retry",
+      "label": "withOptimisticRetry(재조회·저장·재시도 공용 루프)",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/optimisticPlayerWrite.ts",
+        "lineStart": 39,
+        "lineEnd": 66
+      }
+    },
+    {
+      "id": "syn-route",
+      "label": "synthesisRoutes(/synthesis/*)",
+      "kind": "route",
+      "boundary": "synthesis",
+      "evidence": {
+        "file": "src/contexts/synthesis/routes/synthesisRoutes.ts",
+        "lineStart": 16,
+        "lineEnd": 39
+      }
+    },
+    {
+      "id": "syn-service",
+      "label": "synthesisService(synthesizeGradeUpgrade/synthesizeEnhanceMaterial)",
+      "kind": "service",
+      "boundary": "synthesis",
+      "evidence": {
+        "file": "src/contexts/synthesis/application/synthesisService.ts",
+        "lineStart": 43,
+        "lineEnd": 168
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "srv",
+      "to": "syn-route",
+      "label": "app.use"
+    },
+    {
+      "from": "syn-route",
+      "to": "syn-service"
+    },
+    {
+      "from": "syn-service",
+      "to": "infra-optimistic-retry"
+    },
+    {
+      "from": "syn-service",
+      "to": "infra-masterdata-cache",
+      "label": "합성 규칙/카드 원형 조회"
+    },
+    {
+      "from": "syn-service",
+      "to": "infra-auditlog"
+    }
+  ]
+}

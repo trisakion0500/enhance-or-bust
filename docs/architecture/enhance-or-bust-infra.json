@@ -1,0 +1,268 @@
+{
+  "name": "enhance-or-bust-infra",
+  "commit": "9c88667",
+  "generatedAt": "2026-09-28T00:00:00Z",
+  "boundaries": [
+    {
+      "id": "infra",
+      "label": "공용 인프라 · 외부 연동"
+    },
+    {
+      "id": "bootstrap",
+      "label": "부트스트랩"
+    },
+    {
+      "id": "gm",
+      "label": "GM — 운영툴 연동"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "idx",
+      "label": "index.ts (프로세스 부트스트랩)",
+      "kind": "entrypoint",
+      "boundary": "bootstrap",
+      "evidence": {
+        "file": "src/index.ts",
+        "lineStart": 1,
+        "lineEnd": 79
+      }
+    },
+    {
+      "id": "srv",
+      "label": "server.ts (createServer, 라우트 조립)",
+      "kind": "entrypoint",
+      "boundary": "bootstrap",
+      "evidence": {
+        "file": "src/server.ts",
+        "lineStart": 33,
+        "lineEnd": 67
+      }
+    },
+    {
+      "id": "infra-mongo",
+      "label": "MongoDB 앱 DB 클라이언트",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/infra/mongo.ts",
+        "lineStart": 14,
+        "lineEnd": 56
+      }
+    },
+    {
+      "id": "infra-mongolog",
+      "label": "MongoDB 로그 DB 클라이언트",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/infra/mongoLog.ts",
+        "lineStart": 15,
+        "lineEnd": 41
+      }
+    },
+    {
+      "id": "infra-redis",
+      "label": "Redis 클라이언트(redisCall/isRedisHealthy)",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/infra/redis.ts",
+        "lineStart": 30,
+        "lineEnd": 97
+      }
+    },
+    {
+      "id": "infra-logger",
+      "label": "log4js 로거",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/infra/logger.ts",
+        "lineStart": 71
+      }
+    },
+    {
+      "id": "infra-masterdata-cache",
+      "label": "마스터데이터 캐시 싱글톤",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/masterData/masterDataCache.ts",
+        "lineStart": 36,
+        "lineEnd": 295
+      }
+    },
+    {
+      "id": "infra-masterdata-watcher",
+      "label": "Change Stream/폴링 워처",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/masterData/masterDataWatcher.ts",
+        "lineStart": 36,
+        "lineEnd": 116
+      }
+    },
+    {
+      "id": "infra-auditlog",
+      "label": "writeAuditLog 공용 헬퍼",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/auditLog.ts",
+        "lineStart": 8,
+        "lineEnd": 32
+      }
+    },
+    {
+      "id": "infra-optimistic-retry",
+      "label": "withOptimisticRetry(재조회·저장·재시도 공용 루프)",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/optimisticPlayerWrite.ts",
+        "lineStart": 39,
+        "lineEnd": 66
+      }
+    },
+    {
+      "id": "infra-redislock",
+      "label": "withPlayerLock(Redis 분산락)",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/redisLock.ts",
+        "lineStart": 46
+      }
+    },
+    {
+      "id": "infra-requireauth",
+      "label": "requireAuth 세션 인증 미들웨어",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/sessionAuth.ts",
+        "lineStart": 18
+      }
+    },
+    {
+      "id": "infra-dbhealthgate",
+      "label": "dbHealthGate 서킷브레이커 미들웨어",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/dbHealthGate.ts",
+        "lineStart": 21
+      }
+    },
+    {
+      "id": "infra-env",
+      "label": "config/env.ts (환경변수 전체)",
+      "kind": "env",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/config/env.ts",
+        "lineStart": 7,
+        "lineEnd": 53
+      }
+    },
+    {
+      "id": "ext-google",
+      "label": "Google OAuth(GIS/Authorization Code)",
+      "kind": "external",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/contexts/auth/infrastructure/googleAuth.ts",
+        "lineStart": 26,
+        "lineEnd": 76
+      }
+    },
+    {
+      "id": "ext-facebook",
+      "label": "Facebook Graph API",
+      "kind": "external",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/contexts/auth/infrastructure/facebookAuth.ts",
+        "lineStart": 17,
+        "lineEnd": 65
+      }
+    },
+    {
+      "id": "ext-gmplatform",
+      "label": "gm_platform(운영 콘솔, X-API-Key로 호출)",
+      "kind": "external",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/contexts/gm/routes/gmRoutes.ts",
+        "lineStart": 172,
+        "lineEnd": 190
+      }
+    },
+    {
+      "id": "ext-couponplatform",
+      "label": "coupon_platform S2S API(reserve/confirm)",
+      "kind": "external",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/contexts/coupon/infrastructure/couponS2sClient.ts",
+        "lineStart": 1,
+        "lineEnd": 43
+      }
+    },
+    {
+      "id": "gm-route",
+      "label": "gmRoutes(/gm/*, X-API-Key 인증, POST 전용 21개 엔드포인트)",
+      "kind": "route",
+      "boundary": "gm",
+      "evidence": {
+        "file": "src/contexts/gm/routes/gmRoutes.ts",
+        "lineStart": 191,
+        "lineEnd": 306
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "idx",
+      "to": "infra-mongo",
+      "label": "connectMongo()"
+    },
+    {
+      "from": "idx",
+      "to": "infra-mongolog",
+      "label": "connectMongoLog()"
+    },
+    {
+      "from": "idx",
+      "to": "infra-redis",
+      "label": "connectRedis()"
+    },
+    {
+      "from": "idx",
+      "to": "infra-masterdata-cache",
+      "label": "loadAll()"
+    },
+    {
+      "from": "idx",
+      "to": "infra-masterdata-watcher",
+      "label": "startMasterDataWatch/Polling"
+    },
+    {
+      "from": "idx",
+      "to": "ext-couponplatform",
+      "label": "createCouponS2sClient()"
+    },
+    {
+      "from": "srv",
+      "to": "infra-dbhealthgate",
+      "label": "app.use"
+    },
+    {
+      "from": "ext-gmplatform",
+      "to": "gm-route",
+      "label": "X-API-Key로 POST /gm/* 호출"
+    }
+  ]
+}

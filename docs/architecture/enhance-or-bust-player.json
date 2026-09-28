@@ -1,0 +1,169 @@
+{
+  "name": "enhance-or-bust-player",
+  "commit": "9c88667",
+  "generatedAt": "2026-09-28T00:00:00Z",
+  "boundaries": [
+    {
+      "id": "player",
+      "label": "Player — Inventory/Progression/Economy"
+    },
+    {
+      "id": "bootstrap",
+      "label": "부트스트랩"
+    },
+    {
+      "id": "infra",
+      "label": "공용 인프라 · 외부 연동"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "idx",
+      "label": "index.ts (프로세스 부트스트랩)",
+      "kind": "entrypoint",
+      "boundary": "bootstrap",
+      "evidence": {
+        "file": "src/index.ts",
+        "lineStart": 1,
+        "lineEnd": 79
+      }
+    },
+    {
+      "id": "srv",
+      "label": "server.ts (createServer, 라우트 조립)",
+      "kind": "entrypoint",
+      "boundary": "bootstrap",
+      "evidence": {
+        "file": "src/server.ts",
+        "lineStart": 33,
+        "lineEnd": 67
+      }
+    },
+    {
+      "id": "infra-mongo",
+      "label": "MongoDB 앱 DB 클라이언트",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/infra/mongo.ts",
+        "lineStart": 14,
+        "lineEnd": 56
+      }
+    },
+    {
+      "id": "infra-masterdata-cache",
+      "label": "마스터데이터 캐시 싱글톤",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/masterData/masterDataCache.ts",
+        "lineStart": 36,
+        "lineEnd": 295
+      }
+    },
+    {
+      "id": "player-route",
+      "label": "playerRoutes(GET /player/me)",
+      "kind": "route",
+      "boundary": "player",
+      "evidence": {
+        "file": "src/contexts/player/routes/playerRoutes.ts",
+        "lineStart": 20,
+        "lineEnd": 30
+      }
+    },
+    {
+      "id": "player-service",
+      "label": "playerService.getPlayerSummary",
+      "kind": "service",
+      "boundary": "player",
+      "evidence": {
+        "file": "src/contexts/player/application/playerService.ts",
+        "lineStart": 82
+      }
+    },
+    {
+      "id": "player-repo",
+      "label": "MongoPlayerRepository(낙관적 락)",
+      "kind": "repository",
+      "boundary": "player",
+      "evidence": {
+        "file": "src/contexts/player/infrastructure/mongoPlayerRepository.ts",
+        "lineStart": 73
+      }
+    },
+    {
+      "id": "player-aggregate",
+      "label": "Player 애그리게잇",
+      "kind": "other",
+      "boundary": "player",
+      "evidence": {
+        "file": "src/contexts/player/domain/player.ts",
+        "lineStart": 12
+      }
+    },
+    {
+      "id": "player-inventory",
+      "label": "Inventory 값객체(findCard/addCard/removeCard)",
+      "kind": "other",
+      "boundary": "player",
+      "evidence": {
+        "file": "src/contexts/player/domain/inventory.ts",
+        "lineStart": 11
+      }
+    },
+    {
+      "id": "player-economy",
+      "label": "Economy 값객체(deductGold 등)",
+      "kind": "other",
+      "boundary": "player",
+      "evidence": {
+        "file": "src/contexts/player/domain/economy.ts",
+        "lineStart": 9
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "idx",
+      "to": "player-repo",
+      "label": "new MongoPlayerRepository(db)"
+    },
+    {
+      "from": "srv",
+      "to": "player-route",
+      "label": "app.use"
+    },
+    {
+      "from": "player-route",
+      "to": "player-service"
+    },
+    {
+      "from": "player-service",
+      "to": "player-repo",
+      "label": "findById"
+    },
+    {
+      "from": "player-service",
+      "to": "infra-masterdata-cache",
+      "label": "카드/합성룰 조인"
+    },
+    {
+      "from": "player-repo",
+      "to": "infra-mongo"
+    },
+    {
+      "from": "player-repo",
+      "to": "player-aggregate",
+      "label": "문서 ↔ Player 매핑"
+    },
+    {
+      "from": "player-aggregate",
+      "to": "player-inventory"
+    },
+    {
+      "from": "player-aggregate",
+      "to": "player-economy"
+    }
+  ]
+}

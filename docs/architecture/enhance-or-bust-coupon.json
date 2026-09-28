@@ -1,0 +1,148 @@
+{
+  "name": "enhance-or-bust-coupon",
+  "commit": "9c88667",
+  "generatedAt": "2026-09-28T00:00:00Z",
+  "boundaries": [
+    {
+      "id": "coupon",
+      "label": "Coupon — 쿠폰 연동"
+    },
+    {
+      "id": "bootstrap",
+      "label": "부트스트랩"
+    },
+    {
+      "id": "infra",
+      "label": "공용 인프라 · 외부 연동"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "idx",
+      "label": "index.ts (프로세스 부트스트랩)",
+      "kind": "entrypoint",
+      "boundary": "bootstrap",
+      "evidence": {
+        "file": "src/index.ts",
+        "lineStart": 1,
+        "lineEnd": 79
+      }
+    },
+    {
+      "id": "srv",
+      "label": "server.ts (createServer, 라우트 조립)",
+      "kind": "entrypoint",
+      "boundary": "bootstrap",
+      "evidence": {
+        "file": "src/server.ts",
+        "lineStart": 33,
+        "lineEnd": 67
+      }
+    },
+    {
+      "id": "infra-mongo",
+      "label": "MongoDB 앱 DB 클라이언트",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/infra/mongo.ts",
+        "lineStart": 14,
+        "lineEnd": 56
+      }
+    },
+    {
+      "id": "infra-auditlog",
+      "label": "writeAuditLog 공용 헬퍼",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/auditLog.ts",
+        "lineStart": 8,
+        "lineEnd": 32
+      }
+    },
+    {
+      "id": "ext-couponplatform",
+      "label": "coupon_platform S2S API(reserve/confirm)",
+      "kind": "external",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/contexts/coupon/infrastructure/couponS2sClient.ts",
+        "lineStart": 1,
+        "lineEnd": 43
+      }
+    },
+    {
+      "id": "cp-route",
+      "label": "couponRoutes(POST /coupon/redeem)",
+      "kind": "route",
+      "boundary": "coupon",
+      "evidence": {
+        "file": "src/contexts/coupon/routes/couponRoutes.ts",
+        "lineStart": 31,
+        "lineEnd": 44
+      }
+    },
+    {
+      "id": "cp-service",
+      "label": "couponService(redeemCoupon/reconcileUnconfirmedCoupons)",
+      "kind": "service",
+      "boundary": "coupon",
+      "evidence": {
+        "file": "src/contexts/coupon/application/couponService.ts",
+        "lineStart": 104,
+        "lineEnd": 195
+      }
+    },
+    {
+      "id": "cp-repo",
+      "label": "couponRedemptionStore(player_coupon, reserve→mail→confirm 상태 기록)",
+      "kind": "repository",
+      "boundary": "coupon",
+      "evidence": {
+        "file": "src/contexts/coupon/infrastructure/couponRedemptionStore.ts",
+        "lineStart": 11,
+        "lineEnd": 28
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "idx",
+      "to": "cp-repo",
+      "label": "ensureCouponRedemptionIndexes(db)"
+    },
+    {
+      "from": "idx",
+      "to": "cp-service",
+      "label": "cron(매일 새벽4시) reconcileUnconfirmedCoupons"
+    },
+    {
+      "from": "srv",
+      "to": "cp-route",
+      "label": "app.use"
+    },
+    {
+      "from": "cp-route",
+      "to": "cp-service"
+    },
+    {
+      "from": "cp-service",
+      "to": "ext-couponplatform",
+      "label": "reserve/confirm"
+    },
+    {
+      "from": "cp-service",
+      "to": "cp-repo",
+      "label": "recordReserved/markMailGranted/markConfirmed"
+    },
+    {
+      "from": "cp-service",
+      "to": "infra-auditlog"
+    },
+    {
+      "from": "cp-repo",
+      "to": "infra-mongo"
+    }
+  ]
+}

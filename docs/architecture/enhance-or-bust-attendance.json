@@ -1,0 +1,141 @@
+{
+  "name": "enhance-or-bust-attendance",
+  "commit": "9c88667",
+  "generatedAt": "2026-09-28T00:00:00Z",
+  "boundaries": [
+    {
+      "id": "attendance",
+      "label": "Attendance — 출석보상"
+    },
+    {
+      "id": "bootstrap",
+      "label": "부트스트랩"
+    },
+    {
+      "id": "infra",
+      "label": "공용 인프라 · 외부 연동"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "idx",
+      "label": "index.ts (프로세스 부트스트랩)",
+      "kind": "entrypoint",
+      "boundary": "bootstrap",
+      "evidence": {
+        "file": "src/index.ts",
+        "lineStart": 1,
+        "lineEnd": 79
+      }
+    },
+    {
+      "id": "srv",
+      "label": "server.ts (createServer, 라우트 조립)",
+      "kind": "entrypoint",
+      "boundary": "bootstrap",
+      "evidence": {
+        "file": "src/server.ts",
+        "lineStart": 33,
+        "lineEnd": 67
+      }
+    },
+    {
+      "id": "infra-mongo",
+      "label": "MongoDB 앱 DB 클라이언트",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/infra/mongo.ts",
+        "lineStart": 14,
+        "lineEnd": 56
+      }
+    },
+    {
+      "id": "infra-masterdata-cache",
+      "label": "마스터데이터 캐시 싱글톤",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/masterData/masterDataCache.ts",
+        "lineStart": 36,
+        "lineEnd": 295
+      }
+    },
+    {
+      "id": "infra-auditlog",
+      "label": "writeAuditLog 공용 헬퍼",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/auditLog.ts",
+        "lineStart": 8,
+        "lineEnd": 32
+      }
+    },
+    {
+      "id": "att-route",
+      "label": "attendanceRoutes(GET /attendance, POST /attendance/:defId/catchup)",
+      "kind": "route",
+      "boundary": "attendance",
+      "evidence": {
+        "file": "src/contexts/attendance/routes/attendanceRoutes.ts",
+        "lineStart": 21,
+        "lineEnd": 40
+      }
+    },
+    {
+      "id": "att-service",
+      "label": "attendanceService(processLoginAttendance/getAttendanceStatus/purchaseCatchup)",
+      "kind": "service",
+      "boundary": "attendance",
+      "evidence": {
+        "file": "src/contexts/attendance/application/attendanceService.ts",
+        "lineStart": 263
+      }
+    },
+    {
+      "id": "att-store",
+      "label": "attendanceStore(출석 인스턴스/정의 컬렉션 4종)",
+      "kind": "repository",
+      "boundary": "attendance",
+      "evidence": {
+        "file": "src/contexts/attendance/infrastructure/attendanceStore.ts",
+        "lineStart": 16,
+        "lineEnd": 50
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "idx",
+      "to": "att-store",
+      "label": "ensureAttendanceIndexes(db)"
+    },
+    {
+      "from": "srv",
+      "to": "att-route",
+      "label": "app.use"
+    },
+    {
+      "from": "att-route",
+      "to": "att-service"
+    },
+    {
+      "from": "att-service",
+      "to": "att-store"
+    },
+    {
+      "from": "att-service",
+      "to": "infra-masterdata-cache",
+      "label": "출석부 정의/보상 조회"
+    },
+    {
+      "from": "att-service",
+      "to": "infra-auditlog"
+    },
+    {
+      "from": "att-store",
+      "to": "infra-mongo"
+    }
+  ]
+}

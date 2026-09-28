@@ -1,0 +1,205 @@
+{
+  "name": "enhance-or-bust-auth",
+  "commit": "9c88667",
+  "generatedAt": "2026-09-28T00:00:00Z",
+  "boundaries": [
+    {
+      "id": "auth",
+      "label": "Auth — 인증"
+    },
+    {
+      "id": "bootstrap",
+      "label": "부트스트랩"
+    },
+    {
+      "id": "infra",
+      "label": "공용 인프라 · 외부 연동"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "srv",
+      "label": "server.ts (createServer, 라우트 조립)",
+      "kind": "entrypoint",
+      "boundary": "bootstrap",
+      "evidence": {
+        "file": "src/server.ts",
+        "lineStart": 33,
+        "lineEnd": 67
+      }
+    },
+    {
+      "id": "infra-redis",
+      "label": "Redis 클라이언트(redisCall/isRedisHealthy)",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/infra/redis.ts",
+        "lineStart": 30,
+        "lineEnd": 97
+      }
+    },
+    {
+      "id": "infra-masterdata-cache",
+      "label": "마스터데이터 캐시 싱글톤",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/masterData/masterDataCache.ts",
+        "lineStart": 36,
+        "lineEnd": 295
+      }
+    },
+    {
+      "id": "infra-auditlog",
+      "label": "writeAuditLog 공용 헬퍼",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/auditLog.ts",
+        "lineStart": 8,
+        "lineEnd": 32
+      }
+    },
+    {
+      "id": "ext-google",
+      "label": "Google OAuth(GIS/Authorization Code)",
+      "kind": "external",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/contexts/auth/infrastructure/googleAuth.ts",
+        "lineStart": 26,
+        "lineEnd": 76
+      }
+    },
+    {
+      "id": "ext-facebook",
+      "label": "Facebook Graph API",
+      "kind": "external",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/contexts/auth/infrastructure/facebookAuth.ts",
+        "lineStart": 17,
+        "lineEnd": 65
+      }
+    },
+    {
+      "id": "auth-route",
+      "label": "authRoutes(/auth/*)",
+      "kind": "route",
+      "boundary": "auth",
+      "evidence": {
+        "file": "src/contexts/auth/routes/authRoutes.ts",
+        "lineStart": 50,
+        "lineEnd": 194
+      }
+    },
+    {
+      "id": "auth-service",
+      "label": "authService(loginOrRegister/completeRegistration/loginWithSocialProvider)",
+      "kind": "service",
+      "boundary": "auth",
+      "evidence": {
+        "file": "src/contexts/auth/application/authService.ts",
+        "lineStart": 1,
+        "lineEnd": 172
+      }
+    },
+    {
+      "id": "auth-sessionstore",
+      "label": "sessionStore(Redis 세션 저장소)",
+      "kind": "repository",
+      "boundary": "auth",
+      "evidence": {
+        "file": "src/contexts/auth/infrastructure/sessionStore.ts",
+        "lineStart": 18,
+        "lineEnd": 52
+      }
+    },
+    {
+      "id": "auth-pendingstore",
+      "label": "pendingRegistrationStore(Redis 가입보류 저장소)",
+      "kind": "repository",
+      "boundary": "auth",
+      "evidence": {
+        "file": "src/contexts/auth/infrastructure/pendingRegistrationStore.ts",
+        "lineStart": 29,
+        "lineEnd": 55
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "srv",
+      "to": "auth-route",
+      "label": "app.use"
+    },
+    {
+      "from": "auth-route",
+      "to": "auth-service"
+    },
+    {
+      "from": "auth-route",
+      "to": "auth-sessionstore",
+      "label": "logout: resolveSession/deleteSession"
+    },
+    {
+      "from": "auth-route",
+      "to": "auth-pendingstore",
+      "label": "GET /auth/register/pending"
+    },
+    {
+      "from": "auth-route",
+      "to": "ext-google",
+      "label": "generateAuthUrl"
+    },
+    {
+      "from": "auth-route",
+      "to": "ext-facebook",
+      "label": "generateAuthUrl"
+    },
+    {
+      "from": "auth-route",
+      "to": "infra-auditlog",
+      "label": "logout 기록"
+    },
+    {
+      "from": "auth-service",
+      "to": "auth-sessionstore",
+      "label": "createSession"
+    },
+    {
+      "from": "auth-service",
+      "to": "auth-pendingstore",
+      "label": "createPendingRegistration/resolve/delete"
+    },
+    {
+      "from": "auth-service",
+      "to": "ext-google",
+      "label": "verifyGoogleIdToken"
+    },
+    {
+      "from": "auth-service",
+      "to": "ext-facebook",
+      "label": "provider.exchangeAuthCode"
+    },
+    {
+      "from": "auth-service",
+      "to": "infra-masterdata-cache",
+      "label": "getCardTemplatesByGrade(시작카드)"
+    },
+    {
+      "from": "auth-service",
+      "to": "infra-auditlog",
+      "label": "register/login 기록"
+    },
+    {
+      "from": "auth-sessionstore",
+      "to": "infra-redis"
+    },
+    {
+      "from": "auth-pendingstore",
+      "to": "infra-redis"
+    }
+  ]
+}

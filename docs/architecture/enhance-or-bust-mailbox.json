@@ -1,0 +1,178 @@
+{
+  "name": "enhance-or-bust-mailbox",
+  "commit": "9c88667",
+  "generatedAt": "2026-09-28T00:00:00Z",
+  "boundaries": [
+    {
+      "id": "mailbox",
+      "label": "Mailbox — 우편"
+    },
+    {
+      "id": "bootstrap",
+      "label": "부트스트랩"
+    },
+    {
+      "id": "infra",
+      "label": "공용 인프라 · 외부 연동"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "idx",
+      "label": "index.ts (프로세스 부트스트랩)",
+      "kind": "entrypoint",
+      "boundary": "bootstrap",
+      "evidence": {
+        "file": "src/index.ts",
+        "lineStart": 1,
+        "lineEnd": 79
+      }
+    },
+    {
+      "id": "srv",
+      "label": "server.ts (createServer, 라우트 조립)",
+      "kind": "entrypoint",
+      "boundary": "bootstrap",
+      "evidence": {
+        "file": "src/server.ts",
+        "lineStart": 33,
+        "lineEnd": 67
+      }
+    },
+    {
+      "id": "infra-mongo",
+      "label": "MongoDB 앱 DB 클라이언트",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/infra/mongo.ts",
+        "lineStart": 14,
+        "lineEnd": 56
+      }
+    },
+    {
+      "id": "infra-auditlog",
+      "label": "writeAuditLog 공용 헬퍼",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/auditLog.ts",
+        "lineStart": 8,
+        "lineEnd": 32
+      }
+    },
+    {
+      "id": "mb-route",
+      "label": "mailboxRoutes(/mailbox/*)",
+      "kind": "route",
+      "boundary": "mailbox",
+      "evidence": {
+        "file": "src/contexts/mailbox/routes/mailboxRoutes.ts",
+        "lineStart": 16,
+        "lineEnd": 36
+      }
+    },
+    {
+      "id": "mb-service",
+      "label": "mailboxService(sendMail/claimMail/deleteMail/listMails)",
+      "kind": "service",
+      "boundary": "mailbox",
+      "evidence": {
+        "file": "src/contexts/mailbox/application/mailboxService.ts",
+        "lineStart": 31,
+        "lineEnd": 100
+      }
+    },
+    {
+      "id": "mb-cleanup",
+      "label": "mailboxCleanupService.runMailboxCleanupJob(월간 배치)",
+      "kind": "service",
+      "boundary": "mailbox",
+      "evidence": {
+        "file": "src/contexts/mailbox/application/mailboxCleanupService.ts",
+        "lineStart": 23,
+        "lineEnd": 44
+      }
+    },
+    {
+      "id": "mb-repo",
+      "label": "MongoMailboxRepository(claim은 멀티도큐먼트 트랜잭션)",
+      "kind": "repository",
+      "boundary": "mailbox",
+      "evidence": {
+        "file": "src/contexts/mailbox/infrastructure/mongoMailboxRepository.ts",
+        "lineStart": 35,
+        "lineEnd": 40
+      }
+    },
+    {
+      "id": "mb-mail",
+      "label": "Mail 값객체",
+      "kind": "other",
+      "boundary": "mailbox",
+      "evidence": {
+        "file": "src/contexts/mailbox/domain/mail.ts",
+        "lineStart": 8,
+        "lineEnd": 31
+      }
+    },
+    {
+      "id": "mb-mailcontent",
+      "label": "MAIL_CONTENTS 레지스트리(발송 트리거별 제목/만료일)",
+      "kind": "other",
+      "boundary": "mailbox",
+      "evidence": {
+        "file": "src/contexts/mailbox/domain/mailContent.ts",
+        "lineStart": 8,
+        "lineEnd": 24
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "idx",
+      "to": "mb-repo",
+      "label": "new MongoMailboxRepository(db)"
+    },
+    {
+      "from": "idx",
+      "to": "mb-cleanup",
+      "label": "cron(매월 1일)"
+    },
+    {
+      "from": "srv",
+      "to": "mb-route",
+      "label": "app.use"
+    },
+    {
+      "from": "mb-route",
+      "to": "mb-service"
+    },
+    {
+      "from": "mb-service",
+      "to": "mb-repo"
+    },
+    {
+      "from": "mb-service",
+      "to": "infra-auditlog"
+    },
+    {
+      "from": "mb-service",
+      "to": "mb-mail",
+      "label": "new Mail(...)"
+    },
+    {
+      "from": "mb-cleanup",
+      "to": "mb-repo",
+      "label": "deleteExpiredBefore"
+    },
+    {
+      "from": "mb-cleanup",
+      "to": "infra-auditlog"
+    },
+    {
+      "from": "mb-repo",
+      "to": "infra-mongo"
+    }
+  ]
+}

@@ -1,0 +1,432 @@
+{
+  "name": "enhance-or-bust-bootstrap",
+  "commit": "9c88667",
+  "generatedAt": "2026-09-28T00:00:00Z",
+  "boundaries": [
+    {
+      "id": "bootstrap",
+      "label": "부트스트랩"
+    },
+    {
+      "id": "infra",
+      "label": "공용 인프라 · 외부 연동"
+    },
+    {
+      "id": "player",
+      "label": "Player — Inventory/Progression/Economy"
+    },
+    {
+      "id": "mailbox",
+      "label": "Mailbox — 우편"
+    },
+    {
+      "id": "coupon",
+      "label": "Coupon — 쿠폰 연동"
+    },
+    {
+      "id": "attendance",
+      "label": "Attendance — 출석보상"
+    },
+    {
+      "id": "auth",
+      "label": "Auth — 인증"
+    },
+    {
+      "id": "gm",
+      "label": "GM — 운영툴 연동"
+    },
+    {
+      "id": "enhancement",
+      "label": "Enhancement — 강화"
+    },
+    {
+      "id": "synthesis",
+      "label": "Synthesis — 합성"
+    },
+    {
+      "id": "battleStage",
+      "label": "Battle-Stage — 전투 판정"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "idx",
+      "label": "index.ts (프로세스 부트스트랩)",
+      "kind": "entrypoint",
+      "boundary": "bootstrap",
+      "evidence": {
+        "file": "src/index.ts",
+        "lineStart": 1,
+        "lineEnd": 79
+      }
+    },
+    {
+      "id": "srv",
+      "label": "server.ts (createServer, 라우트 조립)",
+      "kind": "entrypoint",
+      "boundary": "bootstrap",
+      "evidence": {
+        "file": "src/server.ts",
+        "lineStart": 33,
+        "lineEnd": 67
+      }
+    },
+    {
+      "id": "infra-mongo",
+      "label": "MongoDB 앱 DB 클라이언트",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/infra/mongo.ts",
+        "lineStart": 14,
+        "lineEnd": 56
+      }
+    },
+    {
+      "id": "infra-mongolog",
+      "label": "MongoDB 로그 DB 클라이언트",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/infra/mongoLog.ts",
+        "lineStart": 15,
+        "lineEnd": 41
+      }
+    },
+    {
+      "id": "infra-redis",
+      "label": "Redis 클라이언트(redisCall/isRedisHealthy)",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/infra/redis.ts",
+        "lineStart": 30,
+        "lineEnd": 97
+      }
+    },
+    {
+      "id": "infra-masterdata-cache",
+      "label": "마스터데이터 캐시 싱글톤",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/masterData/masterDataCache.ts",
+        "lineStart": 36,
+        "lineEnd": 295
+      }
+    },
+    {
+      "id": "infra-masterdata-watcher",
+      "label": "Change Stream/폴링 워처",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/masterData/masterDataWatcher.ts",
+        "lineStart": 36,
+        "lineEnd": 116
+      }
+    },
+    {
+      "id": "infra-dbhealthgate",
+      "label": "dbHealthGate 서킷브레이커 미들웨어",
+      "kind": "infra",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/shared-kernel/dbHealthGate.ts",
+        "lineStart": 21
+      }
+    },
+    {
+      "id": "ext-couponplatform",
+      "label": "coupon_platform S2S API(reserve/confirm)",
+      "kind": "external",
+      "boundary": "infra",
+      "evidence": {
+        "file": "src/contexts/coupon/infrastructure/couponS2sClient.ts",
+        "lineStart": 1,
+        "lineEnd": 43
+      }
+    },
+    {
+      "id": "auth-route",
+      "label": "authRoutes(/auth/*)",
+      "kind": "route",
+      "boundary": "auth",
+      "evidence": {
+        "file": "src/contexts/auth/routes/authRoutes.ts",
+        "lineStart": 50,
+        "lineEnd": 194
+      }
+    },
+    {
+      "id": "player-route",
+      "label": "playerRoutes(GET /player/me)",
+      "kind": "route",
+      "boundary": "player",
+      "evidence": {
+        "file": "src/contexts/player/routes/playerRoutes.ts",
+        "lineStart": 20,
+        "lineEnd": 30
+      }
+    },
+    {
+      "id": "player-repo",
+      "label": "MongoPlayerRepository(낙관적 락)",
+      "kind": "repository",
+      "boundary": "player",
+      "evidence": {
+        "file": "src/contexts/player/infrastructure/mongoPlayerRepository.ts",
+        "lineStart": 73
+      }
+    },
+    {
+      "id": "enh-route",
+      "label": "enhancementRoutes(POST /enhancement/:cardId)",
+      "kind": "route",
+      "boundary": "enhancement",
+      "evidence": {
+        "file": "src/contexts/enhancement/routes/enhancementRoutes.ts",
+        "lineStart": 13,
+        "lineEnd": 23
+      }
+    },
+    {
+      "id": "syn-route",
+      "label": "synthesisRoutes(/synthesis/*)",
+      "kind": "route",
+      "boundary": "synthesis",
+      "evidence": {
+        "file": "src/contexts/synthesis/routes/synthesisRoutes.ts",
+        "lineStart": 16,
+        "lineEnd": 39
+      }
+    },
+    {
+      "id": "bs-route",
+      "label": "battleStageRoutes(POST /battle-stage/:stageId/clear)",
+      "kind": "route",
+      "boundary": "battleStage",
+      "evidence": {
+        "file": "src/contexts/battleStage/routes/battleStageRoutes.ts",
+        "lineStart": 20,
+        "lineEnd": 35
+      }
+    },
+    {
+      "id": "mb-route",
+      "label": "mailboxRoutes(/mailbox/*)",
+      "kind": "route",
+      "boundary": "mailbox",
+      "evidence": {
+        "file": "src/contexts/mailbox/routes/mailboxRoutes.ts",
+        "lineStart": 16,
+        "lineEnd": 36
+      }
+    },
+    {
+      "id": "mb-cleanup",
+      "label": "mailboxCleanupService.runMailboxCleanupJob(월간 배치)",
+      "kind": "service",
+      "boundary": "mailbox",
+      "evidence": {
+        "file": "src/contexts/mailbox/application/mailboxCleanupService.ts",
+        "lineStart": 23,
+        "lineEnd": 44
+      }
+    },
+    {
+      "id": "mb-repo",
+      "label": "MongoMailboxRepository(claim은 멀티도큐먼트 트랜잭션)",
+      "kind": "repository",
+      "boundary": "mailbox",
+      "evidence": {
+        "file": "src/contexts/mailbox/infrastructure/mongoMailboxRepository.ts",
+        "lineStart": 35,
+        "lineEnd": 40
+      }
+    },
+    {
+      "id": "cp-route",
+      "label": "couponRoutes(POST /coupon/redeem)",
+      "kind": "route",
+      "boundary": "coupon",
+      "evidence": {
+        "file": "src/contexts/coupon/routes/couponRoutes.ts",
+        "lineStart": 31,
+        "lineEnd": 44
+      }
+    },
+    {
+      "id": "cp-service",
+      "label": "couponService(redeemCoupon/reconcileUnconfirmedCoupons)",
+      "kind": "service",
+      "boundary": "coupon",
+      "evidence": {
+        "file": "src/contexts/coupon/application/couponService.ts",
+        "lineStart": 104,
+        "lineEnd": 195
+      }
+    },
+    {
+      "id": "cp-repo",
+      "label": "couponRedemptionStore(player_coupon, reserve→mail→confirm 상태 기록)",
+      "kind": "repository",
+      "boundary": "coupon",
+      "evidence": {
+        "file": "src/contexts/coupon/infrastructure/couponRedemptionStore.ts",
+        "lineStart": 11,
+        "lineEnd": 28
+      }
+    },
+    {
+      "id": "att-route",
+      "label": "attendanceRoutes(GET /attendance, POST /attendance/:defId/catchup)",
+      "kind": "route",
+      "boundary": "attendance",
+      "evidence": {
+        "file": "src/contexts/attendance/routes/attendanceRoutes.ts",
+        "lineStart": 21,
+        "lineEnd": 40
+      }
+    },
+    {
+      "id": "att-store",
+      "label": "attendanceStore(출석 인스턴스/정의 컬렉션 4종)",
+      "kind": "repository",
+      "boundary": "attendance",
+      "evidence": {
+        "file": "src/contexts/attendance/infrastructure/attendanceStore.ts",
+        "lineStart": 16,
+        "lineEnd": 50
+      }
+    },
+    {
+      "id": "gm-route",
+      "label": "gmRoutes(/gm/*, X-API-Key 인증, POST 전용 21개 엔드포인트)",
+      "kind": "route",
+      "boundary": "gm",
+      "evidence": {
+        "file": "src/contexts/gm/routes/gmRoutes.ts",
+        "lineStart": 191,
+        "lineEnd": 306
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "idx",
+      "to": "infra-mongo",
+      "label": "connectMongo()"
+    },
+    {
+      "from": "idx",
+      "to": "infra-mongolog",
+      "label": "connectMongoLog()"
+    },
+    {
+      "from": "idx",
+      "to": "infra-redis",
+      "label": "connectRedis()"
+    },
+    {
+      "from": "idx",
+      "to": "infra-masterdata-cache",
+      "label": "loadAll()"
+    },
+    {
+      "from": "idx",
+      "to": "infra-masterdata-watcher",
+      "label": "startMasterDataWatch/Polling"
+    },
+    {
+      "from": "idx",
+      "to": "player-repo",
+      "label": "new MongoPlayerRepository(db)"
+    },
+    {
+      "from": "idx",
+      "to": "mb-repo",
+      "label": "new MongoMailboxRepository(db)"
+    },
+    {
+      "from": "idx",
+      "to": "cp-repo",
+      "label": "ensureCouponRedemptionIndexes(db)"
+    },
+    {
+      "from": "idx",
+      "to": "att-store",
+      "label": "ensureAttendanceIndexes(db)"
+    },
+    {
+      "from": "idx",
+      "to": "srv",
+      "label": "createServer(...)"
+    },
+    {
+      "from": "idx",
+      "to": "mb-cleanup",
+      "label": "cron(매월 1일)"
+    },
+    {
+      "from": "idx",
+      "to": "cp-service",
+      "label": "cron(매일 새벽4시) reconcileUnconfirmedCoupons"
+    },
+    {
+      "from": "idx",
+      "to": "ext-couponplatform",
+      "label": "createCouponS2sClient()"
+    },
+    {
+      "from": "srv",
+      "to": "infra-dbhealthgate",
+      "label": "app.use"
+    },
+    {
+      "from": "srv",
+      "to": "auth-route",
+      "label": "app.use"
+    },
+    {
+      "from": "srv",
+      "to": "gm-route",
+      "label": "app.use"
+    },
+    {
+      "from": "srv",
+      "to": "enh-route",
+      "label": "app.use"
+    },
+    {
+      "from": "srv",
+      "to": "syn-route",
+      "label": "app.use"
+    },
+    {
+      "from": "srv",
+      "to": "bs-route",
+      "label": "app.use"
+    },
+    {
+      "from": "srv",
+      "to": "mb-route",
+      "label": "app.use"
+    },
+    {
+      "from": "srv",
+      "to": "cp-route",
+      "label": "app.use"
+    },
+    {
+      "from": "srv",
+      "to": "player-route",
+      "label": "app.use"
+    },
+    {
+      "from": "srv",
+      "to": "att-route",
+      "label": "app.use"
+    }
+  ]
+}
