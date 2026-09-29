@@ -13,17 +13,19 @@ import { MongoPlayerRepository } from "../../player/infrastructure/mongoPlayerRe
 import { createServer } from "../../../server.js";
 
 /**
- * gm_platform 연동(`/gm/*`) E2E 테스트 — 현재는 출석부 저장 API 3종(`save-attendance-def`/
- * `save-attendance-rewards`/`save-attendance-catchup-prices`) 검증만 다룬다. 다른 GM 조회
- * 엔드포인트는 파라미터가 거의 없어(마스터데이터 덤프/로그 조회) 검증 실패 경로 자체가 얇아 별도
- * 테스트를 두지 않았다(`17_GM_API.md` 참고). `GM_PLATFORM_API_KEY`가 `.env`에 설정돼 있으면
- * `X-API-Key` 헤더로 실어 보낸다(설정 안 되어 있으면 `gmApiKeyAuth.ts`가 검증 자체를 건너뜀).
+ * gm_platform 연동(`/gm/*`) E2E 테스트 — 출석부 저장 API 3종(`save-attendance-def`/
+ * `save-attendance-rewards`/`save-attendance-catchup-prices`)과 카드 원형 저장 API
+ * (`save-card-templates`) 검증을 다룬다. 다른 GM 조회 엔드포인트는 파라미터가 거의 없어
+ * (마스터데이터 덤프/로그 조회) 검증 실패 경로 자체가 얇아 별도 테스트를 두지 않았다
+ * (`17_GM_API.md` 참고). `GM_PLATFORM_API_KEY`가 `.env`에 설정돼 있으면 `X-API-Key`
+ * 헤더로 실어 보낸다(설정 안 되어 있으면 `gmApiKeyAuth.ts`가 검증 자체를 건너뜀).
  * @author trisakion
  */
 
 let baseUrl: string;
 let httpServer: import("node:http").Server;
 const createdDefIds: string[] = [];
+const createdTemplateIds: string[] = [];
 
 before(async () => {
   const db = await connectMongo();
@@ -43,6 +45,8 @@ after(async () => {
   await db.collection(COLLECTIONS.MASTER_ATTENDANCE_DEFS).deleteMany({ defId: { $in: createdDefIds } });
   await db.collection(COLLECTIONS.MASTER_ATTENDANCE_REWARDS).deleteMany({ defId: { $in: createdDefIds } });
   await db.collection(COLLECTIONS.MASTER_ATTENDANCE_CATCHUP_PRICES).deleteMany({ defId: { $in: createdDefIds } });
+  await db.collection(COLLECTIONS.MASTER_CARD_TEMPLATES).deleteMany({ templateId: { $in: createdTemplateIds } });
+  await db.collection(COLLECTIONS.MASTER_STAGE_CARD_DROPS).deleteMany({ templateId: { $in: createdTemplateIds } });
   await new Promise(resolve => httpServer.close(resolve));
   await mongoClient.close();
   await mongoLogClient.close();
@@ -54,6 +58,23 @@ function nextDefId(): string {
   const defId = `gm-test-${randomUUID()}`;
   createdDefIds.push(defId);
   return defId;
+}
+
+/** 테스트 templateId를 발급하고 정리 대상 목록에 등록한다. */
+function nextTemplateId(): string {
+  const templateId = `gm-test-${randomUUID()}`;
+  createdTemplateIds.push(templateId);
+  return templateId;
+}
+
+/**
+ * 저장 API 테스트가 "이 컬렉션의 최종 상태"로 보낼 기준선을 구한다 — `save-card-templates`는
+ * 전체 교체 방식이라, GM 조회 엔드포인트(캐시 경유, Change Stream 갱신이 비동기라 방금 쓴
+ * 값이 아직 안 보일 수 있음)가 아니라 DB를 직접 읽어 항상 최신 상태를 기준으로 삼는다.
+ */
+async function currentCardTemplateRows() {
+  const db = mongoClient.db(process.env.MONGO_APP_DATABASE);
+  return db.collection(COLLECTIONS.MASTER_CARD_TEMPLATES).find({}, { projection: { _id: 0 } }).toArray();
 }
 
 /** 기본값이 채워진 출석부 정의 저장 바디(개별 필드는 override로 덮어씀). 기본은 아직 시작 전인 EVENT. */
@@ -83,6 +104,7 @@ async function post(path: string, body: unknown) {
 const saveDef = (body: unknown) => post("/gm/save-attendance-def", body);
 const saveRewards = (body: unknown) => post("/gm/save-attendance-rewards", body);
 const saveCatchupPrices = (body: unknown) => post("/gm/save-attendance-catchup-prices", body);
+const saveCardTemplates = (body: unknown) => post("/gm/save-card-templates", body);
 
 test("신규 출석부 정의 저장 성공", async () => {
   const defId = nextDefId();
@@ -251,4 +273,87 @@ test("아직 시작 전인 def의 defId를 바꾸면 기존 보상/캐치업 행
   assert.equal(await db.collection(COLLECTIONS.MASTER_ATTENDANCE_REWARDS).countDocuments({ defId: newDefId }), 2);
   assert.equal(await db.collection(COLLECTIONS.MASTER_ATTENDANCE_CATCHUP_PRICES).countDocuments({ defId: oldDefId }), 0);
   assert.equal(await db.collection(COLLECTIONS.MASTER_ATTENDANCE_CATCHUP_PRICES).countDocuments({ defId: newDefId }), 2);
+});
+
+test("카드 원형 저장 — 신규 행 추가", async () => {
+  const templateId = nextTemplateId();
+  const existing = await currentCardTemplateRows();
+  const payload = { data: [...existing, { templateId, grade: "N", element: "fire", baseAttack: 10, baseHp: 50 }] };
+
+  const { status, json } = await saveCardTemplates(payload);
+  assert.equal(status, 200);
+  assert.equal(json.result, 0);
+  const saved = json.data.find((row: { templateId: string }) => row.templateId === templateId);
+  assert.ok(saved);
+  assert.equal(saved.baseAttack, 10);
+});
+
+test("카드 원형 저장 — 기존 행 수정", async () => {
+  const templateId = nextTemplateId();
+  const base = await currentCardTemplateRows();
+  const row = { templateId, grade: "R", element: "water", baseAttack: 20, baseHp: 80 };
+  assert.equal((await saveCardTemplates({ data: [...base, row] })).status, 200);
+
+  const existing = await currentCardTemplateRows();
+  const replaced = existing.map(r => (r.templateId === templateId ? { ...row, baseAttack: 99 } : r));
+  const { status, json } = await saveCardTemplates({ data: replaced });
+
+  assert.equal(status, 200);
+  assert.equal(json.data.find((r: { templateId: string }) => r.templateId === templateId).baseAttack, 99);
+});
+
+test("카드 원형 저장 — 참조 없는 행은 삭제된다", async () => {
+  const templateId = nextTemplateId();
+  const base = await currentCardTemplateRows();
+  assert.equal((await saveCardTemplates({ data: [...base, { templateId, grade: "N", element: "grass", baseAttack: 10, baseHp: 50 }] })).status, 200);
+
+  const withoutRow = (await currentCardTemplateRows()).filter(r => r.templateId !== templateId);
+  const { status, json } = await saveCardTemplates({ data: withoutRow });
+
+  assert.equal(status, 200);
+  assert.ok(!json.data.some((r: { templateId: string }) => r.templateId === templateId));
+});
+
+test("카드 원형 저장 — 참조 중인 행을 빼면 REFERENCED_CANNOT_DELETE(10003)로 거부되고 아무것도 바뀌지 않는다", async () => {
+  const templateId = nextTemplateId();
+  const base = await currentCardTemplateRows();
+  assert.equal((await saveCardTemplates({ data: [...base, { templateId, grade: "SR", element: "fire", baseAttack: 60, baseHp: 200 }] })).status, 200);
+
+  const db = mongoClient.db(process.env.MONGO_APP_DATABASE);
+  await db.collection(COLLECTIONS.MASTER_STAGE_CARD_DROPS).insertOne({ stageId: 999999, templateId, weight: 1 });
+
+  const beforeCount = await db.collection(COLLECTIONS.MASTER_CARD_TEMPLATES).countDocuments();
+  const withoutRow = (await currentCardTemplateRows()).filter(r => r.templateId !== templateId);
+  const { status, json } = await saveCardTemplates({ data: withoutRow });
+
+  assert.equal(status, 409);
+  assert.equal(json.result, 10003);
+  assert.equal(await db.collection(COLLECTIONS.MASTER_CARD_TEMPLATES).countDocuments(), beforeCount);
+
+  await db.collection(COLLECTIONS.MASTER_STAGE_CARD_DROPS).deleteOne({ stageId: 999999, templateId });
+});
+
+test("카드 원형 저장 — payload 내 templateId 중복이면 VALIDATION_FAILED(10000)", async () => {
+  const templateId = nextTemplateId();
+  const row = { templateId, grade: "N", element: "fire", baseAttack: 10, baseHp: 50 };
+  const { status, json } = await saveCardTemplates({ data: [row, row] });
+
+  assert.equal(status, 400);
+  assert.equal(json.result, 10000);
+});
+
+test("카드 원형 저장 — 행 형식이 잘못되면 VALIDATION_FAILED(10000)", async () => {
+  const invalidRows = [
+    { templateId: "", grade: "N", element: "fire", baseAttack: 10, baseHp: 50 },
+    { templateId: nextTemplateId(), grade: "X", element: "fire", baseAttack: 10, baseHp: 50 },
+    { templateId: nextTemplateId(), grade: "N", element: "lava", baseAttack: 10, baseHp: 50 },
+    { templateId: nextTemplateId(), grade: "N", element: "fire", baseAttack: 0, baseHp: 50 },
+    { templateId: nextTemplateId(), grade: "N", element: "fire", baseAttack: 10, baseHp: 0 },
+    { templateId: nextTemplateId(), grade: "N", element: "fire", baseAttack: 1.5, baseHp: 50 },
+  ];
+  for (const row of invalidRows) {
+    const { status, json } = await saveCardTemplates({ data: [row] });
+    assert.equal(status, 400, JSON.stringify(row));
+    assert.equal(json.result, 10000, JSON.stringify(row));
+  }
 });

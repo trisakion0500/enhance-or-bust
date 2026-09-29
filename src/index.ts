@@ -25,10 +25,30 @@ import { reconcileUnconfirmedCoupons } from "./contexts/coupon/application/coupo
 import { connectRedis, redisClient } from "./infra/redis.js";
 import { createServer } from "./server.js";
 
-const db = await connectMongo();
-const logDb = await connectMongoLog();
+/**
+ * 부팅 단계 연결 실패를 즉시 종료로 처리한다 — 운영 중 다운(재연결 전략/circuit breaker,
+ * CLAUDE.md "MongoDB/Redis 다운 상황에 대한 회복력 보강" 절)과 달리, 부팅 시점은 관리자가
+ * 화면을 보고 있어 자동 복구를 기다리기보다 바로 실패를 알리고 멈추는 쪽이 낫다. 이 구분이
+ * 가능한 이유는 `connectMongo()`/`connectMongoLog()`/`connectRedis()`가 프로세스 생애주기
+ * 동안 여기서 딱 한 번만 호출되기 때문 — 이후의 재연결은 전부 드라이버/클라이언트 내부
+ * 로직(하트비트, reconnectStrategy)이 맡아 이 함수를 다시 부르지 않는다.
+ * @param promise 부팅 단계에서 기다릴 연결 Promise
+ * @param label 실패 로그에 남길 대상 이름
+ * @author trisakion
+ */
+async function connectOrExit<T>(promise: Promise<T>, label: string): Promise<T> {
+  try {
+    return await promise;
+  } catch (err) {
+    logger.error(`${label} 연결 실패 — 서버를 구동할 수 없어 즉시 종료합니다`, err);
+    process.exit(1);
+  }
+}
+
+const db = await connectOrExit(connectMongo(), "MongoDB");
+const logDb = await connectOrExit(connectMongoLog(), "MongoDB(로그)");
 await ensureLogIndexes(logDb);
-await connectRedis();
+await connectOrExit(connectRedis(), "Redis");
 logger.info(`connected to mongo db "${db.databaseName}", log db "${logDb.databaseName}", and redis`);
 
 await masterDataCache.loadAll(db);

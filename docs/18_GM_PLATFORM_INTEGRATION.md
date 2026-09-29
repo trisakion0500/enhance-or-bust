@@ -37,10 +37,19 @@ gm_platform의 apiExecution은 등록된 API를 항상 `POST {api_base_url}{endp
   (`get-card-templates`/`get-grade-configs`/`get-enhancement-rules`/
   `get-synthesis-rules`/`get-stage-configs`/`get-stage-card-drops`/`get-attendance-defs`/
   `get-attendance-rewards`/`get-attendance-catchup-prices`) — 서버가 이미 적재해둔
-  `masterDataCache` 싱글톤을 그대로 읽어 반환한다(DB 재조회 없음). **카드/등급/강화/합성/
-  스테이지 6종은 조회만 지원하고 수정/삭제는 아직 없다** — 마스터데이터는 잘못 저장되면
+  `masterDataCache` 싱글톤을 그대로 읽어 반환한다(DB 재조회 없음). **등급/강화/합성/
+  스테이지 5종은 조회만 지원하고 수정/삭제는 아직 없다** — 마스터데이터는 잘못 저장되면
   게임 전체 밸런스에 영향을 줘서, 저장 기능은 컬렉션별 값 검증(확률 0~1, 음수 불가 등)
-  설계를 먼저 한 뒤 별도로 추가하기로 함. 출석부 3종은 예외로 저장 API가 있다(아래).
+  설계를 먼저 한 뒤 별도로 추가하기로 함. 카드 원형과 출석부 3종은 예외로 저장 API가
+  있다(아래).
+- **카드 원형 저장**: `POST /gm/save-card-templates` — gm_platform이 `[기획]카드 데이터`
+  API를 EDITABLE_GRID(`response_view_type=3`)로 바꾸며 행 추가/수정/삭제를 지원하게 돼
+  먼저 도입했다. `data` 배열을 컬렉션의 최종 상태로 보는 전체 교체 방식(추가/수정은
+  upsert, payload에서 빠진 기존 templateId는 삭제 후보)이다. 삭제 후보가 하나라도 아직
+  참조 중이면(플레이어 보유 카드 / 스테이지 카드 드랍 / 출석 보상) 아무것도 쓰지 않고
+  요청 전체를 새 에러 코드 `GM.REFERENCED_CANNOT_DELETE`(10003)로 거부한다 — 부분 반영
+  시 어떤 행이 저장/스킵됐는지 gm_platform 화면에서 구분하기 어려워, 하나라도 걸리면
+  전체를 되돌리는 쪽을 택했다. 상세는 `17_GM_API.md` "카드 원형 저장" 절.
 - **출석부 저장**(gm_platform 화면에서 메뉴 3개로 분리): `POST /gm/save-attendance-def`(정의,
   `id` 유무로 신규/수정) → `POST /gm/save-attendance-rewards`(하루 단위 보상, 수량 입력칸) →
   `POST /gm/save-attendance-catchup-prices`(회차 단위 가격). 이미 시작된 출석부는 수정 불가,

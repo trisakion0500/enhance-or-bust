@@ -131,3 +131,50 @@ Redis 연결이 안 되는 상태에서 프로세스가 종료되지 않고 계�
 상세 코드는 `src/infra/redis.ts`(`isRedisHealthy()`/`redisCall()`), `src/infra/mongo.ts`
 (`isMongoHealthy()`), `src/shared-kernel/dbHealthGate.ts` 참고. 설계 배경은 CLAUDE.md
 "현재 상태" 절의 해당 항목 참고.
+
+---
+
+## 2026-09-29 Redis 최초 연결(부팅) 자체가 안 되면 무한 대기하는 문제 (2026-09-20 조치의 사각지대)
+
+### 발견 경위
+
+gm_platform 카드 원형 저장 API의 e2e 테스트를 추가하고 돌리는 과정에서, 또다시
+`--env-file=.env` 없이 실행해 Redis가 기본 포트(6379)로 연결을 시도했다(이 로컬
+환경은 docker-compose가 6380에 매핑) — 2026-09-20 항목과 정확히 같은 트리거다.
+이번엔 서버가 아니라 프로세스 자체가 몇 분째 아무 응답도 없이 떠 있었고, 추적해보니
+2026-09-20 조치가 다루지 않은 사각지대였다.
+
+### 원인
+
+2026-09-20 조치는 "이미 연결된 클라이언트의 명령"과 "이미 떠 있는 서버가 도중에
+다운되는 경우"만 다뤘다. `connectRedis()`(`src/infra/redis.ts`)가 부팅 시 최초로
+호출하는 `redisClient.connect()`는 이 둘 중 어디에도 해당하지 않는다 — node-redis
+v4는 `reconnectStrategy`를 최초 연결에도 그대로 적용하는데, 이 전략은 절대 `Error`를
+반환하지 않고 항상 backoff 숫자만 반환한다(2026-09-20 조치 항목 2 — 의도적 설계).
+그 결과 `connect()`가 반환하는 프로미스는 최초 연결이 한 번도 성공하지 못하면
+**resolve도 reject도 되지 않고 영원히 pending 상태로 남는다.** `redisCall()`(명령
+단위 12초 타임아웃)은 이미 연결된 클라이언트가 명령을 보낼 때만 적용돼 이 케이스를
+감싸지 못했고, `connectRedis()` 자체엔 어떤 시한도 없었다.
+
+### 조치
+
+- `connectRedis()`에 부팅 전용 12초 시한 추가(`Promise.race([redisClient.connect(),
+  timeout])`) — 넘기면 명확한 에러로 던진다. `reconnectStrategy`는 그대로 둬(운영 중
+  자동 복구 유지), 이 시한은 오직 "최초 연결"에만 적용된다.
+- `index.ts`에 `connectOrExit()` 헬퍼 추가 — 부팅 단계 연결(`connectMongo()`/
+  `connectMongoLog()`/`connectRedis()`) 실패 시 로그를 남기고 `process.exit(1)`한다.
+  "부팅 중" 대 "운영 중"은 코드 구조로 구분된다 — 이 세 함수는 프로세스 생애주기
+  동안 index.ts에서 딱 한 번만 호출되고, 그 이후 재연결은 전부 드라이버 내부 로직
+  (하트비트, reconnectStrategy)이 맡는다.
+- 부팅 시점은 관리자가 화면을 보고 있다는 전제로, "늦게라도 복구되길 기다린다"
+  대신 "즉시 실패를 알리고 멈춘다"를 택했다.
+
+### 검증
+
+잘못된 Redis 포트(`REDIS_URL=redis://127.0.0.1:9`)로 기동 → 12초 후 명확한 에러
+로그와 함께 `process.exit(1)`로 정상 종료 확인. 이후 올바른 env로 gm 라우트 e2e
+스위트(19개) + 전체 스위트(72개) 재실행, 회귀 없음.
+
+상세 코드는 `src/infra/redis.ts`(`connectRedis()`), `src/index.ts`(`connectOrExit()`)
+참고. 설계 배경은 CLAUDE.md "현재 상태" 절의 "MongoDB/Redis 다운 상황에 대한 회복력
+보강" 항목 참고.

@@ -5,7 +5,10 @@ import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
 import { config } from "../../../config/env.js";
 import { mongoLogClient } from "../../../infra/mongoLog.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
+import { bumpMasterDataVersion } from "../../../shared-kernel/masterData/masterDataVersion.js";
 import type { CardTemplate } from "../../../shared-kernel/masterData/cardTemplate.js";
+import type { Grade } from "../../../shared-kernel/masterData/grade.js";
+import type { Element } from "../../../shared-kernel/masterData/element.js";
 import type { GradeConfig } from "../../../shared-kernel/masterData/gradeConfig.js";
 import type { AttendanceBookDef } from "../../attendance/domain/attendanceBookDef.js";
 import type { AttendanceCatchupPrice } from "../../attendance/domain/attendanceCatchupPrice.js";
@@ -136,14 +139,74 @@ export async function getPlayerCardsForGm(playerId: string, playerRepository: Pl
 
 /**
  * gm_platform이 조회하는 시드데이터(마스터데이터) 9종 — 컬렉션을 그대로 덤프한다.
- * 1차는 조회만 지원하고 수정/삭제는 아직 없다(밸런스 데이터라 잘못 저장되면 파급이 커서
- * 별도 검증 설계 후 추가 예정 — 출석부 정의/보상/캐치업가격 3종도 동일 원칙 적용).
+ * 등급/강화/합성/스테이지 5종은 아직 조회만 지원한다(밸런스 데이터라 잘못 저장되면 파급이
+ * 커서 별도 검증 설계 후 추가 예정). 카드 원형과 출석부 정의/보상/캐치업가격은 예외로 저장
+ * API가 있다(아래 {@link saveCardTemplatesForGm} 및 출석부 저장 함수 3종).
  * @returns 전체 카드 원형 목록
  * @author trisakion
  * @modified 2026-09-17 trisakion 출석부 정의/보상/캐치업가격 GM 조회 3종 추가로 "6종"→"9종" 문구 갱신
+ * @modified 2026-09-29 trisakion 카드 원형 저장 API(saveCardTemplatesForGm) 추가로 "조회만 지원" 대상에서 카드 원형 제외
  */
 export function getCardTemplatesForGm(): CardTemplate[] {
   return masterDataCache.getAllCardTemplates();
+}
+
+/** gm_platform이 `POST /gm/save-card-templates`로 보내는 카드 원형 저장 행 하나.
+ * @author trisakion
+ */
+export interface CardTemplateSaveRow {
+  templateId: string;
+  grade: Grade;
+  element: Element;
+  baseAttack: number;
+  baseHp: number;
+}
+
+/** 카드 원형이 삭제 후보일 때 아직 쓰이고 있는지 확인하는 참조처 목록 — 하나라도 걸리면 삭제 불가.
+ * @author trisakion
+ */
+const CARD_TEMPLATE_REFERENCE_CHECKS: Array<(db: Db, templateId: string) => Promise<boolean>> = [
+  async (db, templateId) => (await db.collection(COLLECTIONS.PLAYERS).findOne({ "inventory.templateId": templateId })) !== null,
+  async (db, templateId) => (await db.collection(COLLECTIONS.MASTER_STAGE_CARD_DROPS).findOne({ templateId })) !== null,
+  async (db, templateId) => (await db.collection(COLLECTIONS.MASTER_ATTENDANCE_REWARDS).findOne({ cardTemplateId: templateId })) !== null,
+];
+
+/**
+ * 카드 원형(`master_card_templates`) 전체를 `data` 배열 기준으로 교체 저장한다
+ * (`POST /gm/save-card-templates`) — payload에 있는 templateId는 추가/수정(upsert)하고,
+ * 없는 기존 templateId는 삭제 후보로 본다. 삭제 후보 중 하나라도 아직 참조되는 중이면
+ * (플레이어 보유 카드/스테이지 카드 드랍/출석 보상) 아무것도 쓰지 않고 즉시
+ * GM.REFERENCED_CANNOT_DELETE로 거부한다 — 운영자가 그 카드를 payload에서 빼지 않도록
+ * 되돌리거나 참조를 먼저 정리한 뒤 재시도해야 한다.
+ * @param db 메인 앱 DB 핸들
+ * @param rows 저장할 카드 원형 전체(이 컬렉션의 최종 상태로 취급)
+ * @returns 저장 후 전체 카드 원형 목록
+ * @throws {BusinessException} 행 검증 실패/templateId 중복 시 GM.VALIDATION_FAILED,
+ *   삭제 후보가 참조 중이면 GM.REFERENCED_CANNOT_DELETE
+ * @author trisakion
+ */
+export async function saveCardTemplatesForGm(db: Db, rows: CardTemplateSaveRow[]): Promise<CardTemplate[]> {
+  const payloadIds = rows.map(row => row.templateId);
+  if (new Set(payloadIds).size !== payloadIds.length)
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { rows });
+
+  const collection = db.collection<CardTemplate>(COLLECTIONS.MASTER_CARD_TEMPLATES);
+  const existingIds = await collection.distinct("templateId");
+  const payloadIdSet = new Set(payloadIds);
+  const deleteCandidates = existingIds.filter(id => !payloadIdSet.has(id));
+
+  for (const templateId of deleteCandidates) {
+    for (const isReferenced of CARD_TEMPLATE_REFERENCE_CHECKS) {
+      if (await isReferenced(db, templateId))
+        throw new BusinessException(ERROR_MAP.GM.REFERENCED_CANNOT_DELETE, { templateId });
+    }
+  }
+
+  await Promise.all(rows.map(row => collection.updateOne({ templateId: row.templateId }, { $set: row }, { upsert: true })));
+  if (deleteCandidates.length > 0) await collection.deleteMany({ templateId: { $in: deleteCandidates } });
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_CARD_TEMPLATES);
+
+  return collection.find({}, { projection: { _id: 0 } }).toArray() as Promise<CardTemplate[]>;
 }
 
 /**

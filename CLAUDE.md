@@ -433,7 +433,17 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   `POST /gm/get-stage-card-drops` — 전부 요청 파라미터 없이 컬렉션 전체를 반환한다. **1차는
   조회만 지원하고 수정/삭제는 아직 없다** — 플레이어 개인 재화와 달리 마스터데이터는 잘못
   저장되면 게임 전체 밸런스에 영향을 줘서, 저장 기능은 컬렉션별 값 검증(확률 0~1, 음수 불가
-  등) 설계를 먼저 한 뒤 별도로 추가하기로 함. 단, 출석부 정의 3종(`master_attendance_defs`/
+  등) 설계를 먼저 한 뒤 별도로 추가하기로 함. 카드 원형(`master_card_templates`)은 이
+  원칙의 두 번째 예외다 — gm_platform이 `[기획]카드 데이터` API를 EDITABLE_GRID
+  (`response_view_type=3`)로 바꿔 행 추가/수정/삭제를 지원하게 되면서 `POST
+  /gm/save-card-templates`를 구현했다. `data` 배열을 컬렉션의 최종 상태로 보는 전체 교체
+  방식(추가/수정은 upsert, payload에서 빠진 기존 templateId는 삭제 후보)이며, 삭제 후보가
+  하나라도 아직 참조 중이면(플레이어 보유 카드/스테이지 카드 드랍/출석 보상) 아무것도 쓰지
+  않고 요청 전체를 새 에러 코드 `GM.REFERENCED_CANNOT_DELETE`(10003)로 거부한다 — 부분
+  반영 시 어떤 행이 저장/스킵됐는지 gm_platform 화면에서 구분하기 어려워 전체 롤백 쪽을
+  택했다. 행 검증(templateId 중복 금지, grade는 N/R/SR/SSR, element는 fire/water/grass,
+  baseAttack/baseHp는 1 이상 정수)은 `GM.VALIDATION_FAILED`(10000). 단, 출석부 정의
+  3종(`master_attendance_defs`/
   `_rewards`/`_catchup_prices`)은 예외 — 애초에 gm_platform이 운영 중 실시간으로 쓰도록
   설계된 컬렉션이라 값 검증 규칙이 처음부터 확정돼 있었고, 아래 문단에서 저장 API를 실제로
   구현했다. 이어서 유저고유번호(playerId)별 감사 로그
@@ -526,7 +536,15 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   (`sessionStore.ts`/`pendingRegistrationStore.ts`/`redisLock.ts`)를 감쌌다. 로그 DB
   (`mongoLogClient`)는 이 다운 판정/서킷브레이커 대상이 아니다 — 로그 DB 장애가 메인 흐름을
   막으면 안 된다는 기존 로깅 원칙과 상충하기 때문. 실제로 Docker 컨테이너를 내렸다 올려
-  검증함(다운 판정 후 즉시 503, 복구 후 수 초 내 자동으로 다시 열림)
+  검증함(다운 판정 후 즉시 503, 복구 후 수 초 내 자동으로 다시 열림). 이 회복력 설계는
+  "이미 떠 있는 서버가 도중에 다운되는 경우"만 다룬다 — 부팅 단계(최초 연결) 자체가
+  실패하면(잘못된 REDIS_URL 등) 얘기가 다르다: `reconnectStrategy`가 절대 포기하지 않아
+  최초 연결도 무기한 재시도해 `connectRedis()`가 영원히 안 끝나는 문제가 실사용(테스트
+  실행) 중 발견됐다. 부팅 시점은 관리자가 화면을 보고 있어 자동 복구보다 즉시 실패가
+  낫다는 판단으로, `connectRedis()`에 부팅 전용 12초 시한을 추가하고(운영 중 재연결
+  전략 자체는 그대로), `index.ts`의 `connectOrExit()` 헬퍼가 부팅 단계 연결 실패 시
+  로그를 남기고 `process.exit(1)`한다 — 이 함수들은 프로세스 생애주기 중 부팅 시 딱
+  한 번만 호출되므로 "구동 중"과 "운영 중"을 코드 구조만으로 구분할 수 있다.
 - 출석부 저장 API 3종(`POST /gm/save-attendance-def` → `save-attendance-rewards` →
   `save-attendance-catchup-prices`) 추가 — `attendanceStore.ts`에 쓰기 함수(`upsertBookDef`/
   `replaceRewardRows`/`replaceCatchupPriceRows`)만 미리 있고 실제 gm_platform 호출 경로(라우트)가

@@ -69,12 +69,15 @@ gm_platform의 외부 API 규약(`{ result, message, data: [...] }`, `data`는 �
 ### 시드데이터(마스터데이터) 조회
 
 `master_*` 컬렉션 9종을 컬렉션당 엔드포인트 하나씩 그대로 덤프한다. 응답은 서버가 이미
-적재해둔 `masterDataCache`를 그대로 읽어 반환한다(DB 재조회 없음). **카드/등급/강화/합성/
-스테이지 6종은 조회만 지원하고 수정/삭제는 아직 없다** — 밸런스 데이터라 잘못 저장되면
-게임 전체에 영향을 줄 수 있어 별도 검증 설계 후 추가 예정. **출석부 정의 3종은 예외로
-저장 API 3종(`save-attendance-def`/`-rewards`/`-catchup-prices`, 아래 "출석부 저장" 절)이 있다** — 애초에 gm_platform이
-운영 중 실시간으로 쓰도록 설계된 컬렉션이라(`23_GAME_DESIGN_ATTENDANCE.md` "비즈니스 키 vs
-내부 PK" 절) 값 검증 규칙이 처음부터 확정돼 있었다. **모두 X-API-Key 필요.**
+적재해둔 `masterDataCache`를 그대로 읽어 반환한다(DB 재조회 없음). **등급/강화/합성/
+스테이지 5종은 조회만 지원하고 수정/삭제는 아직 없다** — 밸런스 데이터라 잘못 저장되면
+게임 전체에 영향을 줄 수 있어 별도 검증 설계 후 추가 예정. **카드 원형과 출석부 정의
+3종은 예외로 저장 API가 있다**(카드 원형은 `save-card-templates`, 아래 "카드 원형 저장"
+절 / 출석부는 `save-attendance-def`/`-rewards`/`-catchup-prices`, 아래 "출석부 저장" 절)
+— 출석부는 애초에 gm_platform이 운영 중 실시간으로 쓰도록 설계된 컬렉션이라
+(`23_GAME_DESIGN_ATTENDANCE.md` "비즈니스 키 vs 내부 PK" 절) 값 검증 규칙이 처음부터
+확정돼 있었고, 카드 원형은 gm_platform이 EDITABLE_GRID로 행 추가/수정/삭제를 지원하게
+되면서 저장 API를 먼저 도입했다. **모두 X-API-Key 필요.**
 
 대부분 요청 body 없음(빈 객체 전송)이지만, 출석 날짜별 보상/캐치업 가격 2종은 선택
 파라미터 `defId`로 특정 출석부만 좁혀 조회할 수 있다(생략하면 전체 반환).
@@ -105,6 +108,35 @@ gm_platform의 외부 API 규약(`{ result, message, data: [...] }`, `data`는 �
 
 **에러**: 대부분 파라미터가 없어 검증 실패 경로 자체가 없다. `get-attendance-rewards`/
 `get-attendance-catchup-prices`만 `defId`를 문자열이 아닌 값으로 보내면 10000으로 거부된다.
+
+### 카드 원형 저장
+
+`POST /gm/save-card-templates` — gm_platform EDITABLE_GRID(`response_view_type=3`)에서
+행 추가/수정/삭제를 그대로 지원한다. `data` 배열을 `master_card_templates` 컬렉션의
+**최종 상태**로 취급하는 전체 교체 방식이다: payload에 있는 `templateId`는 추가/수정
+(upsert), 기존에 있었는데 payload에서 빠진 `templateId`는 삭제 후보로 본다.
+
+삭제 후보 중 하나라도 아직 참조되는 중이면(플레이어 보유 카드 / 스테이지 카드 드랍 /
+출석 보상) **아무것도 저장하지 않고** 요청 전체를 거부한다(10003) — 부분 반영으로
+어떤 행은 저장되고 어떤 행은 스킵됐는지 gm_platform 화면에서 구분할 방법이 마땅치 않아,
+하나라도 걸리면 전체를 되돌리는 쪽을 택했다. 이 경우 운영자는 그 카드를 삭제 목록에서
+빼고(행을 다시 채워 payload에 포함) 재시도해야 한다.
+
+**요청 body**
+```json
+{
+  "data": [
+    { "templateId": "N_01", "grade": "N", "element": "fire", "baseAttack": 15, "baseHp": 100 },
+    { "templateId": "SSR_01", "grade": "SSR", "element": "water", "baseAttack": 130, "baseHp": 400 }
+  ]
+}
+```
+
+**응답**: `{ "result": 0, "message": "OK", "data": [ { "templateId", "grade", "baseAttack", "baseHp", "element" }, ... ] }`
+(저장 후 `master_card_templates` 전체)
+
+**에러**: 10000(행 형식 오류 — templateId 빈값, grade/element가 허용 값 밖, baseAttack/baseHp가
+1 이상 정수 아님, payload 내 templateId 중복), 10003(삭제 후보가 아직 참조 중)
 
 ### 출석부 저장 (3단계)
 

@@ -6,7 +6,9 @@ import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
 import { gmApiKeyAuth } from "../../../shared-kernel/gmApiKeyAuth.js";
 import type { AttendanceBookType, AttendanceTargetAudience } from "../../attendance/domain/attendanceBookDef.js";
 import type { PlayerRepository } from "../../player/domain/playerRepository.js";
-import type { AttendanceBookDefSaveInput, AttendanceDayRewardInput } from "../application/gmService.js";
+import type { Grade } from "../../../shared-kernel/masterData/grade.js";
+import type { Element } from "../../../shared-kernel/masterData/element.js";
+import type { AttendanceBookDefSaveInput, AttendanceDayRewardInput, CardTemplateSaveRow } from "../application/gmService.js";
 import {
   getAttendanceCatchupPricesForGm,
   getAttendanceDefsForGm,
@@ -29,10 +31,13 @@ import {
   saveAttendanceBookDefForGm,
   saveAttendanceCatchupPricesForGm,
   saveAttendanceRewardsForGm,
+  saveCardTemplatesForGm,
 } from "../application/gmService.js";
 
 const ATTENDANCE_BOOK_TYPES: AttendanceBookType[] = ["GENERAL", "EVENT"];
 const ATTENDANCE_TARGET_AUDIENCES: AttendanceTargetAudience[] = ["ALL_USERS", "NEW_USER", "RETURNING_USER"];
+const GRADES: Grade[] = ["N", "R", "SR", "SSR"];
+const ELEMENTS: Element[] = ["fire", "water", "grass"];
 
 /**
  * `POST /gm/save-attendance-def` 요청 바디를 검증된 형태로 파싱한다 — 형식 검증만 담당하고
@@ -136,6 +141,41 @@ function parseAttendanceCatchupPriceSave(body: unknown): { defId: string; purcha
 }
 
 /**
+ * `POST /gm/save-card-templates` 요청 바디를 검증된 형태로 파싱한다 — 형식/타입/enum 값만
+ * 담당하고(templateId 중복, 삭제 후보 참조 여부 등 비즈니스 검증은 `saveCardTemplatesForGm()`의
+ * 책임), gm_platform EDITABLE_GRID가 보내는 `data` 배열을 그대로 행 목록으로 받는다.
+ * @param body 요청 바디
+ * @returns 파싱된 카드 원형 저장 행 목록
+ * @throws {BusinessException} `data`가 배열이 아니거나 행 형식이 올바르지 않으면 GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+function parseCardTemplatesSave(body: unknown): CardTemplateSaveRow[] {
+  const { data } = (body ?? {}) as Record<string, unknown>;
+  if (!Array.isArray(data)) throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { body });
+
+  return data.map(row => {
+    const r = (row ?? {}) as Record<string, unknown>;
+    const fail = (): never => {
+      throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { row });
+    };
+
+    if (typeof r.templateId !== "string" || !r.templateId) fail();
+    if (typeof r.grade !== "string" || !GRADES.includes(r.grade as Grade)) fail();
+    if (typeof r.element !== "string" || !ELEMENTS.includes(r.element as Element)) fail();
+    if (typeof r.baseAttack !== "number" || !Number.isInteger(r.baseAttack) || r.baseAttack < 1) fail();
+    if (typeof r.baseHp !== "number" || !Number.isInteger(r.baseHp) || r.baseHp < 1) fail();
+
+    return {
+      templateId: r.templateId as string,
+      grade: r.grade as Grade,
+      element: r.element as Element,
+      baseAttack: r.baseAttack as number,
+      baseHp: r.baseHp as number,
+    };
+  });
+}
+
+/**
  * 로그 조회 라우트 5개가 공통으로 쓰는 요청 파라미터 파싱 — playerId(필수 문자열),
  * fromDate/toDate(선택, 문자열이면 통과시키고 실제 날짜 파싱은 서비스 단에서 검증한다).
  * @param body 요청 바디
@@ -216,9 +256,14 @@ export function createGmRoutes(playerRepository: PlayerRepository, db: Db): Rout
     res.json({ result: 0, message: "OK", data: cards });
   }));
 
-  // 시드데이터(마스터데이터) 9종 — 1차는 조회만, 수정/삭제는 아직 없다.
+  // 시드데이터(마스터데이터) 9종 — 카드 원형/출석부 3종 외에는 아직 조회만, 수정/삭제는 없다.
   router.post("/gm/get-card-templates", gmApiKeyAuth, asyncHandler(async (_req, res) => {
     res.json({ result: 0, message: "OK", data: getCardTemplatesForGm() });
+  }));
+
+  router.post("/gm/save-card-templates", gmApiKeyAuth, asyncHandler(async (req, res) => {
+    const rows = parseCardTemplatesSave(req.body);
+    res.json({ result: 0, message: "OK", data: await saveCardTemplatesForGm(db, rows) });
   }));
 
   router.post("/gm/get-grade-configs", gmApiKeyAuth, asyncHandler(async (_req, res) => {

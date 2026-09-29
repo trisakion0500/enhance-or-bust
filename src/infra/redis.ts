@@ -90,11 +90,33 @@ export function redisCall<T>(promise: Promise<T>): Promise<T> {
 }
 
 /**
- * Redis에 연결하고 클라이언트를 반환한다.
+ * 부팅 단계 최초 연결 시도의 포기 시한 — 운영 중 재연결(`reconnectStrategy`, 절대 포기 안 함)과는
+ * 별개 개념이다. `reconnectStrategy`가 초기 연결에도 그대로 적용되기 때문에(재연결 시도마다
+ * 항상 backoff 숫자만 반환하고 `Error`를 반환하는 법이 없어서), 이 시한이 없으면 Redis가 애초에
+ * 연결 안 되는 상황(잘못된 REDIS_URL, Redis 미기동 등)에서 `connectRedis()`가 영원히 resolve도
+ * reject도 안 된다(실사용 중 재현 확인). 부팅 시점은 관리자가 화면을 보고 있어, 늦게라도 자동
+ * 복구되길 기다리기보다 바로 실패를 알리고 멈추는 쪽이 낫다(CLAUDE.md 확정) — 그래서
+ * `connectRedis()`는 이 시한을 넘기면 던진다. 실제 "구동 시 실패하면 즉시 종료" 처리(`process.exit`)는
+ * 이 함수가 아니라 호출부(`index.ts`)의 책임이다 — e2e 테스트도 이 함수를 그대로 호출하는데,
+ * 거기서까지 프로세스를 죽이면 안 되기 때문(node:test가 `before` 훅 실패로 깔끔하게 보고해야 함).
+ */
+const BOOT_CONNECT_TIMEOUT_MS = 12000;
+
+/**
+ * Redis에 연결하고 클라이언트를 반환한다. 최초 연결이 `BOOT_CONNECT_TIMEOUT_MS` 안에 안 되면
+ * 던진다(위 JSDoc 참고) — 이후의 재연결(운영 중 다운)은 이 시한과 무관하게 `reconnectStrategy`가
+ * 계속 시도한다.
  * @returns 연결된 Redis 클라이언트
+ * @throws {Error} 최초 연결이 시한 안에 성공하지 못하면
  * @author trisakion
+ * @modified 2026-09-29 trisakion 부팅 단계 연결 시한 추가 — 이전엔 잘못된 REDIS_URL 등으로
+ *   최초 연결 자체가 안 되면 이 함수가 무기한 대기했다(reconnectStrategy가 초기 연결에도
+ *   적용돼 절대 포기하지 않아서)
  */
 export async function connectRedis() {
-  await redisClient.connect();
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`Redis 최초 연결 시간 초과(${BOOT_CONNECT_TIMEOUT_MS}ms) — REDIS_URL 등 설정을 확인하세요.`)), BOOT_CONNECT_TIMEOUT_MS),
+  );
+  await Promise.race([redisClient.connect(), timeout]);
   return redisClient;
 }
