@@ -40,8 +40,8 @@ gm_platform의 apiExecution은 등록된 API를 항상 `POST {api_base_url}{endp
   `masterDataCache` 싱글톤을 그대로 읽어 반환한다(DB 재조회 없음). **등급/강화/합성/
   스테이지 5종은 조회만 지원하고 수정/삭제는 아직 없다** — 마스터데이터는 잘못 저장되면
   게임 전체 밸런스에 영향을 줘서, 저장 기능은 컬렉션별 값 검증(확률 0~1, 음수 불가 등)
-  설계를 먼저 한 뒤 별도로 추가하기로 함. 카드 원형과 출석부 3종은 예외로 저장 API가
-  있다(아래).
+  설계를 먼저 한 뒤 별도로 추가하기로 함. 카드 원형/강화 규칙과 출석부 3종은 예외로 저장
+  API가 있다(아래).
 - **카드 원형 저장**: `POST /gm/save-card-templates` — gm_platform이 `[기획]카드 데이터`
   API를 EDITABLE_GRID(`response_view_type=3`)로 바꾸며 행 추가/수정/삭제를 지원하게 돼
   먼저 도입했다. `data` 배열을 컬렉션의 최종 상태로 보는 전체 교체 방식(추가/수정은
@@ -50,6 +50,11 @@ gm_platform의 apiExecution은 등록된 API를 항상 `POST {api_base_url}{endp
   요청 전체를 새 에러 코드 `GM.REFERENCED_CANNOT_DELETE`(10003)로 거부한다 — 부분 반영
   시 어떤 행이 저장/스킵됐는지 gm_platform 화면에서 구분하기 어려워, 하나라도 걸리면
   전체를 되돌리는 쪽을 택했다. 상세는 `17_GM_API.md` "카드 원형 저장" 절.
+- **강화 규칙 저장**: `POST /gm/save-enhancement-rules` — `[기획]강화 규칙` API도 같은
+  이유로 EDITABLE_GRID로 바꾸며 뒤이어 도입했다. 전체 교체 방식은 카드 원형과 같지만, 이
+  규칙은 다른 컬렉션이 ID로 참조하지 않아(강화 시도 시점에 목표 단계로 즉석 조회) 삭제
+  가드가 없다 — 대신 자연키(`minTargetEnhancementLevel`) 중복과 구간 겹침(예: 1~10과
+  5~8)을 GM.VALIDATION_FAILED(10000)로 막는다. 상세는 `17_GM_API.md` "강화 규칙 저장" 절.
 - **출석부 저장**(gm_platform 화면에서 메뉴 3개로 분리): `POST /gm/save-attendance-def`(정의,
   `id` 유무로 신규/수정) → `POST /gm/save-attendance-rewards`(하루 단위 보상, 수량 입력칸) →
   `POST /gm/save-attendance-catchup-prices`(회차 단위 가격). 이미 시작된 출석부는 수정 불가,

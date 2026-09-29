@@ -434,7 +434,7 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   조회만 지원하고 수정/삭제는 아직 없다** — 플레이어 개인 재화와 달리 마스터데이터는 잘못
   저장되면 게임 전체 밸런스에 영향을 줘서, 저장 기능은 컬렉션별 값 검증(확률 0~1, 음수 불가
   등) 설계를 먼저 한 뒤 별도로 추가하기로 함. 카드 원형(`master_card_templates`)은 이
-  원칙의 두 번째 예외다 — gm_platform이 `[기획]카드 데이터` API를 EDITABLE_GRID
+  원칙의 예외다 — gm_platform이 `[기획]카드 데이터` API를 EDITABLE_GRID
   (`response_view_type=3`)로 바꿔 행 추가/수정/삭제를 지원하게 되면서 `POST
   /gm/save-card-templates`를 구현했다. `data` 배열을 컬렉션의 최종 상태로 보는 전체 교체
   방식(추가/수정은 upsert, payload에서 빠진 기존 templateId는 삭제 후보)이며, 삭제 후보가
@@ -442,7 +442,14 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   않고 요청 전체를 새 에러 코드 `GM.REFERENCED_CANNOT_DELETE`(10003)로 거부한다 — 부분
   반영 시 어떤 행이 저장/스킵됐는지 gm_platform 화면에서 구분하기 어려워 전체 롤백 쪽을
   택했다. 행 검증(templateId 중복 금지, grade는 N/R/SR/SSR, element는 fire/water/grass,
-  baseAttack/baseHp는 1 이상 정수)은 `GM.VALIDATION_FAILED`(10000). 단, 출석부 정의
+  baseAttack/baseHp는 1 이상 정수)은 `GM.VALIDATION_FAILED`(10000). 강화 규칙
+  (`master_enhancement_rules`)도 같은 이유로 `[기획]강화 규칙` API가 EDITABLE_GRID로
+  바뀌면서 `POST /gm/save-enhancement-rules`를 뒤이어 구현했다 — 전체 교체 방식은 동일하나,
+  이 규칙은 다른 컬렉션이 ID로 참조하지 않아(강화 시도 시점에 목표 단계로 즉석 조회할 뿐,
+  `masterDataCache.getEnhancementRuleFor()`) 삭제 가드(REFERENCED_CANNOT_DELETE)가 필요
+  없다. 대신 자연키(`minTargetEnhancementLevel`) 중복과 **구간 겹침**(예: 1~10과 5~8)을
+  `GM.VALIDATION_FAILED`(10000)로 막는다 — `getEnhancementRuleFor()`가 배열 `find()`로
+  첫 매치만 쓰기 때문에 구간이 겹치면 실제 적용 규칙을 예측할 수 없어진다. 단, 출석부 정의
   3종(`master_attendance_defs`/
   `_rewards`/`_catchup_prices`)은 예외 — 애초에 gm_platform이 운영 중 실시간으로 쓰도록
   설계된 컬렉션이라 값 검증 규칙이 처음부터 확정돼 있었고, 아래 문단에서 저장 API를 실제로

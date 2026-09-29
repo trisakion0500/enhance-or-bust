@@ -14,8 +14,9 @@ import { createServer } from "../../../server.js";
 
 /**
  * gm_platform 연동(`/gm/*`) E2E 테스트 — 출석부 저장 API 3종(`save-attendance-def`/
- * `save-attendance-rewards`/`save-attendance-catchup-prices`)과 카드 원형 저장 API
- * (`save-card-templates`) 검증을 다룬다. 다른 GM 조회 엔드포인트는 파라미터가 거의 없어
+ * `save-attendance-rewards`/`save-attendance-catchup-prices`), 카드 원형 저장 API
+ * (`save-card-templates`), 강화 규칙 저장 API(`save-enhancement-rules`) 검증을 다룬다.
+ * 다른 GM 조회 엔드포인트는 파라미터가 거의 없어
  * (마스터데이터 덤프/로그 조회) 검증 실패 경로 자체가 얇아 별도 테스트를 두지 않았다
  * (`17_GM_API.md` 참고). `GM_PLATFORM_API_KEY`가 `.env`에 설정돼 있으면 `X-API-Key`
  * 헤더로 실어 보낸다(설정 안 되어 있으면 `gmApiKeyAuth.ts`가 검증 자체를 건너뜀).
@@ -47,6 +48,7 @@ after(async () => {
   await db.collection(COLLECTIONS.MASTER_ATTENDANCE_CATCHUP_PRICES).deleteMany({ defId: { $in: createdDefIds } });
   await db.collection(COLLECTIONS.MASTER_CARD_TEMPLATES).deleteMany({ templateId: { $in: createdTemplateIds } });
   await db.collection(COLLECTIONS.MASTER_STAGE_CARD_DROPS).deleteMany({ templateId: { $in: createdTemplateIds } });
+  await db.collection(COLLECTIONS.MASTER_ENHANCEMENT_RULES).deleteMany({ minTargetEnhancementLevel: { $gte: 16, $lte: 20 } });
   await new Promise(resolve => httpServer.close(resolve));
   await mongoClient.close();
   await mongoLogClient.close();
@@ -77,6 +79,12 @@ async function currentCardTemplateRows() {
   return db.collection(COLLECTIONS.MASTER_CARD_TEMPLATES).find({}, { projection: { _id: 0 } }).toArray();
 }
 
+/** {@link currentCardTemplateRows}와 동일한 이유로 강화 규칙도 DB를 직접 읽어 기준선을 구한다. */
+async function currentEnhancementRuleRows() {
+  const db = mongoClient.db(process.env.MONGO_APP_DATABASE);
+  return db.collection(COLLECTIONS.MASTER_ENHANCEMENT_RULES).find({}, { projection: { _id: 0 } }).toArray();
+}
+
 /** 기본값이 채워진 출석부 정의 저장 바디(개별 필드는 override로 덮어씀). 기본은 아직 시작 전인 EVENT. */
 function buildDefBody(defId: string, override: Record<string, unknown> = {}) {
   return {
@@ -105,6 +113,7 @@ const saveDef = (body: unknown) => post("/gm/save-attendance-def", body);
 const saveRewards = (body: unknown) => post("/gm/save-attendance-rewards", body);
 const saveCatchupPrices = (body: unknown) => post("/gm/save-attendance-catchup-prices", body);
 const saveCardTemplates = (body: unknown) => post("/gm/save-card-templates", body);
+const saveEnhancementRules = (body: unknown) => post("/gm/save-enhancement-rules", body);
 
 test("신규 출석부 정의 저장 성공", async () => {
   const defId = nextDefId();
@@ -353,6 +362,87 @@ test("카드 원형 저장 — 행 형식이 잘못되면 VALIDATION_FAILED(1000
   ];
   for (const row of invalidRows) {
     const { status, json } = await saveCardTemplates({ data: [row] });
+    assert.equal(status, 400, JSON.stringify(row));
+    assert.equal(json.result, 10000, JSON.stringify(row));
+  }
+});
+
+// 강화 규칙은 카드 원형과 달리 다른 컬렉션이 참조하지 않아 삭제 가드가 없다 — 그래서 테스트도
+// 실제 시드 구간(1~15)을 건드리지 않고 전용 테스트 구간(16~20)만 추가/수정/삭제하며, 검증
+// 실패 케이스는 전체가 거부되므로 DB가 바뀌지 않는다. 혹시 어떤 테스트가 중간에 실패해도
+// 이후 테스트/다른 파일에 영향이 없도록 마지막에 원래 상태로 복원한다.
+const TEST_RULE_MIN = 16;
+const TEST_RULE_MAX = 20;
+
+test("강화 규칙 저장 — 신규 구간 추가", async () => {
+  const base = await currentEnhancementRuleRows();
+  const row = { minTargetEnhancementLevel: TEST_RULE_MIN, maxTargetEnhancementLevel: TEST_RULE_MAX, successRate: 0.5, destroyOnFailChance: 0, goldMultiplier: 1000, stoneCost: 5 };
+
+  try {
+    const { status, json } = await saveEnhancementRules({ data: [...base, row] });
+    assert.equal(status, 200);
+    const saved = json.data.find((r: { minTargetEnhancementLevel: number }) => r.minTargetEnhancementLevel === TEST_RULE_MIN);
+    assert.ok(saved);
+    assert.equal(saved.successRate, 0.5);
+  } finally {
+    await saveEnhancementRules({ data: base });
+  }
+});
+
+test("강화 규칙 저장 — 기존 구간 수정", async () => {
+  const base = await currentEnhancementRuleRows();
+  const row = { minTargetEnhancementLevel: TEST_RULE_MIN, maxTargetEnhancementLevel: TEST_RULE_MAX, successRate: 0.5, destroyOnFailChance: 0, goldMultiplier: 1000, stoneCost: 5 };
+
+  try {
+    assert.equal((await saveEnhancementRules({ data: [...base, row] })).status, 200);
+    const { status, json } = await saveEnhancementRules({ data: [...base, { ...row, successRate: 0.9 }] });
+    assert.equal(status, 200);
+    assert.equal(json.data.find((r: { minTargetEnhancementLevel: number }) => r.minTargetEnhancementLevel === TEST_RULE_MIN).successRate, 0.9);
+  } finally {
+    await saveEnhancementRules({ data: base });
+  }
+});
+
+test("강화 규칙 저장 — payload에서 빠진 구간은 삭제된다", async () => {
+  const base = await currentEnhancementRuleRows();
+  const row = { minTargetEnhancementLevel: TEST_RULE_MIN, maxTargetEnhancementLevel: TEST_RULE_MAX, successRate: 0.5, destroyOnFailChance: 0, goldMultiplier: 1000, stoneCost: 5 };
+  assert.equal((await saveEnhancementRules({ data: [...base, row] })).status, 200);
+
+  const { status, json } = await saveEnhancementRules({ data: base });
+  assert.equal(status, 200);
+  assert.ok(!json.data.some((r: { minTargetEnhancementLevel: number }) => r.minTargetEnhancementLevel === TEST_RULE_MIN));
+});
+
+test("강화 규칙 저장 — minTargetEnhancementLevel 중복이면 VALIDATION_FAILED(10000)", async () => {
+  const base = await currentEnhancementRuleRows();
+  const row = { minTargetEnhancementLevel: TEST_RULE_MIN, maxTargetEnhancementLevel: TEST_RULE_MAX, successRate: 0.5, destroyOnFailChance: 0, goldMultiplier: 1000, stoneCost: 5 };
+
+  const { status, json } = await saveEnhancementRules({ data: [...base, row, row] });
+  assert.equal(status, 400);
+  assert.equal(json.result, 10000);
+});
+
+test("강화 규칙 저장 — 구간이 겹치면 VALIDATION_FAILED(10000)", async () => {
+  const base = await currentEnhancementRuleRows();
+  const rowA = { minTargetEnhancementLevel: TEST_RULE_MIN, maxTargetEnhancementLevel: TEST_RULE_MAX, successRate: 0.5, destroyOnFailChance: 0, goldMultiplier: 1000, stoneCost: 5 };
+  const rowB = { minTargetEnhancementLevel: 19, maxTargetEnhancementLevel: 25, successRate: 0.5, destroyOnFailChance: 0, goldMultiplier: 1000, stoneCost: 5 };
+
+  const { status, json } = await saveEnhancementRules({ data: [...base, rowA, rowB] });
+  assert.equal(status, 400);
+  assert.equal(json.result, 10000);
+});
+
+test("강화 규칙 저장 — 행 형식이 잘못되면 VALIDATION_FAILED(10000)", async () => {
+  const invalidRows = [
+    { minTargetEnhancementLevel: 1.5, maxTargetEnhancementLevel: TEST_RULE_MAX, successRate: 0.5, destroyOnFailChance: 0, goldMultiplier: 1000, stoneCost: 5 },
+    { minTargetEnhancementLevel: TEST_RULE_MAX, maxTargetEnhancementLevel: TEST_RULE_MIN, successRate: 0.5, destroyOnFailChance: 0, goldMultiplier: 1000, stoneCost: 5 },
+    { minTargetEnhancementLevel: TEST_RULE_MIN, maxTargetEnhancementLevel: TEST_RULE_MAX, successRate: 1.1, destroyOnFailChance: 0, goldMultiplier: 1000, stoneCost: 5 },
+    { minTargetEnhancementLevel: TEST_RULE_MIN, maxTargetEnhancementLevel: TEST_RULE_MAX, successRate: 0.5, destroyOnFailChance: -0.1, goldMultiplier: 1000, stoneCost: 5 },
+    { minTargetEnhancementLevel: TEST_RULE_MIN, maxTargetEnhancementLevel: TEST_RULE_MAX, successRate: 0.5, destroyOnFailChance: 0, goldMultiplier: -1, stoneCost: 5 },
+    { minTargetEnhancementLevel: TEST_RULE_MIN, maxTargetEnhancementLevel: TEST_RULE_MAX, successRate: 0.5, destroyOnFailChance: 0, goldMultiplier: 1000, stoneCost: -1 },
+  ];
+  for (const row of invalidRows) {
+    const { status, json } = await saveEnhancementRules({ data: [row] });
     assert.equal(status, 400, JSON.stringify(row));
     assert.equal(json.result, 10000, JSON.stringify(row));
   }

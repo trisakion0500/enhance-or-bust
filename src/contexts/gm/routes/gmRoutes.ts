@@ -8,7 +8,7 @@ import type { AttendanceBookType, AttendanceTargetAudience } from "../../attenda
 import type { PlayerRepository } from "../../player/domain/playerRepository.js";
 import type { Grade } from "../../../shared-kernel/masterData/grade.js";
 import type { Element } from "../../../shared-kernel/masterData/element.js";
-import type { AttendanceBookDefSaveInput, AttendanceDayRewardInput, CardTemplateSaveRow } from "../application/gmService.js";
+import type { AttendanceBookDefSaveInput, AttendanceDayRewardInput, CardTemplateSaveRow, EnhancementRuleSaveRow } from "../application/gmService.js";
 import {
   getAttendanceCatchupPricesForGm,
   getAttendanceDefsForGm,
@@ -32,6 +32,7 @@ import {
   saveAttendanceCatchupPricesForGm,
   saveAttendanceRewardsForGm,
   saveCardTemplatesForGm,
+  saveEnhancementRulesForGm,
 } from "../application/gmService.js";
 
 const ATTENDANCE_BOOK_TYPES: AttendanceBookType[] = ["GENERAL", "EVENT"];
@@ -176,6 +177,44 @@ function parseCardTemplatesSave(body: unknown): CardTemplateSaveRow[] {
 }
 
 /**
+ * `POST /gm/save-enhancement-rules` 요청 바디를 검증된 형태로 파싱한다 — 형식/범위만
+ * 담당하고(자연키 중복, 구간 겹침 등 행 간 비교 검증은 `saveEnhancementRulesForGm()`의
+ * 책임), gm_platform EDITABLE_GRID가 보내는 `data` 배열을 그대로 행 목록으로 받는다.
+ * @param body 요청 바디
+ * @returns 파싱된 강화 규칙 저장 행 목록
+ * @throws {BusinessException} `data`가 배열이 아니거나 행 형식이 올바르지 않으면 GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+function parseEnhancementRulesSave(body: unknown): EnhancementRuleSaveRow[] {
+  const { data } = (body ?? {}) as Record<string, unknown>;
+  if (!Array.isArray(data)) throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { body });
+
+  return data.map(row => {
+    const r = (row ?? {}) as Record<string, unknown>;
+    const fail = (): never => {
+      throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { row });
+    };
+
+    if (typeof r.minTargetEnhancementLevel !== "number" || !Number.isInteger(r.minTargetEnhancementLevel) || r.minTargetEnhancementLevel < 1) fail();
+    const minLevel = r.minTargetEnhancementLevel as number;
+    if (typeof r.maxTargetEnhancementLevel !== "number" || !Number.isInteger(r.maxTargetEnhancementLevel) || r.maxTargetEnhancementLevel < minLevel) fail();
+    if (typeof r.successRate !== "number" || r.successRate < 0 || r.successRate > 1) fail();
+    if (typeof r.destroyOnFailChance !== "number" || r.destroyOnFailChance < 0 || r.destroyOnFailChance > 1) fail();
+    if (typeof r.goldMultiplier !== "number" || !Number.isInteger(r.goldMultiplier) || r.goldMultiplier < 0) fail();
+    if (typeof r.stoneCost !== "number" || !Number.isInteger(r.stoneCost) || r.stoneCost < 0) fail();
+
+    return {
+      minTargetEnhancementLevel: r.minTargetEnhancementLevel as number,
+      maxTargetEnhancementLevel: r.maxTargetEnhancementLevel as number,
+      successRate: r.successRate as number,
+      destroyOnFailChance: r.destroyOnFailChance as number,
+      goldMultiplier: r.goldMultiplier as number,
+      stoneCost: r.stoneCost as number,
+    };
+  });
+}
+
+/**
  * 로그 조회 라우트 5개가 공통으로 쓰는 요청 파라미터 파싱 — playerId(필수 문자열),
  * fromDate/toDate(선택, 문자열이면 통과시키고 실제 날짜 파싱은 서비스 단에서 검증한다).
  * @param body 요청 바디
@@ -227,6 +266,8 @@ function parseOptionalDefId(body: unknown): string | undefined {
  * @modified 2026-09-21 trisakion 출석부 정의/보상/캐치업가격 저장 라우트 3종(POST
  *   /gm/save-attendance-def, save-attendance-rewards, save-attendance-catchup-prices) 추가,
  *   db 파라미터 신규(저장 검증/쓰기가 DB 접근 필요)
+ * @modified 2026-09-29 trisakion 카드 원형 저장(POST /gm/save-card-templates), 강화 규칙 저장
+ *   (POST /gm/save-enhancement-rules) 라우트 추가
  */
 export function createGmRoutes(playerRepository: PlayerRepository, db: Db): Router {
   const router = Router();
@@ -256,7 +297,7 @@ export function createGmRoutes(playerRepository: PlayerRepository, db: Db): Rout
     res.json({ result: 0, message: "OK", data: cards });
   }));
 
-  // 시드데이터(마스터데이터) 9종 — 카드 원형/출석부 3종 외에는 아직 조회만, 수정/삭제는 없다.
+  // 시드데이터(마스터데이터) 9종 — 카드 원형/강화 규칙/출석부 3종 외에는 아직 조회만, 수정/삭제는 없다.
   router.post("/gm/get-card-templates", gmApiKeyAuth, asyncHandler(async (_req, res) => {
     res.json({ result: 0, message: "OK", data: getCardTemplatesForGm() });
   }));
@@ -272,6 +313,11 @@ export function createGmRoutes(playerRepository: PlayerRepository, db: Db): Rout
 
   router.post("/gm/get-enhancement-rules", gmApiKeyAuth, asyncHandler(async (_req, res) => {
     res.json({ result: 0, message: "OK", data: getEnhancementRulesForGm() });
+  }));
+
+  router.post("/gm/save-enhancement-rules", gmApiKeyAuth, asyncHandler(async (req, res) => {
+    const rows = parseEnhancementRulesSave(req.body);
+    res.json({ result: 0, message: "OK", data: await saveEnhancementRulesForGm(db, rows) });
   }));
 
   router.post("/gm/get-synthesis-rules", gmApiKeyAuth, asyncHandler(async (_req, res) => {

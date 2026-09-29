@@ -69,15 +69,15 @@ gm_platform의 외부 API 규약(`{ result, message, data: [...] }`, `data`는 �
 ### 시드데이터(마스터데이터) 조회
 
 `master_*` 컬렉션 9종을 컬렉션당 엔드포인트 하나씩 그대로 덤프한다. 응답은 서버가 이미
-적재해둔 `masterDataCache`를 그대로 읽어 반환한다(DB 재조회 없음). **등급/강화/합성/
-스테이지 5종은 조회만 지원하고 수정/삭제는 아직 없다** — 밸런스 데이터라 잘못 저장되면
-게임 전체에 영향을 줄 수 있어 별도 검증 설계 후 추가 예정. **카드 원형과 출석부 정의
-3종은 예외로 저장 API가 있다**(카드 원형은 `save-card-templates`, 아래 "카드 원형 저장"
-절 / 출석부는 `save-attendance-def`/`-rewards`/`-catchup-prices`, 아래 "출석부 저장" 절)
-— 출석부는 애초에 gm_platform이 운영 중 실시간으로 쓰도록 설계된 컬렉션이라
+적재해둔 `masterDataCache`를 그대로 읽어 반환한다(DB 재조회 없음). **등급/합성/
+스테이지 4종은 조회만 지원하고 수정/삭제는 아직 없다** — 밸런스 데이터라 잘못 저장되면
+게임 전체에 영향을 줄 수 있어 별도 검증 설계 후 추가 예정. **카드 원형/강화 규칙과 출석부
+정의 3종은 예외로 저장 API가 있다**(카드 원형은 `save-card-templates`, 강화 규칙은
+`save-enhancement-rules`, 아래 각 절 / 출석부는 `save-attendance-def`/`-rewards`/
+`-catchup-prices`, 아래 "출석부 저장" 절) — 출석부는 애초에 gm_platform이 운영 중 실시간으로 쓰도록 설계된 컬렉션이라
 (`23_GAME_DESIGN_ATTENDANCE.md` "비즈니스 키 vs 내부 PK" 절) 값 검증 규칙이 처음부터
-확정돼 있었고, 카드 원형은 gm_platform이 EDITABLE_GRID로 행 추가/수정/삭제를 지원하게
-되면서 저장 API를 먼저 도입했다. **모두 X-API-Key 필요.**
+확정돼 있었고, 카드 원형/강화 규칙은 gm_platform이 EDITABLE_GRID로 행 추가/수정/삭제를
+지원하게 되면서 저장 API를 도입했다. **모두 X-API-Key 필요.**
 
 대부분 요청 body 없음(빈 객체 전송)이지만, 출석 날짜별 보상/캐치업 가격 2종은 선택
 파라미터 `defId`로 특정 출석부만 좁혀 조회할 수 있다(생략하면 전체 반환).
@@ -137,6 +137,36 @@ gm_platform의 외부 API 규약(`{ result, message, data: [...] }`, `data`는 �
 
 **에러**: 10000(행 형식 오류 — templateId 빈값, grade/element가 허용 값 밖, baseAttack/baseHp가
 1 이상 정수 아님, payload 내 templateId 중복), 10003(삭제 후보가 아직 참조 중)
+
+### 강화 규칙 저장
+
+`POST /gm/save-enhancement-rules` — gm_platform EDITABLE_GRID에서 행 추가/수정/삭제를
+지원한다. `data` 배열을 `master_enhancement_rules` 컬렉션의 **최종 상태**로 취급하는
+전체 교체 방식은 카드 원형과 같지만, 카드 원형과 달리 이 규칙을 ID로 참조하는 다른
+컬렉션이 없어(강화 시도 시점에 목표 단계로 즉석 조회할 뿐) **삭제 가드가 없다** — 삭제
+후보는 참조 여부와 무관하게 그냥 지워진다.
+
+행 식별(자연키)은 `minTargetEnhancementLevel`이다. 검증: `min`/`max`는 1 이상 정수이고
+`max >= min`, `successRate`/`destroyOnFailChance`는 0~1, `goldMultiplier`/`stoneCost`는
+0 이상 정수, `minTargetEnhancementLevel` 중복 금지, **구간이 서로 겹치면 거부**(예: 1~10과
+5~8) — 서버가 목표 단계에 해당하는 규칙을 배열에서 첫 매치로 찾기 때문에, 구간이 겹치면
+실제로 어떤 규칙이 적용될지 예측할 수 없어진다.
+
+**요청 body**
+```json
+{
+  "data": [
+    { "minTargetEnhancementLevel": 1, "maxTargetEnhancementLevel": 5, "successRate": 1.0, "destroyOnFailChance": 0, "goldMultiplier": 100, "stoneCost": 1 },
+    { "minTargetEnhancementLevel": 6, "maxTargetEnhancementLevel": 10, "successRate": 0.7, "destroyOnFailChance": 0, "goldMultiplier": 300, "stoneCost": 2 }
+  ]
+}
+```
+
+**응답**: `{ "result": 0, "message": "OK", "data": [ { "minTargetEnhancementLevel", "maxTargetEnhancementLevel", "successRate", "destroyOnFailChance", "goldMultiplier", "stoneCost" }, ... ] }`
+(저장 후 `master_enhancement_rules` 전체)
+
+**에러**: 10000(행 형식 오류 — min/max 정수 아님, max<min, 확률 범위 밖, 비용 음수, 자연키
+중복, 구간 겹침)
 
 ### 출석부 저장 (3단계)
 

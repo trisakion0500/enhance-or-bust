@@ -25,10 +25,10 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
   // JSON.stringify로 직렬화해서 넘긴다 — 객체를 그대로 넘기면 log4js가 콘솔/파일 어펜더 상관없이
   // util.inspect 기본 배열 truncation(요소 6개 넘어가면 "[Object], [Object], ..."로 접음)을
   // 그대로 적용해, 카드 원형 저장처럼 배열 요소가 많은 body는 실제 값이 로그에서 안 보였다.
-  logger.info(`[${id}] --> ${req.method} ${req.originalUrl}`, JSON.stringify(maskSensitive({ query: req.query, body: req.body })));
+  logger.info(`[${id}] <-- ${req.method} ${req.originalUrl}`, JSON.stringify(maskSensitive({ query: req.query, body: req.body })));
 
   res.on("finish", () => {
-    logger.info(`[${id}] <-- ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - start}ms`);
+    logger.info(`[${id}] --> ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - start}ms`);
   });
 
   next();

@@ -139,13 +139,15 @@ export async function getPlayerCardsForGm(playerId: string, playerRepository: Pl
 
 /**
  * gm_platform이 조회하는 시드데이터(마스터데이터) 9종 — 컬렉션을 그대로 덤프한다.
- * 등급/강화/합성/스테이지 5종은 아직 조회만 지원한다(밸런스 데이터라 잘못 저장되면 파급이
- * 커서 별도 검증 설계 후 추가 예정). 카드 원형과 출석부 정의/보상/캐치업가격은 예외로 저장
- * API가 있다(아래 {@link saveCardTemplatesForGm} 및 출석부 저장 함수 3종).
+ * 등급/합성/스테이지 4종은 아직 조회만 지원한다(밸런스 데이터라 잘못 저장되면 파급이
+ * 커서 별도 검증 설계 후 추가 예정). 카드 원형/강화 규칙과 출석부 정의/보상/캐치업가격은
+ * 예외로 저장 API가 있다(아래 {@link saveCardTemplatesForGm}/{@link saveEnhancementRulesForGm}
+ * 및 출석부 저장 함수 3종).
  * @returns 전체 카드 원형 목록
  * @author trisakion
  * @modified 2026-09-17 trisakion 출석부 정의/보상/캐치업가격 GM 조회 3종 추가로 "6종"→"9종" 문구 갱신
  * @modified 2026-09-29 trisakion 카드 원형 저장 API(saveCardTemplatesForGm) 추가로 "조회만 지원" 대상에서 카드 원형 제외
+ * @modified 2026-09-29 trisakion 강화 규칙 저장 API(saveEnhancementRulesForGm) 추가로 "조회만 지원" 대상에서 강화 규칙 제외
  */
 export function getCardTemplatesForGm(): CardTemplate[] {
   return masterDataCache.getAllCardTemplates();
@@ -223,6 +225,56 @@ export function getGradeConfigsForGm(): GradeConfig[] {
  */
 export function getEnhancementRulesForGm(): EnhancementRule[] {
   return masterDataCache.getAllEnhancementRules();
+}
+
+/** gm_platform이 `POST /gm/save-enhancement-rules`로 보내는 강화 규칙 저장 행 하나.
+ * @author trisakion
+ */
+export interface EnhancementRuleSaveRow {
+  minTargetEnhancementLevel: number;
+  maxTargetEnhancementLevel: number;
+  successRate: number;
+  destroyOnFailChance: number;
+  goldMultiplier: number;
+  stoneCost: number;
+}
+
+/**
+ * 강화 규칙(`master_enhancement_rules`) 전체를 `data` 배열 기준으로 교체 저장한다
+ * (`POST /gm/save-enhancement-rules`) — 카드 원형과 달리 다른 컬렉션이 이 규칙을 ID로
+ * 참조하지 않는다(강화 시도 시점에 목표 단계로 즉석 조회할 뿐, {@link
+ * masterDataCache.getEnhancementRuleFor}) — 그래서 삭제 가드가 필요 없고 순수 전체
+ * 교체(upsert + 빠진 행 삭제)만 한다. `minTargetEnhancementLevel`을 자연키로 삼아
+ * upsert/삭제 후보를 가르며, 이 값이 중복이거나 구간이 서로 겹치면(예: 1~10과 5~8)
+ * GM.VALIDATION_FAILED로 거부한다 — `getEnhancementRuleFor()`가 배열 `find()`로 첫
+ * 매치만 쓰기 때문에 구간이 겹치면 실제로 어떤 규칙이 적용될지 예측할 수 없어진다.
+ * @param db 메인 앱 DB 핸들
+ * @param rows 저장할 강화 규칙 전체(이 컬렉션의 최종 상태로 취급)
+ * @returns 저장 후 전체 강화 규칙 목록
+ * @throws {BusinessException} 행 검증 실패/자연키 중복/구간 겹침 시 GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+export async function saveEnhancementRulesForGm(db: Db, rows: EnhancementRuleSaveRow[]): Promise<EnhancementRule[]> {
+  const keys = rows.map(row => row.minTargetEnhancementLevel);
+  if (new Set(keys).size !== keys.length)
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { rows });
+
+  const sortedByMin = [...rows].sort((a, b) => a.minTargetEnhancementLevel - b.minTargetEnhancementLevel);
+  for (let i = 1; i < sortedByMin.length; i++) {
+    if (sortedByMin[i].minTargetEnhancementLevel <= sortedByMin[i - 1].maxTargetEnhancementLevel)
+      throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { rows });
+  }
+
+  const collection = db.collection<EnhancementRule>(COLLECTIONS.MASTER_ENHANCEMENT_RULES);
+  const existingKeys = await collection.distinct("minTargetEnhancementLevel");
+  const keySet = new Set(keys);
+  const deleteCandidates = existingKeys.filter(key => !keySet.has(key));
+
+  await Promise.all(rows.map(row => collection.updateOne({ minTargetEnhancementLevel: row.minTargetEnhancementLevel }, { $set: row }, { upsert: true })));
+  if (deleteCandidates.length > 0) await collection.deleteMany({ minTargetEnhancementLevel: { $in: deleteCandidates } });
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_ENHANCEMENT_RULES);
+
+  return collection.find({}, { projection: { _id: 0 } }).toArray() as Promise<EnhancementRule[]>;
 }
 
 /**
