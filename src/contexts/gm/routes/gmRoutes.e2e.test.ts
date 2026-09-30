@@ -17,7 +17,8 @@ import { createServer } from "../../../server.js";
  * `save-attendance-rewards`/`save-attendance-catchup-prices`), 카드 원형 저장 API
  * (`save-card-templates`), 등급 설정 저장 API(`save-grade-configs`), 강화 규칙 저장 API
  * (`save-enhancement-rules`), 스테이지 카드 드랍 저장 API(`save-stage-card-drops`), 스테이지
- * 설정 저장 API(`save-stage-configs`) 검증을 다룬다. 다른 GM 조회 엔드포인트는 파라미터가 거의 없어
+ * 설정 저장 API(`save-stage-configs`), 합성 규칙 저장 API(`save-synthesis-rules`) 검증을
+ * 다룬다. 다른 GM 조회 엔드포인트는 파라미터가 거의 없어
  * (마스터데이터 덤프/로그 조회) 검증 실패 경로 자체가 얇아 별도 테스트를 두지 않았다
  * (`17_GM_API.md` 참고). `GM_PLATFORM_API_KEY`가 `.env`에 설정돼 있으면 `X-API-Key`
  * 헤더로 실어 보낸다(설정 안 되어 있으면 `gmApiKeyAuth.ts`가 검증 자체를 건너뜀).
@@ -105,6 +106,12 @@ async function currentStageConfigRows() {
   return db.collection(COLLECTIONS.MASTER_STAGE_CONFIGS).find({}, { projection: { _id: 0 } }).toArray();
 }
 
+/** {@link currentCardTemplateRows}와 동일한 이유로 합성 규칙도 DB를 직접 읽어 기준선을 구한다. */
+async function currentSynthesisRuleRows() {
+  const db = mongoClient.db(process.env.MONGO_APP_DATABASE);
+  return db.collection(COLLECTIONS.MASTER_SYNTHESIS_RULES).find({}, { projection: { _id: 0 } }).toArray();
+}
+
 /** 기본값이 채워진 출석부 정의 저장 바디(개별 필드는 override로 덮어씀). 기본은 아직 시작 전인 EVENT. */
 function buildDefBody(defId: string, override: Record<string, unknown> = {}) {
   return {
@@ -137,6 +144,7 @@ const saveGradeConfigs = (body: unknown) => post("/gm/save-grade-configs", body)
 const saveEnhancementRules = (body: unknown) => post("/gm/save-enhancement-rules", body);
 const saveStageCardDrops = (body: unknown) => post("/gm/save-stage-card-drops", body);
 const saveStageConfigs = (body: unknown) => post("/gm/save-stage-configs", body);
+const saveSynthesisRules = (body: unknown) => post("/gm/save-synthesis-rules", body);
 
 test("신규 출석부 정의 저장 성공", async () => {
   const defId = nextDefId();
@@ -707,4 +715,119 @@ test("스테이지 설정 저장 — 행 형식/범위가 잘못되면 VALIDATIO
     assert.equal(status, 400, JSON.stringify(row));
     assert.equal(json.result, 10000, JSON.stringify(row));
   }
+});
+
+// 합성 규칙은 등급 설정과 같은 이유(고정된 리터럴 집합)로 순수 upsert다 — gradeUpgrade는
+// sourceGrade N/R/SR 각 하나씩(SSR은 더 승급할 상위 등급이 없어 제외), enhanceMaterial은
+// 싱글턴 1행, 합쳐서 항상 정확히 4행이어야 한다. resultGrade는 GAME_DESIGN.md 3절의 고정
+// 순서(N→R→R→SR→SR→SSR)를 벗어나면 거부된다(2026-09-30 AskUserQuestion으로 확정).
+function findGradeUpgradeRow(rows: Array<Record<string, unknown>>, sourceGrade: string) {
+  return rows.find(r => r.type === "gradeUpgrade" && r.sourceGrade === sourceGrade);
+}
+
+test("합성 규칙 저장 — 현재 값 그대로 재저장하면 4행이 그대로 반환된다", async () => {
+  const base = await currentSynthesisRuleRows();
+  const { status, json } = await saveSynthesisRules({ data: base });
+
+  assert.equal(status, 200);
+  assert.equal(json.result, 0);
+  assert.equal(json.data.length, 4);
+  assert.deepEqual(
+    json.data.filter((r: { type: string }) => r.type === "gradeUpgrade").map((r: { sourceGrade: string }) => r.sourceGrade).sort(),
+    ["N", "R", "SR"],
+  );
+  assert.equal(json.data.filter((r: { type: string }) => r.type === "enhanceMaterial").length, 1);
+});
+
+test("합성 규칙 저장 — upsert로 기존 값이 바뀐다", async () => {
+  const base = await currentSynthesisRuleRows();
+
+  try {
+    const changed = base.map(r => (r.type === "gradeUpgrade" && r.sourceGrade === "N" ? { ...r, successRate: 0.42 } : r));
+    const { status, json } = await saveSynthesisRules({ data: changed });
+
+    assert.equal(status, 200);
+    assert.equal(findGradeUpgradeRow(json.data, "N")?.successRate, 0.42);
+  } finally {
+    await saveSynthesisRules({ data: base });
+  }
+});
+
+test("합성 규칙 저장 — gradeUpgrade sourceGrade 하나(N/R/SR)라도 빠지면 VALIDATION_FAILED(10000)", async () => {
+  const base = await currentSynthesisRuleRows();
+  const missingN = base.filter(r => !(r.type === "gradeUpgrade" && r.sourceGrade === "N"));
+
+  const { status, json } = await saveSynthesisRules({ data: missingN });
+  assert.equal(status, 400);
+  assert.equal(json.result, 10000);
+});
+
+test("합성 규칙 저장 — enhanceMaterial 행이 0개/2개면 VALIDATION_FAILED(10000)", async () => {
+  const base = await currentSynthesisRuleRows();
+  const gradeUpgradeOnly = base.filter(r => r.type !== "enhanceMaterial");
+  const enhanceMaterialRow = base.find(r => r.type === "enhanceMaterial");
+
+  const zero = await saveSynthesisRules({ data: gradeUpgradeOnly });
+  assert.equal(zero.status, 400);
+  assert.equal(zero.json.result, 10000);
+
+  const two = await saveSynthesisRules({ data: [...base, enhanceMaterialRow] });
+  assert.equal(two.status, 400);
+  assert.equal(two.json.result, 10000);
+});
+
+test("합성 규칙 저장 — sourceGrade가 중복되면 VALIDATION_FAILED(10000)", async () => {
+  const base = await currentSynthesisRuleRows();
+  const nRow = findGradeUpgradeRow(base, "N")!;
+  const duplicated = [...base.filter(r => !(r.type === "gradeUpgrade" && r.sourceGrade === "R")), nRow];
+
+  const { status, json } = await saveSynthesisRules({ data: duplicated });
+  assert.equal(status, 400);
+  assert.equal(json.result, 10000);
+});
+
+test("합성 규칙 저장 — resultGrade가 고정 순서(N→R, R→SR, SR→SSR)와 다르면 VALIDATION_FAILED(10000)", async () => {
+  const base = await currentSynthesisRuleRows();
+  const wrongOrder = base.map(r => (r.type === "gradeUpgrade" && r.sourceGrade === "N" ? { ...r, resultGrade: "SSR" } : r));
+
+  const { status, json } = await saveSynthesisRules({ data: wrongOrder });
+  assert.equal(status, 400);
+  assert.equal(json.result, 10000);
+});
+
+test("합성 규칙 저장 — 행 형식이 잘못되면 VALIDATION_FAILED(10000)", async () => {
+  const base = await currentSynthesisRuleRows();
+  const nRow = findGradeUpgradeRow(base, "N")!;
+  const enhanceRow = base.find(r => r.type === "enhanceMaterial")!;
+  const otherRows = base.filter(r => r !== nRow && r !== enhanceRow);
+
+  const invalidGradeUpgradeRows = [
+    { ...nRow, sourceGrade: "X" },
+    { ...nRow, resultGrade: "X" },
+    { ...nRow, materialCount: 0 },
+    { ...nRow, materialCount: 1.5 },
+    { ...nRow, successRate: 1.1 },
+    { ...nRow, successRate: -0.1 },
+  ];
+  for (const row of invalidGradeUpgradeRows) {
+    const { status, json } = await saveSynthesisRules({ data: [...otherRows, row, enhanceRow] });
+    assert.equal(status, 400, JSON.stringify(row));
+    assert.equal(json.result, 10000, JSON.stringify(row));
+  }
+
+  const invalidEnhanceMaterialRows = [
+    { ...enhanceRow, materialCount: 0 },
+    { ...enhanceRow, materialCount: 1.5 },
+    { ...enhanceRow, goldCost: -1 },
+    { ...enhanceRow, goldCost: 1.5 },
+  ];
+  for (const row of invalidEnhanceMaterialRows) {
+    const { status, json } = await saveSynthesisRules({ data: [...otherRows, nRow, row] });
+    assert.equal(status, 400, JSON.stringify(row));
+    assert.equal(json.result, 10000, JSON.stringify(row));
+  }
+
+  const { status, json } = await saveSynthesisRules({ data: [...otherRows, nRow, { type: "unknown", materialCount: 1 }] });
+  assert.equal(status, 400);
+  assert.equal(json.result, 10000);
 });

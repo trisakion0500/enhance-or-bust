@@ -26,7 +26,7 @@ import {
   upsertCatchupPriceRow,
 } from "../../attendance/infrastructure/attendanceStore.js";
 import type { EnhancementRule } from "../../enhancement/domain/enhancementRule.js";
-import type { SynthesisRule } from "../../synthesis/domain/synthesisRule.js";
+import type { GradeUpgradeSynthesisRule, EnhanceMaterialSynthesisRule, SynthesisRule } from "../../synthesis/domain/synthesisRule.js";
 import type { StageConfig } from "../../battleStage/domain/stageConfig.js";
 import type { CardDropRuleDoc } from "../../battleStage/domain/cardDrop.js";
 import type { Player } from "../../player/domain/player.js";
@@ -139,11 +139,9 @@ export async function getPlayerCardsForGm(playerId: string, playerRepository: Pl
 
 /**
  * gm_platform이 조회하는 시드데이터(마스터데이터) 9종 — 컬렉션을 그대로 덤프한다.
- * 합성 규칙 1종은 아직 조회만 지원한다(밸런스 데이터라 잘못 저장되면 파급이
- * 커서 별도 검증 설계 후 추가 예정). 카드 원형/등급 설정/강화 규칙/스테이지 설정/스테이지 카드
- * 드랍과 출석부 정의/보상/캐치업가격은 예외로 저장 API가 있다(아래 {@link saveCardTemplatesForGm}/
- * {@link saveGradeConfigsForGm}/{@link saveEnhancementRulesForGm}/
- * {@link saveStageConfigsForGm}/{@link saveStageCardDropsForGm} 및 출석부 저장 함수 3종).
+ * 이제 전부 저장 API가 있다(아래 {@link saveCardTemplatesForGm}/{@link saveGradeConfigsForGm}/
+ * {@link saveEnhancementRulesForGm}/{@link saveSynthesisRulesForGm}/{@link saveStageConfigsForGm}/
+ * {@link saveStageCardDropsForGm} 및 출석부 저장 함수 3종).
  * @returns 전체 카드 원형 목록
  * @author trisakion
  * @modified 2026-09-17 trisakion 출석부 정의/보상/캐치업가격 GM 조회 3종 추가로 "6종"→"9종" 문구 갱신
@@ -152,6 +150,7 @@ export async function getPlayerCardsForGm(playerId: string, playerRepository: Pl
  * @modified 2026-09-30 trisakion 등급 설정 저장 API(saveGradeConfigsForGm) 추가로 "조회만 지원" 대상에서 등급 설정 제외
  * @modified 2026-09-30 trisakion 스테이지 카드 드랍 저장 API(saveStageCardDropsForGm) 추가로 "조회만 지원" 대상에서 스테이지 카드 드랍 제외
  * @modified 2026-09-30 trisakion 스테이지 설정 저장 API(saveStageConfigsForGm) 추가로 "조회만 지원" 대상에서 스테이지 설정 제외
+ * @modified 2026-09-30 trisakion 합성 규칙 저장 API(saveSynthesisRulesForGm) 추가로 "조회만 지원" 대상 완전 소진(9종 전부 저장 지원)
  */
 export function getCardTemplatesForGm(): CardTemplate[] {
   return masterDataCache.getAllCardTemplates();
@@ -333,6 +332,66 @@ export async function saveEnhancementRulesForGm(db: Db, rows: EnhancementRuleSav
  */
 export function getSynthesisRulesForGm(): readonly SynthesisRule[] {
   return masterDataCache.getSynthesisRules();
+}
+
+/** gm_platform이 `POST /gm/save-synthesis-rules`로 보내는 합성 규칙 저장 행 하나 — `domain/synthesisRule.ts`의
+ * 판별 유니온을 그대로 재사용한다(DB 저장 형태와 완전히 동일해 별도 필드 매핑이 필요 없음).
+ * @author trisakion
+ */
+export type SynthesisRuleSaveRow = SynthesisRule;
+
+/** 등급 승급 합성이 반드시 포함해야 하는 sourceGrade 집합 — SSR은 더 승급할 상위 등급이
+ * 없어 대상에서 제외된다(등급 설정의 `REQUIRED_GRADES`와 달리 4종이 아니라 3종). */
+const REQUIRED_GRADE_UPGRADE_SOURCE_GRADES: Grade[] = ["N", "R", "SR"];
+
+/** sourceGrade별로 허용되는 유일한 resultGrade — GAME_DESIGN.md 3절의 "동일 등급 3장 →
+ * 상위 등급 1장" 순서(N→R→SR→SSR)를 코드로 고정한다. GM이 자유롭게 resultGrade를 지정하면
+ * N 3장으로 SSR을 만드는 등 설계와 어긋난 조합이 저장될 수 있어, materialCount/successRate만
+ * 튜닝 가능하게 하고 승급 경로 자체는 잠근다(2026-09-30 AskUserQuestion으로 확인한 결정). */
+const NEXT_GRADE: Record<Grade, Grade | undefined> = { N: "R", R: "SR", SR: "SSR", SSR: undefined };
+
+/**
+ * 합성 규칙(`master_synthesis_rules`) 전체를 저장한다(`POST /gm/save-synthesis-rules`) — 등급
+ * 설정과 같은 이유(고정된 리터럴 집합이라 행을 추가/삭제할 수 없음)로 **순수 upsert**다.
+ * payload는 항상 gradeUpgrade 3행(sourceGrade N/R/SR 각 하나씩, resultGrade는 {@link NEXT_GRADE}
+ * 순서 고정) + enhanceMaterial 1행, 정확히 4행이어야 한다 — 집합이 안 맞거나 resultGrade가
+ * 고정 순서와 다르면 전부 GM.VALIDATION_FAILED로 거부한다. materialCount/successRate/goldCost
+ * 자체의 형식 검증(범위/정수)은 라우트(`parseSynthesisRulesSave()`)가 맡는다. 자연키는
+ * gradeUpgrade는 `sourceGrade`, enhanceMaterial은 `type`(싱글턴) — 둘 다 다른 컬렉션이
+ * ID로 참조하지 않아(합성 시도 시점에 즉석 조회할 뿐, {@link masterDataCache.getSynthesisRules})
+ * 삭제 가드는 필요 없다.
+ * @param db 메인 앱 DB 핸들
+ * @param rows 저장할 합성 규칙 전체(항상 gradeUpgrade 3행 + enhanceMaterial 1행)
+ * @returns 저장 후 전체 합성 규칙 목록
+ * @throws {BusinessException} 필요한 행 집합과 정확히 일치하지 않거나 resultGrade가 고정
+ *   순서와 다르면 GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+export async function saveSynthesisRulesForGm(db: Db, rows: SynthesisRuleSaveRow[]): Promise<SynthesisRule[]> {
+  const gradeUpgradeRows = rows.filter((row): row is GradeUpgradeSynthesisRule => row.type === "gradeUpgrade");
+  const enhanceMaterialRows = rows.filter((row): row is EnhanceMaterialSynthesisRule => row.type === "enhanceMaterial");
+  const sourceGrades = gradeUpgradeRows.map(row => row.sourceGrade);
+
+  const isExactRequiredSet = rows.length === REQUIRED_GRADE_UPGRADE_SOURCE_GRADES.length + 1
+    && enhanceMaterialRows.length === 1
+    && new Set(sourceGrades).size === sourceGrades.length
+    && REQUIRED_GRADE_UPGRADE_SOURCE_GRADES.every(grade => sourceGrades.includes(grade));
+  if (!isExactRequiredSet)
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { rows });
+
+  for (const row of gradeUpgradeRows) {
+    if (row.resultGrade !== NEXT_GRADE[row.sourceGrade])
+      throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { row });
+  }
+
+  const collection = db.collection<SynthesisRule>(COLLECTIONS.MASTER_SYNTHESIS_RULES);
+  await Promise.all(gradeUpgradeRows.map(row =>
+    collection.updateOne({ type: "gradeUpgrade", sourceGrade: row.sourceGrade }, { $set: row }, { upsert: true }),
+  ));
+  await collection.updateOne({ type: "enhanceMaterial" }, { $set: enhanceMaterialRows[0] }, { upsert: true });
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_SYNTHESIS_RULES);
+
+  return collection.find({}, { projection: { _id: 0 } }).toArray() as Promise<SynthesisRule[]>;
 }
 
 /**

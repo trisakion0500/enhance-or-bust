@@ -69,19 +69,15 @@ gm_platform의 외부 API 규약(`{ result, message, data: [...] }`, `data`는 �
 ### 시드데이터(마스터데이터) 조회
 
 `master_*` 컬렉션 9종을 컬렉션당 엔드포인트 하나씩 그대로 덤프한다. 응답은 서버가 이미
-적재해둔 `masterDataCache`를 그대로 읽어 반환한다(DB 재조회 없음). **합성 규칙 1종은
-조회만 지원하고 수정/삭제는 아직 없다** — 밸런스 데이터라 잘못 저장되면 게임 전체에 영향을
-줄 수 있어 별도 검증 설계 후 추가 예정. **카드 원형/등급 설정/강화 규칙/스테이지 설정/
-스테이지 카드 드랍과 출석부 정의 3종은 예외로 저장 API가 있다**(카드 원형은
-`save-card-templates`, 등급 설정은 `save-grade-configs`, 강화 규칙은
-`save-enhancement-rules`, 스테이지 설정은 `save-stage-configs`, 스테이지 카드 드랍은
-`save-stage-card-drops`, 아래 각 절 / 출석부는
+적재해둔 `masterDataCache`를 그대로 읽어 반환한다(DB 재조회 없음). **9종 전부 저장 API가
+있다**(카드 원형은 `save-card-templates`, 등급 설정은 `save-grade-configs`, 강화 규칙은
+`save-enhancement-rules`, 합성 규칙은 `save-synthesis-rules`, 스테이지 설정은
+`save-stage-configs`, 스테이지 카드 드랍은 `save-stage-card-drops`, 아래 각 절 / 출석부는
 `save-attendance-def`/`-rewards`/`-catchup-prices`, 아래 "출석부 저장" 절) — 출석부는
 애초에 gm_platform이 운영 중 실시간으로 쓰도록 설계된 컬렉션이라
 (`23_GAME_DESIGN_ATTENDANCE.md` "비즈니스 키 vs 내부 PK" 절) 값 검증 규칙이 처음부터
-확정돼 있었고, 카드 원형/등급 설정/강화 규칙/스테이지 설정/스테이지 카드 드랍은 gm_platform이
-EDITABLE_GRID로 행 추가/수정/삭제를 지원하게 되면서 저장 API를 도입했다. **모두 X-API-Key
-필요.**
+확정돼 있었고, 나머지는 gm_platform이 EDITABLE_GRID로 행 추가/수정/삭제(또는 순수 upsert)를
+지원하게 되면서 순차로 저장 API를 도입했다. **모두 X-API-Key 필요.**
 
 대부분 요청 body 없음(빈 객체 전송)이지만, 출석 날짜별 보상/캐치업 가격 2종은 선택
 파라미터 `defId`로 특정 출석부만 좁혀 조회할 수 있다(생략하면 전체 반환).
@@ -200,6 +196,49 @@ EDITABLE_GRID로 행 추가/수정/삭제를 지원하게 되면서 저장 API�
 
 **에러**: 10000(행 형식 오류 — min/max 정수 아님, max<min, 확률 범위 밖, 비용 음수, 자연키
 중복, 구간 겹침)
+
+### 합성 규칙 저장
+
+`POST /gm/save-synthesis-rules` — gm_platform EDITABLE_GRID에서 행 편집을 지원한다. 등급
+설정과 같은 이유로 **순수 upsert**다: 등급 승급(`type: "gradeUpgrade"`)은 `sourceGrade`가
+N/R/SR 중 하나로 고정돼(SSR은 더 승급할 상위 등급이 없어 제외) 행을 추가/삭제할 수 없고,
+강화 재료(`type: "enhanceMaterial"`)는 애초에 싱글턴이라 행이 정확히 1개여야 한다 — `data`
+배열은 항상 gradeUpgrade 3행(N/R/SR 각 하나) + enhanceMaterial 1행, 정확히 4행이어야 한다.
+
+`resultGrade`는 GAME_DESIGN.md 3절의 "동일 등급 3장 → 상위 등급 1장" 고정 순서
+(N→R, R→SR, SR→SSR)를 벗어나면 거부된다 — GM이 자유롭게 지정할 수 있게 하면 N 3장으로
+SSR을 만드는 등 설계와 어긋난 조합이 저장될 수 있어, `materialCount`/`successRate`만
+튜닝 가능하게 하고 승급 경로 자체는 코드로 잠갔다. gm_platform 쪽 `type` 컬럼은 공통코드
+그룹 `CRAFTING_RULES`를, `sourceGrade`/`resultGrade` 컬럼은 카드 원형/등급 설정과 동일한
+`CARD_GRADE`를 참조하도록 등록돼 있다.
+
+행 식별(자연키)은 gradeUpgrade는 `sourceGrade`, enhanceMaterial은 `type`(싱글턴이라 그
+자체가 키)다. 검증: `materialCount`는 1 이상 정수(두 타입 공통), gradeUpgrade의
+`successRate`는 0~1, enhanceMaterial의 `goldCost`는 0 이상 정수.
+
+`type`과 안 맞는 필드(예: `enhanceMaterial` 행에 `sourceGrade`/`resultGrade`/`successRate`,
+`gradeUpgrade` 행에 `goldCost`가 같이 옴)는 검증 없이 조용히 무시된다 — gm_platform 그리드가
+두 타입을 한 테이블에서 섞어 편집해 그리드 셀에 값이 남아있어도 저장/응답 어디에도 반영되지
+않는다(의도적 결정, 별도 에러로 거부하지 않음).
+
+**요청 body**
+```json
+{
+  "data": [
+    { "type": "gradeUpgrade", "sourceGrade": "N", "resultGrade": "R", "materialCount": 3, "successRate": 0.8 },
+    { "type": "gradeUpgrade", "sourceGrade": "R", "resultGrade": "SR", "materialCount": 3, "successRate": 0.8 },
+    { "type": "gradeUpgrade", "sourceGrade": "SR", "resultGrade": "SSR", "materialCount": 3, "successRate": 0.8 },
+    { "type": "enhanceMaterial", "materialCount": 2, "goldCost": 500 }
+  ]
+}
+```
+
+**응답**: `{ "result": 0, "message": "OK", "data": [ { "type", "sourceGrade"?, "resultGrade"?, "materialCount", "successRate"?, "goldCost"? }, ... ] }`
+(저장 후 `master_synthesis_rules` 전체, 항상 4행)
+
+**에러**: 10000(행 형식 오류 — materialCount/successRate/goldCost 범위 밖, sourceGrade
+중복, gradeUpgrade 3종(N/R/SR)+enhanceMaterial 1종 집합과 불일치, resultGrade가 고정
+순서와 다름)
 
 ### 스테이지 설정 저장
 

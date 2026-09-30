@@ -37,11 +37,8 @@ gm_platform의 apiExecution은 등록된 API를 항상 `POST {api_base_url}{endp
   (`get-card-templates`/`get-grade-configs`/`get-enhancement-rules`/
   `get-synthesis-rules`/`get-stage-configs`/`get-stage-card-drops`/`get-attendance-defs`/
   `get-attendance-rewards`/`get-attendance-catchup-prices`) — 서버가 이미 적재해둔
-  `masterDataCache` 싱글톤을 그대로 읽어 반환한다(DB 재조회 없음). **합성 규칙 1종은
-  조회만 지원하고 수정/삭제는 아직 없다** — 마스터데이터는 잘못 저장되면 게임
-  전체 밸런스에 영향을 줘서, 저장 기능은 컬렉션별 값 검증(확률 0~1, 음수 불가 등) 설계를
-  먼저 한 뒤 별도로 추가하기로 함. 카드 원형/등급 설정/강화 규칙/스테이지 설정/스테이지 카드
-  드랍과 출석부 3종은 예외로 저장 API가 있다(아래).
+  `masterDataCache` 싱글톤을 그대로 읽어 반환한다(DB 재조회 없음). **9종 전부 저장 API가
+  있다**(아래).
 - **카드 원형 저장**: `POST /gm/save-card-templates` — gm_platform이 `[기획]카드 데이터`
   API를 EDITABLE_GRID(`response_view_type=3`)로 바꾸며 행 추가/수정/삭제를 지원하게 돼
   먼저 도입했다. `data` 배열을 컬렉션의 최종 상태로 보는 전체 교체 방식(추가/수정은
@@ -61,6 +58,15 @@ gm_platform의 apiExecution은 등록된 API를 항상 `POST {api_base_url}{endp
   규칙은 다른 컬렉션이 ID로 참조하지 않아(강화 시도 시점에 목표 단계로 즉석 조회) 삭제
   가드가 없다 — 대신 자연키(`minTargetEnhancementLevel`) 중복과 구간 겹침(예: 1~10과
   5~8)을 GM.VALIDATION_FAILED(10000)로 막는다. 상세는 `17_GM_API.md` "강화 규칙 저장" 절.
+- **합성 규칙 저장**: `POST /gm/save-synthesis-rules` — `[기획]합성 규칙` API도 EDITABLE_GRID로
+  바꾸며 뒤이어 도입했다. 등급 설정과 같은 이유(고정된 리터럴 집합)로 순수 upsert다 — 등급
+  승급(`sourceGrade` N/R/SR 각 하나, SSR은 상위 등급이 없어 제외)+강화 재료(싱글턴 1행),
+  정확히 4행이어야 한다. `resultGrade`는 GAME_DESIGN.md 3절의 고정 순서(N→R→SR→SSR)를
+  벗어나면 거부한다 — GM이 자유롭게 지정하게 두면 N 3장으로 SSR을 만드는 등 설계와 어긋난
+  조합이 저장될 수 있어, materialCount/successRate만 튜닝 가능하게 하고 승급 경로는 코드로
+  잠갔다(2026-09-30 AskUserQuestion으로 확인). gm_platform 쪽 `type` 컬럼은 공통코드 그룹
+  `CRAFTING_RULES`를, `sourceGrade`/`resultGrade` 컬럼은 카드 원형/등급 설정과 동일한
+  `CARD_GRADE`를 참조하도록 등록했다. 상세는 `17_GM_API.md` "합성 규칙 저장" 절.
 - **스테이지 설정 저장**: `POST /gm/save-stage-configs` — `[기획]스테이지 설정` API도 같은
   이유로 EDITABLE_GRID로 바꾸며 뒤이어 도입했다. 전체 교체 방식은 카드 원형과 같고, 삭제
   후보의 `stageId`를 스테이지 카드 드랍(`master_stage_card_drops`)이 아직 참조 중이면

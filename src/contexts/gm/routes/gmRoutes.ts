@@ -8,7 +8,7 @@ import type { AttendanceBookType, AttendanceTargetAudience } from "../../attenda
 import type { PlayerRepository } from "../../player/domain/playerRepository.js";
 import type { Grade } from "../../../shared-kernel/masterData/grade.js";
 import type { Element } from "../../../shared-kernel/masterData/element.js";
-import type { AttendanceBookDefSaveInput, AttendanceDayRewardInput, CardTemplateSaveRow, EnhancementRuleSaveRow, GradeConfigSaveRow, StageCardDropSaveRow, StageConfigSaveRow } from "../application/gmService.js";
+import type { AttendanceBookDefSaveInput, AttendanceDayRewardInput, CardTemplateSaveRow, EnhancementRuleSaveRow, GradeConfigSaveRow, StageCardDropSaveRow, StageConfigSaveRow, SynthesisRuleSaveRow } from "../application/gmService.js";
 import {
   getAttendanceCatchupPricesForGm,
   getAttendanceDefsForGm,
@@ -36,6 +36,7 @@ import {
   saveGradeConfigsForGm,
   saveStageCardDropsForGm,
   saveStageConfigsForGm,
+  saveSynthesisRulesForGm,
 } from "../application/gmService.js";
 
 const ATTENDANCE_BOOK_TYPES: AttendanceBookType[] = ["GENERAL", "EVENT"];
@@ -249,6 +250,60 @@ function parseGradeConfigsSave(body: unknown): GradeConfigSaveRow[] {
 }
 
 /**
+ * `POST /gm/save-synthesis-rules` 요청 바디를 검증된 형태로 파싱한다 — 형식/범위/판별 태그만
+ * 담당하고(gradeUpgrade 3행+enhanceMaterial 1행 집합 일치, resultGrade 고정 순서 검증 등은
+ * `saveSynthesisRulesForGm()`의 책임), gm_platform EDITABLE_GRID가 보내는 `data` 배열을
+ * 그대로 행 목록으로 받는다. 두 행 타입이 서로 다른 필드를 가져(판별 유니온) `type` 값으로
+ * 먼저 분기한다 — gm_platform 그리드는 두 타입을 한 테이블에서 섞어 편집해 컬럼 자체는
+ * 항상 다 보이므로, `type`과 안 맞는 필드(예: enhanceMaterial 행에 채워진 sourceGrade/
+ * resultGrade/successRate, gradeUpgrade 행에 채워진 goldCost)가 함께 와도 이 분기에서
+ * 애초에 읽지 않아 조용히 버려진다 — 의도적 결정(2026-09-30 확인), 별도 거부 처리 없음.
+ * @param body 요청 바디
+ * @returns 파싱된 합성 규칙 저장 행 목록
+ * @throws {BusinessException} `data`가 배열이 아니거나 행 형식이 올바르지 않으면 GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+function parseSynthesisRulesSave(body: unknown): SynthesisRuleSaveRow[] {
+  const { data } = (body ?? {}) as Record<string, unknown>;
+  if (!Array.isArray(data)) throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { body });
+
+  return data.map(row => {
+    const r = (row ?? {}) as Record<string, unknown>;
+    const fail = (): never => {
+      throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { row });
+    };
+
+    if (r.type === "gradeUpgrade") {
+      if (typeof r.sourceGrade !== "string" || !GRADES.includes(r.sourceGrade as Grade)) fail();
+      if (typeof r.resultGrade !== "string" || !GRADES.includes(r.resultGrade as Grade)) fail();
+      if (typeof r.materialCount !== "number" || !Number.isInteger(r.materialCount) || r.materialCount < 1) fail();
+      if (typeof r.successRate !== "number" || r.successRate < 0 || r.successRate > 1) fail();
+
+      return {
+        type: "gradeUpgrade",
+        sourceGrade: r.sourceGrade as Grade,
+        resultGrade: r.resultGrade as Grade,
+        materialCount: r.materialCount as number,
+        successRate: r.successRate as number,
+      };
+    }
+
+    if (r.type === "enhanceMaterial") {
+      if (typeof r.materialCount !== "number" || !Number.isInteger(r.materialCount) || r.materialCount < 1) fail();
+      if (typeof r.goldCost !== "number" || !Number.isInteger(r.goldCost) || r.goldCost < 0) fail();
+
+      return {
+        type: "enhanceMaterial",
+        materialCount: r.materialCount as number,
+        goldCost: r.goldCost as number,
+      };
+    }
+
+    return fail();
+  });
+}
+
+/**
  * `POST /gm/save-stage-card-drops` 요청 바디를 검증된 형태로 파싱한다 — 형식만 담당하고
  * (자연키 중복, stageId/templateId 실재 여부 등 비즈니스 검증은
  * `saveStageCardDropsForGm()`의 책임), gm_platform EDITABLE_GRID가 보내는 `data` 배열을
@@ -390,6 +445,7 @@ function parseOptionalDefId(body: unknown): string | undefined {
  * @modified 2026-09-30 trisakion 등급 설정 저장(POST /gm/save-grade-configs) 라우트 추가
  * @modified 2026-09-30 trisakion 스테이지 카드 드랍 저장(POST /gm/save-stage-card-drops) 라우트 추가
  * @modified 2026-09-30 trisakion 스테이지 설정 저장(POST /gm/save-stage-configs) 라우트 추가
+ * @modified 2026-09-30 trisakion 합성 규칙 저장(POST /gm/save-synthesis-rules) 라우트 추가
  */
 export function createGmRoutes(playerRepository: PlayerRepository, db: Db): Router {
   const router = Router();
@@ -419,7 +475,7 @@ export function createGmRoutes(playerRepository: PlayerRepository, db: Db): Rout
     res.json({ result: 0, message: "OK", data: cards });
   }));
 
-  // 시드데이터(마스터데이터) 9종 — 카드 원형/등급 설정/강화 규칙/스테이지 설정/스테이지 카드 드랍/출석부 3종 외에는 아직 조회만, 수정/삭제는 없다.
+  // 시드데이터(마스터데이터) 9종 — 이제 전부 저장 API가 있다(아래 각 save-* 라우트 참고).
   router.post("/gm/get-card-templates", gmApiKeyAuth, asyncHandler(async (_req, res) => {
     res.json({ result: 0, message: "OK", data: getCardTemplatesForGm() });
   }));
@@ -449,6 +505,11 @@ export function createGmRoutes(playerRepository: PlayerRepository, db: Db): Rout
 
   router.post("/gm/get-synthesis-rules", gmApiKeyAuth, asyncHandler(async (_req, res) => {
     res.json({ result: 0, message: "OK", data: getSynthesisRulesForGm() });
+  }));
+
+  router.post("/gm/save-synthesis-rules", gmApiKeyAuth, asyncHandler(async (req, res) => {
+    const rows = parseSynthesisRulesSave(req.body);
+    res.json({ result: 0, message: "OK", data: await saveSynthesisRulesForGm(db, rows) });
   }));
 
   router.post("/gm/get-stage-configs", gmApiKeyAuth, asyncHandler(async (_req, res) => {

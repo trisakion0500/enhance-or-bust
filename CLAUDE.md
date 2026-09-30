@@ -458,7 +458,21 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   하나라도 빠지면 그 등급 카드의 강화/합성/레벨업 시도마다 하는
   `masterDataCache.getGradeConfig()` 조회가 실패해 즉시 INTERNAL_ERROR로 막힌다. gm_platform
   쪽 `grade` 컬럼도 카드 원형 저장 화면과 동일한 공통코드 그룹(`CARD_GRADE`)을 참조하도록
-  등록해 두 화면의 등급 표기를 통일했다. 스테이지 설정(`master_stage_configs`)도 같은
+  등록해 두 화면의 등급 표기를 통일했다. 합성 규칙(`master_synthesis_rules`)도 같은 이유로
+  `[기획]합성 규칙` API가 EDITABLE_GRID로 바뀌면서 `POST /gm/save-synthesis-rules`를 뒤이어
+  구현했다 — 등급 설정과 같은 이유(고정된 리터럴 집합)로 순수 upsert다: 등급 승급 규칙
+  (`type: "gradeUpgrade"`)은 `sourceGrade`가 N/R/SR 중 하나로 고정되고(SSR은 더 승급할 상위
+  등급이 없어 대상에서 제외) 강화 재료 규칙(`type: "enhanceMaterial"`)은 애초에 싱글턴이라
+  행이 정확히 1개여야 해서, payload는 항상 gradeUpgrade 3행+enhanceMaterial 1행, 정확히
+  4행이어야 한다(집합이 안 맞으면 `GM.VALIDATION_FAILED`(10000)). `resultGrade`는
+  GAME_DESIGN.md 3절의 "동일 등급 3장 → 상위 등급 1장" 고정 순서(N→R, R→SR, SR→SSR)를
+  코드(`NEXT_GRADE` 맵)로 잠갔다 — GM이 resultGrade를 자유롭게 지정하게 두면 N 3장으로
+  SSR을 만드는 등 설계와 어긋난 조합이 저장될 수 있어, materialCount/successRate만 튜닝
+  가능하게 하고 승급 경로 자체는 바꿀 수 없게 했다(트레이드오프가 갈리는 결정이라
+  AskUserQuestion으로 확인 후 진행). 자연키는 gradeUpgrade는 `sourceGrade`, enhanceMaterial은
+  `type`(싱글턴이라 그 자체가 키). gm_platform 쪽 `type` 컬럼은 공통코드 그룹
+  `CRAFTING_RULES`를, `sourceGrade`/`resultGrade` 컬럼은 카드 원형/등급 설정과 동일한
+  `CARD_GRADE`를 참조하도록 등록했다. 스테이지 설정(`master_stage_configs`)도 같은
   이유로 `[기획]스테이지 설정` API가 EDITABLE_GRID로 바뀌면서 `POST /gm/save-stage-configs`를
   뒤이어 구현했다 — 전체 교체 방식은 카드 원형과 같고, 삭제 후보의 stageId를 스테이지 카드
   드랍(`master_stage_card_drops`)이 아직 참조 중이면 카드 원형과 동일하게
