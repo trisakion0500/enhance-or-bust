@@ -139,16 +139,18 @@ export async function getPlayerCardsForGm(playerId: string, playerRepository: Pl
 
 /**
  * gm_platform이 조회하는 시드데이터(마스터데이터) 9종 — 컬렉션을 그대로 덤프한다.
- * 합성/스테이지 2종은 아직 조회만 지원한다(밸런스 데이터라 잘못 저장되면 파급이
- * 커서 별도 검증 설계 후 추가 예정). 카드 원형/등급 설정/강화 규칙과 출석부 정의/보상/
- * 캐치업가격은 예외로 저장 API가 있다(아래 {@link saveCardTemplatesForGm}/
- * {@link saveGradeConfigsForGm}/{@link saveEnhancementRulesForGm} 및 출석부 저장 함수 3종).
+ * 합성 규칙/스테이지 설정 2종은 아직 조회만 지원한다(밸런스 데이터라 잘못 저장되면 파급이
+ * 커서 별도 검증 설계 후 추가 예정). 카드 원형/등급 설정/강화 규칙/스테이지 카드 드랍과
+ * 출석부 정의/보상/캐치업가격은 예외로 저장 API가 있다(아래 {@link saveCardTemplatesForGm}/
+ * {@link saveGradeConfigsForGm}/{@link saveEnhancementRulesForGm}/
+ * {@link saveStageCardDropsForGm} 및 출석부 저장 함수 3종).
  * @returns 전체 카드 원형 목록
  * @author trisakion
  * @modified 2026-09-17 trisakion 출석부 정의/보상/캐치업가격 GM 조회 3종 추가로 "6종"→"9종" 문구 갱신
  * @modified 2026-09-29 trisakion 카드 원형 저장 API(saveCardTemplatesForGm) 추가로 "조회만 지원" 대상에서 카드 원형 제외
  * @modified 2026-09-29 trisakion 강화 규칙 저장 API(saveEnhancementRulesForGm) 추가로 "조회만 지원" 대상에서 강화 규칙 제외
  * @modified 2026-09-30 trisakion 등급 설정 저장 API(saveGradeConfigsForGm) 추가로 "조회만 지원" 대상에서 등급 설정 제외
+ * @modified 2026-09-30 trisakion 스테이지 카드 드랍 저장 API(saveStageCardDropsForGm) 추가로 "조회만 지원" 대상에서 스테이지 카드 드랍 제외
  */
 export function getCardTemplatesForGm(): CardTemplate[] {
   return masterDataCache.getAllCardTemplates();
@@ -346,6 +348,55 @@ export function getStageConfigsForGm(): StageConfig[] {
  */
 export function getStageCardDropsForGm(): CardDropRuleDoc[] {
   return masterDataCache.getAllCardDropRules();
+}
+
+/** gm_platform이 `POST /gm/save-stage-card-drops`로 보내는 스테이지 카드 드랍 저장 행 하나.
+ * @author trisakion
+ */
+export interface StageCardDropSaveRow {
+  stageId: number;
+  templateId: string;
+  weight: number;
+}
+
+/**
+ * 스테이지 카드 드랍(`master_stage_card_drops`) 전체를 `data` 배열 기준으로 교체 저장한다
+ * (`POST /gm/save-stage-card-drops`) — 카드 원형과 같은 전체 교체 방식(upsert + 빠진 행
+ * 삭제)이지만, 이 행 자체를 참조하는 다른 컬렉션이 없어(스테이지 클리어 시점에 즉석 조회할
+ * 뿐, {@link masterDataCache.getCardDropTable}) 삭제 가드는 필요 없다 — 강화 규칙과 동일한
+ * 이유. 자연키는 `(stageId, templateId)`이며 중복을 GM.VALIDATION_FAILED로 막는다. 또한
+ * stageId는 `master_stage_configs`에, templateId는 `master_card_templates`에 실제로 있는
+ * 값이어야 한다 — 존재하지 않는 스테이지/카드 원형을 가리키는 고아 드랍 행을 막기 위함
+ * (출석부 보상 저장의 cardTemplateId 존재 검증과 동일 원칙). weight 자체의 형식 검증(양수)은
+ * 라우트(`parseStageCardDropsSave()`)가 맡는다.
+ * @param db 메인 앱 DB 핸들
+ * @param rows 저장할 스테이지 카드 드랍 전체(이 컬렉션의 최종 상태로 취급)
+ * @returns 저장 후 전체 스테이지 카드 드랍 목록
+ * @throws {BusinessException} 자연키 중복/존재하지 않는 stageId·templateId 참조 시 GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+export async function saveStageCardDropsForGm(db: Db, rows: StageCardDropSaveRow[]): Promise<CardDropRuleDoc[]> {
+  const keyOf = (row: { stageId: number; templateId: string }): string => `${row.stageId}:${row.templateId}`;
+  const keys = rows.map(keyOf);
+  if (new Set(keys).size !== keys.length)
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { rows });
+
+  for (const row of rows) {
+    if (!masterDataCache.getStageConfig(row.stageId) || !masterDataCache.getCardTemplate(row.templateId))
+      throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { row });
+  }
+
+  const collection = db.collection<CardDropRuleDoc>(COLLECTIONS.MASTER_STAGE_CARD_DROPS);
+  const existing = await collection.find({}, { projection: { _id: 0, stageId: 1, templateId: 1 } }).toArray();
+  const keySet = new Set(keys);
+  const deleteCandidates = existing.filter(doc => !keySet.has(keyOf(doc)));
+
+  await Promise.all(rows.map(row => collection.updateOne({ stageId: row.stageId, templateId: row.templateId }, { $set: row }, { upsert: true })));
+  if (deleteCandidates.length > 0)
+    await collection.deleteMany({ $or: deleteCandidates.map(({ stageId, templateId }) => ({ stageId, templateId })) });
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_STAGE_CARD_DROPS);
+
+  return collection.find({}, { projection: { _id: 0 } }).toArray() as Promise<CardDropRuleDoc[]>;
 }
 
 /**

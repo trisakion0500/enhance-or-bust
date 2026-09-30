@@ -16,7 +16,8 @@ import { createServer } from "../../../server.js";
  * gm_platform 연동(`/gm/*`) E2E 테스트 — 출석부 저장 API 3종(`save-attendance-def`/
  * `save-attendance-rewards`/`save-attendance-catchup-prices`), 카드 원형 저장 API
  * (`save-card-templates`), 등급 설정 저장 API(`save-grade-configs`), 강화 규칙 저장 API
- * (`save-enhancement-rules`) 검증을 다룬다. 다른 GM 조회 엔드포인트는 파라미터가 거의 없어
+ * (`save-enhancement-rules`), 스테이지 카드 드랍 저장 API(`save-stage-card-drops`) 검증을
+ * 다룬다. 다른 GM 조회 엔드포인트는 파라미터가 거의 없어
  * (마스터데이터 덤프/로그 조회) 검증 실패 경로 자체가 얇아 별도 테스트를 두지 않았다
  * (`17_GM_API.md` 참고). `GM_PLATFORM_API_KEY`가 `.env`에 설정돼 있으면 `X-API-Key`
  * 헤더로 실어 보낸다(설정 안 되어 있으면 `gmApiKeyAuth.ts`가 검증 자체를 건너뜀).
@@ -91,6 +92,12 @@ async function currentGradeConfigRows() {
   return db.collection(COLLECTIONS.MASTER_GRADE_CONFIGS).find({}, { projection: { _id: 0 } }).toArray();
 }
 
+/** {@link currentCardTemplateRows}와 동일한 이유로 스테이지 카드 드랍도 DB를 직접 읽어 기준선을 구한다. */
+async function currentStageCardDropRows() {
+  const db = mongoClient.db(process.env.MONGO_APP_DATABASE);
+  return db.collection(COLLECTIONS.MASTER_STAGE_CARD_DROPS).find({}, { projection: { _id: 0 } }).toArray();
+}
+
 /** 기본값이 채워진 출석부 정의 저장 바디(개별 필드는 override로 덮어씀). 기본은 아직 시작 전인 EVENT. */
 function buildDefBody(defId: string, override: Record<string, unknown> = {}) {
   return {
@@ -121,6 +128,7 @@ const saveCatchupPrices = (body: unknown) => post("/gm/save-attendance-catchup-p
 const saveCardTemplates = (body: unknown) => post("/gm/save-card-templates", body);
 const saveGradeConfigs = (body: unknown) => post("/gm/save-grade-configs", body);
 const saveEnhancementRules = (body: unknown) => post("/gm/save-enhancement-rules", body);
+const saveStageCardDrops = (body: unknown) => post("/gm/save-stage-card-drops", body);
 
 test("신규 출석부 정의 저장 성공", async () => {
   const defId = nextDefId();
@@ -508,6 +516,81 @@ test("강화 규칙 저장 — 행 형식이 잘못되면 VALIDATION_FAILED(1000
   ];
   for (const row of invalidRows) {
     const { status, json } = await saveEnhancementRules({ data: [row] });
+    assert.equal(status, 400, JSON.stringify(row));
+    assert.equal(json.result, 10000, JSON.stringify(row));
+  }
+});
+
+// 스테이지 카드 드랍은 카드 원형과 같은 전체 교체 방식이지만(다른 컬렉션이 이 행 자체를
+// ID로 참조하지 않아) 삭제 가드는 없다. 자연키는 (stageId, templateId) 복합키인데, 시드
+// 데이터가 이미 모든 스테이지×카드 원형 조합을 채우고 있어(seedData.ts의
+// buildCardDropRules()) 강화 규칙(전용 구간 16~20)처럼 건드려도 안전한 여분 조합이 없다.
+// 그래서 실제 조합 하나(stageId=1, N_01)를 바꾸는 테스트는 항상 finally에서 원래 값으로
+// 복원한다. 새 카드 원형을 만들어 곧바로 참조하는 방식은 쓰지 않는다 — FK 검증이 보는
+// masterDataCache는 Change Stream 갱신이 비동기라 방금 만든 원형이 아직 캐시에 안 보일
+// 수 있기 때문(다른 GM 조회 엔드포인트의 캐시 지연과 동일 이유).
+const TEST_STAGE_ID = 1;
+const TEST_TEMPLATE_ID = "N_01";
+
+test("스테이지 카드 드랍 저장 — upsert로 기존 값이 바뀐다", async () => {
+  const base = await currentStageCardDropRows();
+  const original = base.find(r => r.stageId === TEST_STAGE_ID && r.templateId === TEST_TEMPLATE_ID);
+  assert.ok(original, "시드 데이터에 stageId=1/N_01 조합이 있어야 한다");
+
+  try {
+    const changed = base.map(r => (r.stageId === TEST_STAGE_ID && r.templateId === TEST_TEMPLATE_ID ? { ...r, weight: 12345 } : r));
+    const { status, json } = await saveStageCardDrops({ data: changed });
+
+    assert.equal(status, 200);
+    assert.equal(json.data.find((r: { stageId: number; templateId: string }) => r.stageId === TEST_STAGE_ID && r.templateId === TEST_TEMPLATE_ID).weight, 12345);
+  } finally {
+    await saveStageCardDrops({ data: base });
+  }
+});
+
+test("스테이지 카드 드랍 저장 — payload에서 빠진 행은 삭제된다(참조 가드 없음)", async () => {
+  const base = await currentStageCardDropRows();
+  const withoutRow = base.filter(r => !(r.stageId === TEST_STAGE_ID && r.templateId === TEST_TEMPLATE_ID));
+
+  try {
+    const { status, json } = await saveStageCardDrops({ data: withoutRow });
+    assert.equal(status, 200);
+    assert.ok(!json.data.some((r: { stageId: number; templateId: string }) => r.stageId === TEST_STAGE_ID && r.templateId === TEST_TEMPLATE_ID));
+  } finally {
+    await saveStageCardDrops({ data: base });
+  }
+});
+
+test("스테이지 카드 드랍 저장 — (stageId, templateId) 중복이면 VALIDATION_FAILED(10000)", async () => {
+  const row = { stageId: TEST_STAGE_ID, templateId: TEST_TEMPLATE_ID, weight: 1 };
+  const { status, json } = await saveStageCardDrops({ data: [row, row] });
+
+  assert.equal(status, 400);
+  assert.equal(json.result, 10000);
+});
+
+test("스테이지 카드 드랍 저장 — 존재하지 않는 stageId/templateId를 참조하면 VALIDATION_FAILED(10000)", async () => {
+  const invalidRows = [
+    { stageId: 999999, templateId: TEST_TEMPLATE_ID, weight: 1 },
+    { stageId: TEST_STAGE_ID, templateId: "NO_SUCH_TEMPLATE", weight: 1 },
+  ];
+  for (const row of invalidRows) {
+    const { status, json } = await saveStageCardDrops({ data: [row] });
+    assert.equal(status, 400, JSON.stringify(row));
+    assert.equal(json.result, 10000, JSON.stringify(row));
+  }
+});
+
+test("스테이지 카드 드랍 저장 — 행 형식이 잘못되면 VALIDATION_FAILED(10000)", async () => {
+  const invalidRows = [
+    { stageId: 0, templateId: TEST_TEMPLATE_ID, weight: 1 },
+    { stageId: 1.5, templateId: TEST_TEMPLATE_ID, weight: 1 },
+    { stageId: TEST_STAGE_ID, templateId: "", weight: 1 },
+    { stageId: TEST_STAGE_ID, templateId: TEST_TEMPLATE_ID, weight: 0 },
+    { stageId: TEST_STAGE_ID, templateId: TEST_TEMPLATE_ID, weight: -1 },
+  ];
+  for (const row of invalidRows) {
+    const { status, json } = await saveStageCardDrops({ data: [row] });
     assert.equal(status, 400, JSON.stringify(row));
     assert.equal(json.result, 10000, JSON.stringify(row));
   }

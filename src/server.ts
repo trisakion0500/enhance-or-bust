@@ -33,7 +33,9 @@ import { createSynthesisRoutes } from "./contexts/synthesis/routes/synthesisRout
 export function createServer(playerRepository: PlayerRepository, mailboxRepository: MailboxRepository, db: Db) {
   const app = express();
   app.use(requestId);
-  app.use(express.json());
+  // 기본 100kb 제한은 gm_platform EDITABLE_GRID 저장(전체 교체 방식)이 보내는 데이터가
+  // 큰 컬렉션(예: master_stage_card_drops, 스테이지×카드 원형 전 조합)에서 실제로 넘긴다.
+  app.use(express.json({ limit: "5mb" }));
   app.use(requestLogger);
   app.use(express.static("public"));
 

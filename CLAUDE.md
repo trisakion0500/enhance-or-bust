@@ -458,8 +458,19 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   하나라도 빠지면 그 등급 카드의 강화/합성/레벨업 시도마다 하는
   `masterDataCache.getGradeConfig()` 조회가 실패해 즉시 INTERNAL_ERROR로 막힌다. gm_platform
   쪽 `grade` 컬럼도 카드 원형 저장 화면과 동일한 공통코드 그룹(`CARD_GRADE`)을 참조하도록
-  등록해 두 화면의 등급 표기를 통일했다. 단, 출석부 정의
-  3종(`master_attendance_defs`/
+  등록해 두 화면의 등급 표기를 통일했다. 스테이지 카드 드랍(`master_stage_card_drops`)도
+  같은 이유로 `[기획]스테이지 카드 드랍` API가 EDITABLE_GRID로 바뀌면서 `POST
+  /gm/save-stage-card-drops`를 뒤이어 구현했다 — 전체 교체 방식/삭제 가드 없음은 강화
+  규칙과 동일하나(이 행도 다른 컬렉션이 ID로 참조하지 않고 스테이지 클리어 시점에 즉석
+  조회할 뿐, `masterDataCache.getCardDropTable()`), 자연키가 `(stageId, templateId)`
+  복합키다. 시드 데이터가 이미 모든 스테이지×카드 원형 조합을 채우고 있어 자연키 중복
+  금지만으로는 부족해, stageId는 `master_stage_configs`에 templateId는
+  `master_card_templates`에 실제로 있는 값이어야 한다는 검증도 추가했다 — 존재하지 않는
+  스테이지/카드 원형을 가리키는 고아 드랍 행을 막기 위함(출석부 보상 저장의 카드 원형
+  존재 검증과 동일 원칙). 이 컬렉션은 100개 스테이지 × 카드 원형 전체 조합이라 payload가
+  기존 express 기본 body 크기 제한(100kb)을 실제로 넘겨서, `server.ts`의
+  `express.json()` 한도를 5mb로 올렸다(다른 GM 저장 API도 이 한도를 공유한다). 단, 출석부
+  정의 3종(`master_attendance_defs`/
   `_rewards`/`_catchup_prices`)은 예외 — 애초에 gm_platform이 운영 중 실시간으로 쓰도록
   설계된 컬렉션이라 값 검증 규칙이 처음부터 확정돼 있었고, 아래 문단에서 저장 API를 실제로
   구현했다. 이어서 유저고유번호(playerId)별 감사 로그

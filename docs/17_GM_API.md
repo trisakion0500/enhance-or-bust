@@ -69,16 +69,18 @@ gm_platform의 외부 API 규약(`{ result, message, data: [...] }`, `data`는 �
 ### 시드데이터(마스터데이터) 조회
 
 `master_*` 컬렉션 9종을 컬렉션당 엔드포인트 하나씩 그대로 덤프한다. 응답은 서버가 이미
-적재해둔 `masterDataCache`를 그대로 읽어 반환한다(DB 재조회 없음). **합성/스테이지 2종은
-조회만 지원하고 수정/삭제는 아직 없다** — 밸런스 데이터라 잘못 저장되면 게임 전체에
-영향을 줄 수 있어 별도 검증 설계 후 추가 예정. **카드 원형/등급 설정/강화 규칙과 출석부
-정의 3종은 예외로 저장 API가 있다**(카드 원형은 `save-card-templates`, 등급 설정은
-`save-grade-configs`, 강화 규칙은 `save-enhancement-rules`, 아래 각 절 / 출석부는
-`save-attendance-def`/`-rewards`/`-catchup-prices`, 아래 "출석부 저장" 절) — 출석부는
-애초에 gm_platform이 운영 중 실시간으로 쓰도록 설계된 컬렉션이라
+적재해둔 `masterDataCache`를 그대로 읽어 반환한다(DB 재조회 없음). **합성 규칙/스테이지
+설정 2종은 조회만 지원하고 수정/삭제는 아직 없다** — 밸런스 데이터라 잘못 저장되면 게임
+전체에 영향을 줄 수 있어 별도 검증 설계 후 추가 예정. **카드 원형/등급 설정/강화 규칙/
+스테이지 카드 드랍과 출석부 정의 3종은 예외로 저장 API가 있다**(카드 원형은
+`save-card-templates`, 등급 설정은 `save-grade-configs`, 강화 규칙은
+`save-enhancement-rules`, 스테이지 카드 드랍은 `save-stage-card-drops`, 아래 각 절 /
+출석부는 `save-attendance-def`/`-rewards`/`-catchup-prices`, 아래 "출석부 저장" 절) —
+출석부는 애초에 gm_platform이 운영 중 실시간으로 쓰도록 설계된 컬렉션이라
 (`23_GAME_DESIGN_ATTENDANCE.md` "비즈니스 키 vs 내부 PK" 절) 값 검증 규칙이 처음부터
-확정돼 있었고, 카드 원형/등급 설정/강화 규칙은 gm_platform이 EDITABLE_GRID로 행 추가/
-수정/삭제를 지원하게 되면서 저장 API를 도입했다. **모두 X-API-Key 필요.**
+확정돼 있었고, 카드 원형/등급 설정/강화 규칙/스테이지 카드 드랍은 gm_platform이
+EDITABLE_GRID로 행 추가/수정/삭제를 지원하게 되면서 저장 API를 도입했다. **모두 X-API-Key
+필요.**
 
 대부분 요청 body 없음(빈 객체 전송)이지만, 출석 날짜별 보상/캐치업 가격 2종은 선택
 파라미터 `defId`로 특정 출석부만 좁혀 조회할 수 있다(생략하면 전체 반환).
@@ -197,6 +199,35 @@ gm_platform의 외부 API 규약(`{ result, message, data: [...] }`, `data`는 �
 
 **에러**: 10000(행 형식 오류 — min/max 정수 아님, max<min, 확률 범위 밖, 비용 음수, 자연키
 중복, 구간 겹침)
+
+### 스테이지 카드 드랍 저장
+
+`POST /gm/save-stage-card-drops` — gm_platform EDITABLE_GRID에서 행 추가/수정/삭제를
+지원한다. `data` 배열을 `master_stage_card_drops` 컬렉션의 **최종 상태**로 취급하는
+전체 교체 방식은 카드 원형과 같지만, 강화 규칙과 마찬가지로 이 행 자체를 ID로 참조하는
+다른 컬렉션이 없어(스테이지 클리어 시점에 즉석 조회할 뿐) **삭제 가드가 없다**.
+
+행 식별(자연키)은 `(stageId, templateId)` 복합키다. 검증: `stageId`는 1 이상 정수이고
+`master_stage_configs`에 실제로 있는 값이어야 하며, `templateId`는 빈 문자열이 아니고
+`master_card_templates`에 실제로 있는 값이어야 한다(존재하지 않는 스테이지/카드 원형을
+가리키는 고아 드랍 행 방지 — 출석부 보상 저장의 카드 원형 존재 검증과 동일 원칙),
+`weight`는 0보다 큰 유한한 수여야 한다. `(stageId, templateId)` 중복은 거부한다.
+
+**요청 body**
+```json
+{
+  "data": [
+    { "stageId": 1, "templateId": "N_01", "weight": 6 },
+    { "stageId": 1, "templateId": "R_01", "weight": 3 }
+  ]
+}
+```
+
+**응답**: `{ "result": 0, "message": "OK", "data": [ { "stageId", "templateId", "weight" }, ... ] }`
+(저장 후 `master_stage_card_drops` 전체)
+
+**에러**: 10000(행 형식 오류 — stageId/weight 범위 밖, templateId 빈값, `(stageId,
+templateId)` 중복, 존재하지 않는 stageId/templateId 참조)
 
 ### 출석부 저장 (3단계)
 
