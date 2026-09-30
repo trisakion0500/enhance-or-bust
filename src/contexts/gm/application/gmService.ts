@@ -139,11 +139,11 @@ export async function getPlayerCardsForGm(playerId: string, playerRepository: Pl
 
 /**
  * gm_platform이 조회하는 시드데이터(마스터데이터) 9종 — 컬렉션을 그대로 덤프한다.
- * 합성 규칙/스테이지 설정 2종은 아직 조회만 지원한다(밸런스 데이터라 잘못 저장되면 파급이
- * 커서 별도 검증 설계 후 추가 예정). 카드 원형/등급 설정/강화 규칙/스테이지 카드 드랍과
- * 출석부 정의/보상/캐치업가격은 예외로 저장 API가 있다(아래 {@link saveCardTemplatesForGm}/
+ * 합성 규칙 1종은 아직 조회만 지원한다(밸런스 데이터라 잘못 저장되면 파급이
+ * 커서 별도 검증 설계 후 추가 예정). 카드 원형/등급 설정/강화 규칙/스테이지 설정/스테이지 카드
+ * 드랍과 출석부 정의/보상/캐치업가격은 예외로 저장 API가 있다(아래 {@link saveCardTemplatesForGm}/
  * {@link saveGradeConfigsForGm}/{@link saveEnhancementRulesForGm}/
- * {@link saveStageCardDropsForGm} 및 출석부 저장 함수 3종).
+ * {@link saveStageConfigsForGm}/{@link saveStageCardDropsForGm} 및 출석부 저장 함수 3종).
  * @returns 전체 카드 원형 목록
  * @author trisakion
  * @modified 2026-09-17 trisakion 출석부 정의/보상/캐치업가격 GM 조회 3종 추가로 "6종"→"9종" 문구 갱신
@@ -151,6 +151,7 @@ export async function getPlayerCardsForGm(playerId: string, playerRepository: Pl
  * @modified 2026-09-29 trisakion 강화 규칙 저장 API(saveEnhancementRulesForGm) 추가로 "조회만 지원" 대상에서 강화 규칙 제외
  * @modified 2026-09-30 trisakion 등급 설정 저장 API(saveGradeConfigsForGm) 추가로 "조회만 지원" 대상에서 등급 설정 제외
  * @modified 2026-09-30 trisakion 스테이지 카드 드랍 저장 API(saveStageCardDropsForGm) 추가로 "조회만 지원" 대상에서 스테이지 카드 드랍 제외
+ * @modified 2026-09-30 trisakion 스테이지 설정 저장 API(saveStageConfigsForGm) 추가로 "조회만 지원" 대상에서 스테이지 설정 제외
  */
 export function getCardTemplatesForGm(): CardTemplate[] {
   return masterDataCache.getAllCardTemplates();
@@ -340,6 +341,63 @@ export function getSynthesisRulesForGm(): readonly SynthesisRule[] {
  */
 export function getStageConfigsForGm(): StageConfig[] {
   return masterDataCache.getAllStageConfigs();
+}
+
+/** gm_platform이 `POST /gm/save-stage-configs`로 보내는 스테이지 설정 저장 행 하나.
+ * @author trisakion
+ */
+export interface StageConfigSaveRow {
+  stageId: number;
+  monsterHp: number;
+  monsterAttack: number;
+  monsterDefense: number;
+  monsterElement: Element;
+  rewardGold: number;
+  rewardExp: number;
+  enhancementStoneDropRate: number;
+  enhancementStoneMin: number;
+  enhancementStoneMax: number;
+  farmRewardRate: number;
+  cardDropRateFirstClear: number;
+  cardDropRateFarm: number;
+}
+
+/**
+ * 스테이지 설정(`master_stage_configs`) 전체를 `data` 배열 기준으로 교체 저장한다
+ * (`POST /gm/save-stage-configs`) — 카드 원형과 같은 전체 교체 방식(upsert + 빠진 행 삭제)이며,
+ * 삭제 후보가 아직 스테이지 카드 드랍(`master_stage_card_drops`)에서 참조되고 있으면(고아 드랍
+ * 행 방지, {@link saveStageCardDropsForGm}이 저장 시점에 검증하는 것과 같은 불변조건을 반대
+ * 방향에서 지킨다) 아무것도 쓰지 않고 GM.REFERENCED_CANNOT_DELETE로 거부한다. 자연키는
+ * `stageId` 단일 필드이며 중복은 GM.VALIDATION_FAILED로 막는다. 필드 형식 검증(범위/enum)은
+ * 라우트(`parseStageConfigsSave()`)가 맡는다.
+ * @param db 메인 앱 DB 핸들
+ * @param rows 저장할 스테이지 설정 전체(이 컬렉션의 최종 상태로 취급)
+ * @returns 저장 후 전체 스테이지 설정 목록
+ * @throws {BusinessException} stageId 중복 시 GM.VALIDATION_FAILED, 삭제 후보가 카드 드랍에서
+ *   참조 중이면 GM.REFERENCED_CANNOT_DELETE
+ * @author trisakion
+ */
+export async function saveStageConfigsForGm(db: Db, rows: StageConfigSaveRow[]): Promise<StageConfig[]> {
+  const stageIds = rows.map(row => row.stageId);
+  if (new Set(stageIds).size !== stageIds.length)
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { rows });
+
+  const collection = db.collection<StageConfig>(COLLECTIONS.MASTER_STAGE_CONFIGS);
+  const existingIds = await collection.distinct("stageId");
+  const idSet = new Set(stageIds);
+  const deleteCandidates = existingIds.filter(id => !idSet.has(id));
+
+  const cardDropCollection = db.collection(COLLECTIONS.MASTER_STAGE_CARD_DROPS);
+  for (const stageId of deleteCandidates) {
+    if ((await cardDropCollection.findOne({ stageId })) !== null)
+      throw new BusinessException(ERROR_MAP.GM.REFERENCED_CANNOT_DELETE, { stageId });
+  }
+
+  await Promise.all(rows.map(row => collection.updateOne({ stageId: row.stageId }, { $set: row }, { upsert: true })));
+  if (deleteCandidates.length > 0) await collection.deleteMany({ stageId: { $in: deleteCandidates } });
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_STAGE_CONFIGS);
+
+  return collection.find({}, { projection: { _id: 0 } }).toArray() as Promise<StageConfig[]>;
 }
 
 /**

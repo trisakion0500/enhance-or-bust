@@ -69,16 +69,17 @@ gm_platform의 외부 API 규약(`{ result, message, data: [...] }`, `data`는 �
 ### 시드데이터(마스터데이터) 조회
 
 `master_*` 컬렉션 9종을 컬렉션당 엔드포인트 하나씩 그대로 덤프한다. 응답은 서버가 이미
-적재해둔 `masterDataCache`를 그대로 읽어 반환한다(DB 재조회 없음). **합성 규칙/스테이지
-설정 2종은 조회만 지원하고 수정/삭제는 아직 없다** — 밸런스 데이터라 잘못 저장되면 게임
-전체에 영향을 줄 수 있어 별도 검증 설계 후 추가 예정. **카드 원형/등급 설정/강화 규칙/
+적재해둔 `masterDataCache`를 그대로 읽어 반환한다(DB 재조회 없음). **합성 규칙 1종은
+조회만 지원하고 수정/삭제는 아직 없다** — 밸런스 데이터라 잘못 저장되면 게임 전체에 영향을
+줄 수 있어 별도 검증 설계 후 추가 예정. **카드 원형/등급 설정/강화 규칙/스테이지 설정/
 스테이지 카드 드랍과 출석부 정의 3종은 예외로 저장 API가 있다**(카드 원형은
 `save-card-templates`, 등급 설정은 `save-grade-configs`, 강화 규칙은
-`save-enhancement-rules`, 스테이지 카드 드랍은 `save-stage-card-drops`, 아래 각 절 /
-출석부는 `save-attendance-def`/`-rewards`/`-catchup-prices`, 아래 "출석부 저장" 절) —
-출석부는 애초에 gm_platform이 운영 중 실시간으로 쓰도록 설계된 컬렉션이라
+`save-enhancement-rules`, 스테이지 설정은 `save-stage-configs`, 스테이지 카드 드랍은
+`save-stage-card-drops`, 아래 각 절 / 출석부는
+`save-attendance-def`/`-rewards`/`-catchup-prices`, 아래 "출석부 저장" 절) — 출석부는
+애초에 gm_platform이 운영 중 실시간으로 쓰도록 설계된 컬렉션이라
 (`23_GAME_DESIGN_ATTENDANCE.md` "비즈니스 키 vs 내부 PK" 절) 값 검증 규칙이 처음부터
-확정돼 있었고, 카드 원형/등급 설정/강화 규칙/스테이지 카드 드랍은 gm_platform이
+확정돼 있었고, 카드 원형/등급 설정/강화 규칙/스테이지 설정/스테이지 카드 드랍은 gm_platform이
 EDITABLE_GRID로 행 추가/수정/삭제를 지원하게 되면서 저장 API를 도입했다. **모두 X-API-Key
 필요.**
 
@@ -199,6 +200,39 @@ EDITABLE_GRID로 행 추가/수정/삭제를 지원하게 되면서 저장 API�
 
 **에러**: 10000(행 형식 오류 — min/max 정수 아님, max<min, 확률 범위 밖, 비용 음수, 자연키
 중복, 구간 겹침)
+
+### 스테이지 설정 저장
+
+`POST /gm/save-stage-configs` — gm_platform EDITABLE_GRID에서 행 추가/수정/삭제를 지원한다.
+`data` 배열을 `master_stage_configs` 컬렉션의 **최종 상태**로 취급하는 전체 교체 방식은
+카드 원형과 같다. 삭제 후보의 `stageId`를 스테이지 카드 드랍(`master_stage_card_drops`)이
+아직 참조하고 있으면(고아 드랍 행 방지 — 스테이지 카드 드랍 저장이 저장 시점에 `stageId`
+실재 여부를 검증하는 것과 같은 불변조건을 반대 방향에서 지킨다) **아무것도 저장하지 않고**
+요청 전체를 10003으로 거부한다 — 카드 원형과 동일하게, 부분 반영 시 어떤 행이 저장/스킵됐는지
+구분하기 어려워 전체 롤백을 택했다.
+
+행 식별(자연키)은 `stageId` 단일 필드다. 검증: `stageId`는 1 이상 정수, `monsterHp`/
+`monsterAttack`은 1 이상 정수, `monsterDefense`는 0 이상 정수, `monsterElement`는
+fire/water/grass 중 하나, `rewardGold`/`rewardExp`는 0 이상 정수,
+`enhancementStoneDropRate`/`farmRewardRate`/`cardDropRateFirstClear`/`cardDropRateFarm`은
+0~1, `enhancementStoneMin`/`enhancementStoneMax`는 0 이상 정수이고 `max >= min`.
+
+**요청 body**
+```json
+{
+  "data": [
+    { "stageId": 1, "monsterHp": 29, "monsterAttack": 3, "monsterDefense": 1, "monsterElement": "water",
+      "rewardGold": 10, "rewardExp": 5, "enhancementStoneDropRate": 0.5, "enhancementStoneMin": 1,
+      "enhancementStoneMax": 2, "farmRewardRate": 0.5, "cardDropRateFirstClear": 0.3, "cardDropRateFarm": 0.15 }
+  ]
+}
+```
+
+**응답**: `{ "result": 0, "message": "OK", "data": [ { "stageId", "monsterHp", "monsterAttack", "monsterDefense", "monsterElement", "rewardGold", "rewardExp", "enhancementStoneDropRate", "enhancementStoneMin", "enhancementStoneMax", "farmRewardRate", "cardDropRateFirstClear", "cardDropRateFarm" }, ... ] }`
+(저장 후 `master_stage_configs` 전체)
+
+**에러**: 10000(행 형식 오류 — 범위/enum 밖, stageId 중복, min>max), 10003(삭제 후보를
+스테이지 카드 드랍이 아직 참조 중)
 
 ### 스테이지 카드 드랍 저장
 

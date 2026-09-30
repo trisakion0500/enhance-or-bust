@@ -16,8 +16,8 @@ import { createServer } from "../../../server.js";
  * gm_platform 연동(`/gm/*`) E2E 테스트 — 출석부 저장 API 3종(`save-attendance-def`/
  * `save-attendance-rewards`/`save-attendance-catchup-prices`), 카드 원형 저장 API
  * (`save-card-templates`), 등급 설정 저장 API(`save-grade-configs`), 강화 규칙 저장 API
- * (`save-enhancement-rules`), 스테이지 카드 드랍 저장 API(`save-stage-card-drops`) 검증을
- * 다룬다. 다른 GM 조회 엔드포인트는 파라미터가 거의 없어
+ * (`save-enhancement-rules`), 스테이지 카드 드랍 저장 API(`save-stage-card-drops`), 스테이지
+ * 설정 저장 API(`save-stage-configs`) 검증을 다룬다. 다른 GM 조회 엔드포인트는 파라미터가 거의 없어
  * (마스터데이터 덤프/로그 조회) 검증 실패 경로 자체가 얇아 별도 테스트를 두지 않았다
  * (`17_GM_API.md` 참고). `GM_PLATFORM_API_KEY`가 `.env`에 설정돼 있으면 `X-API-Key`
  * 헤더로 실어 보낸다(설정 안 되어 있으면 `gmApiKeyAuth.ts`가 검증 자체를 건너뜀).
@@ -50,6 +50,7 @@ after(async () => {
   await db.collection(COLLECTIONS.MASTER_CARD_TEMPLATES).deleteMany({ templateId: { $in: createdTemplateIds } });
   await db.collection(COLLECTIONS.MASTER_STAGE_CARD_DROPS).deleteMany({ templateId: { $in: createdTemplateIds } });
   await db.collection(COLLECTIONS.MASTER_ENHANCEMENT_RULES).deleteMany({ minTargetEnhancementLevel: { $gte: 16, $lte: 20 } });
+  await db.collection(COLLECTIONS.MASTER_STAGE_CONFIGS).deleteMany({ stageId: TEST_UNREFERENCED_STAGE_ID });
   await new Promise(resolve => httpServer.close(resolve));
   await mongoClient.close();
   await mongoLogClient.close();
@@ -98,6 +99,12 @@ async function currentStageCardDropRows() {
   return db.collection(COLLECTIONS.MASTER_STAGE_CARD_DROPS).find({}, { projection: { _id: 0 } }).toArray();
 }
 
+/** {@link currentCardTemplateRows}와 동일한 이유로 스테이지 설정도 DB를 직접 읽어 기준선을 구한다. */
+async function currentStageConfigRows() {
+  const db = mongoClient.db(process.env.MONGO_APP_DATABASE);
+  return db.collection(COLLECTIONS.MASTER_STAGE_CONFIGS).find({}, { projection: { _id: 0 } }).toArray();
+}
+
 /** 기본값이 채워진 출석부 정의 저장 바디(개별 필드는 override로 덮어씀). 기본은 아직 시작 전인 EVENT. */
 function buildDefBody(defId: string, override: Record<string, unknown> = {}) {
   return {
@@ -129,6 +136,7 @@ const saveCardTemplates = (body: unknown) => post("/gm/save-card-templates", bod
 const saveGradeConfigs = (body: unknown) => post("/gm/save-grade-configs", body);
 const saveEnhancementRules = (body: unknown) => post("/gm/save-enhancement-rules", body);
 const saveStageCardDrops = (body: unknown) => post("/gm/save-stage-card-drops", body);
+const saveStageConfigs = (body: unknown) => post("/gm/save-stage-configs", body);
 
 test("신규 출석부 정의 저장 성공", async () => {
   const defId = nextDefId();
@@ -591,6 +599,111 @@ test("스테이지 카드 드랍 저장 — 행 형식이 잘못되면 VALIDATIO
   ];
   for (const row of invalidRows) {
     const { status, json } = await saveStageCardDrops({ data: [row] });
+    assert.equal(status, 400, JSON.stringify(row));
+    assert.equal(json.result, 10000, JSON.stringify(row));
+  }
+});
+
+// 스테이지 설정도 카드 원형과 같은 전체 교체 방식 + 삭제 가드 조합이다. 자연키는 stageId
+// 단일 필드. 시드 데이터가 이미 1~100 전 스테이지를 채우고 있어(seedData.ts의
+// buildStageConfigs()) 실제 스테이지(stageId=1)를 건드리는 업서트/삭제-차단 테스트는 항상
+// finally에서 원래 값으로 복원하거나 애초에 거부돼 아무것도 안 바뀐다. "삭제가 실제로
+// 허용되는" 경로는 시드 범위 밖의 미사용 stageId(999998)를 새로 만들어 카드 드랍이 전혀
+// 참조하지 않는 상태로 지웠다 복원한다 — masterDataCache 캐시 지연 문제가 없는 이유는
+// 이 저장 함수가 FK 검증을 캐시가 아니라 DB에서 직접 하기 때문(스테이지 카드 드랍 저장과
+// 반대 방향).
+const TEST_STAGE_CONFIG_ID = 1;
+const TEST_UNREFERENCED_STAGE_ID = 999998;
+
+/** 미사용 stageId로 새 스테이지 설정 행을 만들 때 쓰는 유효한 기본값. */
+function buildStageConfigRow(stageId: number, override: Record<string, unknown> = {}) {
+  return {
+    stageId,
+    monsterHp: 100,
+    monsterAttack: 10,
+    monsterDefense: 5,
+    monsterElement: "fire",
+    rewardGold: 10,
+    rewardExp: 5,
+    enhancementStoneDropRate: 0.5,
+    enhancementStoneMin: 1,
+    enhancementStoneMax: 2,
+    farmRewardRate: 0.5,
+    cardDropRateFirstClear: 0.3,
+    cardDropRateFarm: 0.15,
+    ...override,
+  };
+}
+
+test("스테이지 설정 저장 — upsert로 기존 값이 바뀐다", async () => {
+  const base = await currentStageConfigRows();
+  const original = base.find(r => r.stageId === TEST_STAGE_CONFIG_ID);
+  assert.ok(original, "시드 데이터에 stageId=1이 있어야 한다");
+
+  try {
+    const changed = base.map(r => (r.stageId === TEST_STAGE_CONFIG_ID ? { ...r, monsterHp: 999999 } : r));
+    const { status, json } = await saveStageConfigs({ data: changed });
+
+    assert.equal(status, 200);
+    assert.equal(json.data.find((r: { stageId: number }) => r.stageId === TEST_STAGE_CONFIG_ID).monsterHp, 999999);
+  } finally {
+    await saveStageConfigs({ data: base });
+  }
+});
+
+test("스테이지 설정 저장 — 카드 드랍이 참조 중인 stageId를 빼면 REFERENCED_CANNOT_DELETE(10003)", async () => {
+  const base = await currentStageConfigRows();
+  const withoutRow = base.filter(r => r.stageId !== TEST_STAGE_CONFIG_ID);
+
+  const { status, json } = await saveStageConfigs({ data: withoutRow });
+  assert.equal(status, 409);
+  assert.equal(json.result, 10003);
+
+  const after = await currentStageConfigRows();
+  assert.ok(after.some(r => r.stageId === TEST_STAGE_CONFIG_ID), "거부됐으니 원본 행이 그대로 남아있어야 한다");
+});
+
+test("스테이지 설정 저장 — 카드 드랍 참조가 없는 stageId는 실제로 삭제된다", async () => {
+  const base = await currentStageConfigRows();
+
+  try {
+    const created = await saveStageConfigs({ data: [...base, buildStageConfigRow(TEST_UNREFERENCED_STAGE_ID)] });
+    assert.equal(created.status, 200);
+    assert.ok(created.json.data.some((r: { stageId: number }) => r.stageId === TEST_UNREFERENCED_STAGE_ID));
+
+    const deleted = await saveStageConfigs({ data: base });
+    assert.equal(deleted.status, 200);
+    assert.ok(!deleted.json.data.some((r: { stageId: number }) => r.stageId === TEST_UNREFERENCED_STAGE_ID));
+  } finally {
+    await saveStageConfigs({ data: base });
+  }
+});
+
+test("스테이지 설정 저장 — stageId 중복이면 VALIDATION_FAILED(10000)", async () => {
+  const row = buildStageConfigRow(TEST_UNREFERENCED_STAGE_ID);
+  const { status, json } = await saveStageConfigs({ data: [row, row] });
+
+  assert.equal(status, 400);
+  assert.equal(json.result, 10000);
+});
+
+test("스테이지 설정 저장 — 행 형식/범위가 잘못되면 VALIDATION_FAILED(10000)", async () => {
+  const invalidRows = [
+    buildStageConfigRow(TEST_UNREFERENCED_STAGE_ID, { stageId: 0 }),
+    buildStageConfigRow(TEST_UNREFERENCED_STAGE_ID, { monsterHp: 0 }),
+    buildStageConfigRow(TEST_UNREFERENCED_STAGE_ID, { monsterAttack: 0 }),
+    buildStageConfigRow(TEST_UNREFERENCED_STAGE_ID, { monsterDefense: -1 }),
+    buildStageConfigRow(TEST_UNREFERENCED_STAGE_ID, { monsterElement: "dark" }),
+    buildStageConfigRow(TEST_UNREFERENCED_STAGE_ID, { rewardGold: -1 }),
+    buildStageConfigRow(TEST_UNREFERENCED_STAGE_ID, { rewardExp: -1 }),
+    buildStageConfigRow(TEST_UNREFERENCED_STAGE_ID, { enhancementStoneDropRate: 1.5 }),
+    buildStageConfigRow(TEST_UNREFERENCED_STAGE_ID, { enhancementStoneMin: 5, enhancementStoneMax: 2 }),
+    buildStageConfigRow(TEST_UNREFERENCED_STAGE_ID, { farmRewardRate: -0.1 }),
+    buildStageConfigRow(TEST_UNREFERENCED_STAGE_ID, { cardDropRateFirstClear: 1.1 }),
+    buildStageConfigRow(TEST_UNREFERENCED_STAGE_ID, { cardDropRateFarm: -0.1 }),
+  ];
+  for (const row of invalidRows) {
+    const { status, json } = await saveStageConfigs({ data: [row] });
     assert.equal(status, 400, JSON.stringify(row));
     assert.equal(json.result, 10000, JSON.stringify(row));
   }

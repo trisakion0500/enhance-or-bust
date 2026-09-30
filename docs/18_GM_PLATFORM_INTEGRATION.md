@@ -37,11 +37,11 @@ gm_platform의 apiExecution은 등록된 API를 항상 `POST {api_base_url}{endp
   (`get-card-templates`/`get-grade-configs`/`get-enhancement-rules`/
   `get-synthesis-rules`/`get-stage-configs`/`get-stage-card-drops`/`get-attendance-defs`/
   `get-attendance-rewards`/`get-attendance-catchup-prices`) — 서버가 이미 적재해둔
-  `masterDataCache` 싱글톤을 그대로 읽어 반환한다(DB 재조회 없음). **합성 규칙/스테이지
-  설정 2종은 조회만 지원하고 수정/삭제는 아직 없다** — 마스터데이터는 잘못 저장되면 게임
+  `masterDataCache` 싱글톤을 그대로 읽어 반환한다(DB 재조회 없음). **합성 규칙 1종은
+  조회만 지원하고 수정/삭제는 아직 없다** — 마스터데이터는 잘못 저장되면 게임
   전체 밸런스에 영향을 줘서, 저장 기능은 컬렉션별 값 검증(확률 0~1, 음수 불가 등) 설계를
-  먼저 한 뒤 별도로 추가하기로 함. 카드 원형/등급 설정/강화 규칙/스테이지 카드 드랍과
-  출석부 3종은 예외로 저장 API가 있다(아래).
+  먼저 한 뒤 별도로 추가하기로 함. 카드 원형/등급 설정/강화 규칙/스테이지 설정/스테이지 카드
+  드랍과 출석부 3종은 예외로 저장 API가 있다(아래).
 - **카드 원형 저장**: `POST /gm/save-card-templates` — gm_platform이 `[기획]카드 데이터`
   API를 EDITABLE_GRID(`response_view_type=3`)로 바꾸며 행 추가/수정/삭제를 지원하게 돼
   먼저 도입했다. `data` 배열을 컬렉션의 최종 상태로 보는 전체 교체 방식(추가/수정은
@@ -61,6 +61,12 @@ gm_platform의 apiExecution은 등록된 API를 항상 `POST {api_base_url}{endp
   규칙은 다른 컬렉션이 ID로 참조하지 않아(강화 시도 시점에 목표 단계로 즉석 조회) 삭제
   가드가 없다 — 대신 자연키(`minTargetEnhancementLevel`) 중복과 구간 겹침(예: 1~10과
   5~8)을 GM.VALIDATION_FAILED(10000)로 막는다. 상세는 `17_GM_API.md` "강화 규칙 저장" 절.
+- **스테이지 설정 저장**: `POST /gm/save-stage-configs` — `[기획]스테이지 설정` API도 같은
+  이유로 EDITABLE_GRID로 바꾸며 뒤이어 도입했다. 전체 교체 방식은 카드 원형과 같고, 삭제
+  후보의 `stageId`를 스테이지 카드 드랍(`master_stage_card_drops`)이 아직 참조 중이면
+  GM.REFERENCED_CANNOT_DELETE(10003)로 거부하는 삭제 가드가 있다 — 스테이지 카드 드랍 저장이
+  `stageId` 실재 여부를 검증하는 것과 같은 불변조건(고아 드랍 행 방지)을 반대 방향에서 지킨다.
+  자연키는 `stageId` 단일 필드. 상세는 `17_GM_API.md` "스테이지 설정 저장" 절.
 - **스테이지 카드 드랍 저장**: `POST /gm/save-stage-card-drops` — `[기획]스테이지 카드 드랍`
   API도 같은 이유로 EDITABLE_GRID로 바꾸며 뒤이어 도입했다. 전체 교체 방식/삭제 가드 없음은
   강화 규칙과 동일하지만, 자연키가 `(stageId, templateId)` 복합키이고 stageId는

@@ -458,7 +458,13 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   하나라도 빠지면 그 등급 카드의 강화/합성/레벨업 시도마다 하는
   `masterDataCache.getGradeConfig()` 조회가 실패해 즉시 INTERNAL_ERROR로 막힌다. gm_platform
   쪽 `grade` 컬럼도 카드 원형 저장 화면과 동일한 공통코드 그룹(`CARD_GRADE`)을 참조하도록
-  등록해 두 화면의 등급 표기를 통일했다. 스테이지 카드 드랍(`master_stage_card_drops`)도
+  등록해 두 화면의 등급 표기를 통일했다. 스테이지 설정(`master_stage_configs`)도 같은
+  이유로 `[기획]스테이지 설정` API가 EDITABLE_GRID로 바뀌면서 `POST /gm/save-stage-configs`를
+  뒤이어 구현했다 — 전체 교체 방식은 카드 원형과 같고, 삭제 후보의 stageId를 스테이지 카드
+  드랍(`master_stage_card_drops`)이 아직 참조 중이면 카드 원형과 동일하게
+  GM.REFERENCED_CANNOT_DELETE(10003)로 거부하는 삭제 가드도 그대로 뒀다 — 아래 스테이지 카드
+  드랍 저장이 저장 시점에 stageId 실재 여부를 검증하는 것과 같은 불변조건(고아 드랍 행 방지)을
+  반대 방향에서 지킨다. 자연키는 `stageId` 단일 필드. 스테이지 카드 드랍(`master_stage_card_drops`)도
   같은 이유로 `[기획]스테이지 카드 드랍` API가 EDITABLE_GRID로 바뀌면서 `POST
   /gm/save-stage-card-drops`를 뒤이어 구현했다 — 전체 교체 방식/삭제 가드 없음은 강화
   규칙과 동일하나(이 행도 다른 컬렉션이 ID로 참조하지 않고 스테이지 클리어 시점에 즉석

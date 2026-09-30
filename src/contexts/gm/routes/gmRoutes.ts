@@ -8,7 +8,7 @@ import type { AttendanceBookType, AttendanceTargetAudience } from "../../attenda
 import type { PlayerRepository } from "../../player/domain/playerRepository.js";
 import type { Grade } from "../../../shared-kernel/masterData/grade.js";
 import type { Element } from "../../../shared-kernel/masterData/element.js";
-import type { AttendanceBookDefSaveInput, AttendanceDayRewardInput, CardTemplateSaveRow, EnhancementRuleSaveRow, GradeConfigSaveRow, StageCardDropSaveRow } from "../application/gmService.js";
+import type { AttendanceBookDefSaveInput, AttendanceDayRewardInput, CardTemplateSaveRow, EnhancementRuleSaveRow, GradeConfigSaveRow, StageCardDropSaveRow, StageConfigSaveRow } from "../application/gmService.js";
 import {
   getAttendanceCatchupPricesForGm,
   getAttendanceDefsForGm,
@@ -35,6 +35,7 @@ import {
   saveEnhancementRulesForGm,
   saveGradeConfigsForGm,
   saveStageCardDropsForGm,
+  saveStageConfigsForGm,
 } from "../application/gmService.js";
 
 const ATTENDANCE_BOOK_TYPES: AttendanceBookType[] = ["GENERAL", "EVENT"];
@@ -280,6 +281,59 @@ function parseStageCardDropsSave(body: unknown): StageCardDropSaveRow[] {
 }
 
 /**
+ * `POST /gm/save-stage-configs` 요청 바디를 검증된 형태로 파싱한다 — 형식/범위/enum 값만
+ * 담당하고(stageId 중복, 삭제 후보의 카드 드랍 참조 여부 등 비즈니스 검증은
+ * `saveStageConfigsForGm()`의 책임), gm_platform EDITABLE_GRID가 보내는 `data` 배열을 그대로
+ * 행 목록으로 받는다.
+ * @param body 요청 바디
+ * @returns 파싱된 스테이지 설정 저장 행 목록
+ * @throws {BusinessException} `data`가 배열이 아니거나 행 형식이 올바르지 않으면 GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+function parseStageConfigsSave(body: unknown): StageConfigSaveRow[] {
+  const { data } = (body ?? {}) as Record<string, unknown>;
+  if (!Array.isArray(data)) throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { body });
+
+  return data.map(row => {
+    const r = (row ?? {}) as Record<string, unknown>;
+    const fail = (): never => {
+      throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { row });
+    };
+
+    if (typeof r.stageId !== "number" || !Number.isInteger(r.stageId) || r.stageId < 1) fail();
+    if (typeof r.monsterHp !== "number" || !Number.isInteger(r.monsterHp) || r.monsterHp < 1) fail();
+    if (typeof r.monsterAttack !== "number" || !Number.isInteger(r.monsterAttack) || r.monsterAttack < 1) fail();
+    if (typeof r.monsterDefense !== "number" || !Number.isInteger(r.monsterDefense) || r.monsterDefense < 0) fail();
+    if (typeof r.monsterElement !== "string" || !ELEMENTS.includes(r.monsterElement as Element)) fail();
+    if (typeof r.rewardGold !== "number" || !Number.isInteger(r.rewardGold) || r.rewardGold < 0) fail();
+    if (typeof r.rewardExp !== "number" || !Number.isInteger(r.rewardExp) || r.rewardExp < 0) fail();
+    if (typeof r.enhancementStoneDropRate !== "number" || r.enhancementStoneDropRate < 0 || r.enhancementStoneDropRate > 1) fail();
+    if (typeof r.enhancementStoneMin !== "number" || !Number.isInteger(r.enhancementStoneMin) || r.enhancementStoneMin < 0) fail();
+    const stoneMin = r.enhancementStoneMin as number;
+    if (typeof r.enhancementStoneMax !== "number" || !Number.isInteger(r.enhancementStoneMax) || r.enhancementStoneMax < stoneMin) fail();
+    if (typeof r.farmRewardRate !== "number" || r.farmRewardRate < 0 || r.farmRewardRate > 1) fail();
+    if (typeof r.cardDropRateFirstClear !== "number" || r.cardDropRateFirstClear < 0 || r.cardDropRateFirstClear > 1) fail();
+    if (typeof r.cardDropRateFarm !== "number" || r.cardDropRateFarm < 0 || r.cardDropRateFarm > 1) fail();
+
+    return {
+      stageId: r.stageId as number,
+      monsterHp: r.monsterHp as number,
+      monsterAttack: r.monsterAttack as number,
+      monsterDefense: r.monsterDefense as number,
+      monsterElement: r.monsterElement as Element,
+      rewardGold: r.rewardGold as number,
+      rewardExp: r.rewardExp as number,
+      enhancementStoneDropRate: r.enhancementStoneDropRate as number,
+      enhancementStoneMin: stoneMin,
+      enhancementStoneMax: r.enhancementStoneMax as number,
+      farmRewardRate: r.farmRewardRate as number,
+      cardDropRateFirstClear: r.cardDropRateFirstClear as number,
+      cardDropRateFarm: r.cardDropRateFarm as number,
+    };
+  });
+}
+
+/**
  * 로그 조회 라우트 5개가 공통으로 쓰는 요청 파라미터 파싱 — playerId(필수 문자열),
  * fromDate/toDate(선택, 문자열이면 통과시키고 실제 날짜 파싱은 서비스 단에서 검증한다).
  * @param body 요청 바디
@@ -335,6 +389,7 @@ function parseOptionalDefId(body: unknown): string | undefined {
  *   (POST /gm/save-enhancement-rules) 라우트 추가
  * @modified 2026-09-30 trisakion 등급 설정 저장(POST /gm/save-grade-configs) 라우트 추가
  * @modified 2026-09-30 trisakion 스테이지 카드 드랍 저장(POST /gm/save-stage-card-drops) 라우트 추가
+ * @modified 2026-09-30 trisakion 스테이지 설정 저장(POST /gm/save-stage-configs) 라우트 추가
  */
 export function createGmRoutes(playerRepository: PlayerRepository, db: Db): Router {
   const router = Router();
@@ -364,7 +419,7 @@ export function createGmRoutes(playerRepository: PlayerRepository, db: Db): Rout
     res.json({ result: 0, message: "OK", data: cards });
   }));
 
-  // 시드데이터(마스터데이터) 9종 — 카드 원형/등급 설정/강화 규칙/스테이지 카드 드랍/출석부 3종 외에는 아직 조회만, 수정/삭제는 없다.
+  // 시드데이터(마스터데이터) 9종 — 카드 원형/등급 설정/강화 규칙/스테이지 설정/스테이지 카드 드랍/출석부 3종 외에는 아직 조회만, 수정/삭제는 없다.
   router.post("/gm/get-card-templates", gmApiKeyAuth, asyncHandler(async (_req, res) => {
     res.json({ result: 0, message: "OK", data: getCardTemplatesForGm() });
   }));
@@ -398,6 +453,11 @@ export function createGmRoutes(playerRepository: PlayerRepository, db: Db): Rout
 
   router.post("/gm/get-stage-configs", gmApiKeyAuth, asyncHandler(async (_req, res) => {
     res.json({ result: 0, message: "OK", data: getStageConfigsForGm() });
+  }));
+
+  router.post("/gm/save-stage-configs", gmApiKeyAuth, asyncHandler(async (req, res) => {
+    const rows = parseStageConfigsSave(req.body);
+    res.json({ result: 0, message: "OK", data: await saveStageConfigsForGm(db, rows) });
   }));
 
   router.post("/gm/get-stage-card-drops", gmApiKeyAuth, asyncHandler(async (_req, res) => {
