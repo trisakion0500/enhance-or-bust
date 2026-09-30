@@ -178,3 +178,43 @@ v4는 `reconnectStrategy`를 최초 연결에도 그대로 적용하는데, 이 
 상세 코드는 `src/infra/redis.ts`(`connectRedis()`), `src/index.ts`(`connectOrExit()`)
 참고. 설계 배경은 CLAUDE.md "현재 상태" 절의 "MongoDB/Redis 다운 상황에 대한 회복력
 보강" 항목 참고.
+
+---
+
+## 2026-09-30 스테이지 카드 드랍 EDITABLE_GRID 저장 시 express.json() 기본 100kb 제한 초과
+
+### 증상
+
+`[기획]스테이지 카드 드랍`(`master_stage_card_drops`)을 EDITABLE_GRID로 전환한 뒤,
+gm_platform에서 저장을 시도하면 실패했다. 이 컬렉션은 스테이지(100개)×카드 원형 전
+조합이라 행이 4000개에 달하고, 전체 교체 방식이라 셀 하나만 고쳐도 4000행 전체를
+다시 전송한다 — JSON 페이로드가 약 186KB(190,690바이트)로, 두 프로젝트(enhanceOrBust,
+gm_platform) 모두 express 기본 body 제한(100kb)을 넘겼다.
+
+### 진단
+
+gm_platform의 API 실행(`POST /api/apis/:id/execute`) 파이프라인으로 4000행 no-op
+재저장을 직접 호출해 재현했다. 8ms 만에 즉시 500(`result:50000`)이 났는데, 같은
+시각 enhanceOrBust 쪽 요청 로그에는 이 시도가 전혀 찍히지 않았다 — gm_platform이
+enhanceOrBust를 호출하기도 전에 자기 쪽 body-parser에서 먼저 거부했다는 뜻이다("처리
+지연"이 아니라 "요청 자체가 안 나감"임을 이렇게 구분했다).
+
+### 조치
+
+- enhanceOrBust: `server.ts`의 `app.use(express.json())` limit을 100kb → 5mb로
+  상향(전역 적용 — GM 라우트뿐 아니라 공개 엔드포인트도 같은 limit을 공유하기로
+  결정. 대안으로 `/gm/*` 경로에만 큰 limit을 스코프하는 안도 검토했으나, 공개
+  라우트는 실측 페이로드가 애초에 작아 리스크가 낮다고 보고 전역 5mb로 확정).
+- gm_platform: body 제한을 5mb로 올림(별도 포트폴리오 프로젝트라 소스는 이 레포
+  작업 범위 밖).
+
+### 검증
+
+enhanceOrBust API를 직접 호출해 4000행 no-op 재저장 성공(200, 1064ms) 및 DB 값
+불변 확인. 이후 gm_platform 쪽 limit도 올린 뒤 실제 그리드 화면에서 단일 행 편집
+저장까지 정상 동작 확인.
+
+상세 코드는 `src/server.ts`의 `express.json({ limit: "5mb" })`,
+`src/contexts/gm/application/gmService.ts`의 `saveStageCardDropsForGm()` 참고.
+설계 배경은 `CLAUDE.md` GM 연동 절, API 상세는 `docs/17_GM_API.md` "스테이지 카드
+드랍 저장" 절 참고.
