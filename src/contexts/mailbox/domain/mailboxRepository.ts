@@ -39,7 +39,10 @@ export interface MailboxRepository {
    * @returns 수령 처리된 우편(claimedAt 채워짐)
    * @throws {BusinessException} 우편이 없거나 소유자가 아니면 MAILBOX.NOT_FOUND, 이미 수령했으면
    *   MAILBOX.ALREADY_CLAIMED, 만료됐으면 MAILBOX.EXPIRED, 카드 첨부물을 받으면 인벤토리 슬롯
-   *   상한을 초과하면 MAILBOX.INVENTORY_FULL(이 경우 우편은 미수령 상태 그대로 남는다)
+   *   상한을 초과하면 MAILBOX.INVENTORY_FULL(이 경우 우편은 미수령 상태 그대로 남는다). 첨부된
+   *   랜덤박스가 있으면 그 자리에서 뽑기 판정을 한다 — 상자가 없거나 비활성화됐으면
+   *   RANDOM_BOX.NOT_FOUND, 확률테이블/풀이 비어있으면 RANDOM_BOX.INTERNAL_ERROR(둘 다 이
+   *   경우도 우편은 미수령 상태로 남는다)
    */
   claimMail(mailId: string, playerId: string): Promise<Mail>;
 

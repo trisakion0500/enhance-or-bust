@@ -121,6 +121,7 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   | `log_attendance` | `catchup_purchase` | defId, type, day, price, attachments(지급된 첨부) | 구현됨 |
   | `log_attendance` | `issue` | defId, type, startDate, endDate(최초 발급 1회만) | 구현됨 |
   | `log_attendance` | `reset` | defId, type, rotationCount, startDate, endDate, attendedDays, catchupPurchaseCount(로테이션 시 문서를 in-place로 리셋하기 직전, 덮어써지는 옛 사이클의 최종 상태) | 구현됨 |
+  | `log_random_box` | `draw` | boxType, boxId, resultCardId, resultTemplateId — 다이아 직접 뽑기(`POST /random-box/*`)만 해당. 우편 경유 개봉은 별도 기록 없이 `log_mailbox`의 `claim`(`attachments.cardTemplateIds`)에 이미 실제 결과가 남는다 | 구현됨 |
   | `stats_daily_active_players` | (감사 로그 아님, DAU 전용) | {playerId, date} 유니크 인덱스, 하루 1건 | 구현됨 |
   | `attempts_battle_stage` | `attempt` | (감사 로그 아님, 통계 전용) stageId, squadCardIds, squadTemplateIds, won, clearedStage — 승패 무관 매 시도 | 구현됨 |
 

@@ -6,6 +6,7 @@ import { renderBattle } from "./battle.js";
 import { renderMailbox } from "./mailbox.js";
 import { renderCoupon } from "./coupon.js";
 import { renderAttendance } from "./attendance.js";
+import { renderRandomBox } from "./randomBox.js";
 
 /** 앱 전역 공유 상태 — 각 탭 렌더 함수가 이 하나를 읽는다. */
 const state = { player: null };
@@ -42,6 +43,7 @@ async function refreshPlayer() {
   await renderMailbox(state, refreshPlayer);
   await renderAttendance(state, refreshPlayer);
   renderCoupon(state, refreshPlayer);
+  renderRandomBox(state, refreshPlayer);
 }
 
 /** 로그아웃 버튼 클릭 시 서버 세션을 지우고 로그인 화면으로 되돌아간다. */

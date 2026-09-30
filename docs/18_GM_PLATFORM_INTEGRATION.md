@@ -33,12 +33,13 @@ gm_platform의 apiExecution은 등록된 API를 항상 `POST {api_base_url}{endp
 
 - **플레이어 조회**: `POST /gm/get-player`(단건/전체, 최대 200명), `POST
   /gm/get-player-cards`(보유 카드, playerId 필수)
-- **시드데이터(마스터데이터) 조회**: `master_*` 컬렉션 9종, 컬렉션당 엔드포인트 하나씩
+- **시드데이터(마스터데이터) 조회**: `master_*` 컬렉션 13종, 컬렉션당 엔드포인트 하나씩
   (`get-card-templates`/`get-grade-configs`/`get-enhancement-rules`/
-  `get-synthesis-rules`/`get-stage-configs`/`get-stage-card-drops`/`get-attendance-defs`/
-  `get-attendance-rewards`/`get-attendance-catchup-prices`) — 서버가 이미 적재해둔
-  `masterDataCache` 싱글톤을 그대로 읽어 반환한다(DB 재조회 없음). **9종 전부 저장 API가
-  있다**(아래).
+  `get-synthesis-rules`/`get-stage-configs`/`get-stage-card-drops`/
+  `get-random-box-grade-rate-def`/`get-random-box-grade-rate`/`get-random-box-custom-def`/
+  `get-random-box-custom-pool`/`get-attendance-defs`/`get-attendance-rewards`/
+  `get-attendance-catchup-prices`) — 서버가 이미 적재해둔 `masterDataCache` 싱글톤을 그대로
+  읽어 반환한다(DB 재조회 없음). **13종 전부 저장 API가 있다**(아래).
 - **카드 원형 저장**: `POST /gm/save-card-templates` — gm_platform이 `[기획]카드 데이터`
   API를 EDITABLE_GRID(`response_view_type=3`)로 바꾸며 행 추가/수정/삭제를 지원하게 돼
   먼저 도입했다. `data` 배열을 컬렉션의 최종 상태로 보는 전체 교체 방식(추가/수정은
@@ -79,6 +80,17 @@ gm_platform의 apiExecution은 등록된 API를 항상 `POST {api_base_url}{endp
   `master_stage_configs`에, templateId는 `master_card_templates`에 실제로 있는 값이어야
   한다(고아 드랍 행 방지) — 하나라도 없으면 GM.VALIDATION_FAILED(10000)로 거부한다. 상세는
   `17_GM_API.md` "스테이지 카드 드랍 저장" 절.
+- **랜덤박스 저장**(4종, gm_platform 화면 메뉴 4개로 분리): `POST
+  /gm/save-random-box-grade-rate-def`(등급비율 상자 정의) / `POST
+  /gm/save-random-box-grade-rate`(상자별 등급 확률, `boxId`별 rate 합=100 검증) / `POST
+  /gm/save-random-box-custom-def`(커스텀 상자 정의) / `POST
+  /gm/save-random-box-custom-pool`(상자별 원형 가중치). 정의 2종(`-grade-rate-def`/
+  `-custom-def`)은 카드 원형과 동일한 전체 교체+삭제 가드(각각 확률/가중치 행이 아직
+  참조 중이면 GM.REFERENCED_CANNOT_DELETE)다. 확률/가중치 2종(`-grade-rate`/`-custom-pool`)은
+  스테이지 카드 드랍과 동일하게 전체 교체(삭제 가드 없음)이며, 상위 `boxId`가 정의 컬렉션에
+  실재해야 한다(고아 행 방지). `grade` 값은 등급을 코드에 고정하지 않는 설계라 어떤 문자열이든
+  허용한다 — 카드 원형/등급 설정의 `CARD_GRADE` 공통코드와 달리 gm_platform 쪽에도 코드 그룹을
+  연결하지 않았다. 상세는 `17_GM_API.md` "랜덤박스 저장" 절.
 - **출석부 저장**(gm_platform 화면에서 메뉴 3개로 분리): `POST /gm/save-attendance-def`(정의,
   `id` 유무로 신규/수정) → `POST /gm/save-attendance-rewards`(하루 단위 보상, 수량 입력칸) →
   `POST /gm/save-attendance-catchup-prices`(회차 단위 가격). 이미 시작된 출석부는 수정 불가,

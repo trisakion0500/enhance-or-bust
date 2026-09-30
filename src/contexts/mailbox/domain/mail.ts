@@ -7,6 +7,18 @@
  */
 export const MAIL_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
+import type { RandomBoxType } from "../../randomBox/domain/randomBoxType.js";
+
+/**
+ * 우편에 실리는 랜덤박스 개봉 자격 — 확정된 카드가 아니라 "어떤 상자를 열 자격"만 싣는다.
+ * 실제 뽑기는 발송 시점이 아니라 수령(ClaimMail) 시점에 이루어진다(GAME_DESIGN.md 7-1절).
+ * @author trisakion
+ */
+export interface RandomBoxAttachmentRef {
+  boxType: RandomBoxType;
+  boxId: string;
+}
+
 /**
  * 우편에 첨부되는 보상. 모든 필드가 선택적이며, 값이 있는 필드만 수령 시 지급된다.
  * @author trisakion
@@ -20,6 +32,9 @@ export interface MailAttachments {
   diamond?: number;
   /** 지급할 카드 원형 ID 목록 — 항목마다 새 카드 인스턴스(레벨 1, EXP 0, 강화 0단계)를 생성해 지급 */
   cardTemplateIds?: string[];
+  /** 개봉 자격이 있는 랜덤박스 목록 — 수령 시점에 뽑기 판정 후 결과 카드가 cardTemplateIds와
+   * 동일하게 새 카드 인스턴스로 지급된다. 다이아 소모 없이 수령 즉시 자동 개봉(7-1절) */
+  randomBoxes?: RandomBoxAttachmentRef[];
 }
 
 /**

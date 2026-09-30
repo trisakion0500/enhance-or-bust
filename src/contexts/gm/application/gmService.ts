@@ -29,6 +29,10 @@ import type { EnhancementRule } from "../../enhancement/domain/enhancementRule.j
 import type { GradeUpgradeSynthesisRule, EnhanceMaterialSynthesisRule, SynthesisRule } from "../../synthesis/domain/synthesisRule.js";
 import type { StageConfig } from "../../battleStage/domain/stageConfig.js";
 import type { CardDropRuleDoc } from "../../battleStage/domain/cardDrop.js";
+import type { RandomBoxCustomDef } from "../../randomBox/domain/randomBoxCustomDef.js";
+import type { RandomBoxCustomPool } from "../../randomBox/domain/randomBoxCustomPool.js";
+import type { RandomBoxGradeRate } from "../../randomBox/domain/randomBoxGradeRate.js";
+import type { RandomBoxGradeRateDef } from "../../randomBox/domain/randomBoxGradeRateDef.js";
 import type { Player } from "../../player/domain/player.js";
 import type { PlayerRepository } from "../../player/domain/playerRepository.js";
 
@@ -718,6 +722,211 @@ export async function saveAttendanceCatchupPricesForGm(db: Db, defId: string, pu
 
   await upsertCatchupPriceRow(db, defId, purchaseIndex, price);
   return findCatchupPriceRows(db, defId);
+}
+
+/**
+ * @returns 전체 등급비율 상자 정의 목록
+ * @author trisakion
+ */
+export function getRandomBoxGradeRateDefsForGm(): RandomBoxGradeRateDef[] {
+  return masterDataCache.getAllRandomBoxGradeRateDefs();
+}
+
+/**
+ * @returns 전체 등급비율 상자 확률 행 목록
+ * @author trisakion
+ */
+export function getRandomBoxGradeRatesForGm(): RandomBoxGradeRate[] {
+  return masterDataCache.getAllRandomBoxGradeRates();
+}
+
+/**
+ * @returns 전체 커스텀 상자 정의 목록
+ * @author trisakion
+ */
+export function getRandomBoxCustomDefsForGm(): RandomBoxCustomDef[] {
+  return masterDataCache.getAllRandomBoxCustomDefs();
+}
+
+/**
+ * @returns 전체 커스텀 상자 가중치 행 목록
+ * @author trisakion
+ */
+export function getRandomBoxCustomPoolsForGm(): RandomBoxCustomPool[] {
+  return masterDataCache.getAllRandomBoxCustomPools();
+}
+
+/** gm_platform이 `POST /gm/save-random-box-grade-rate-def`/`save-random-box-custom-def`로
+ * 보내는 상자 정의 저장 행 하나 — 두 상자 종류가 필드 모양이 완전히 같아(boxId/name/
+ * diamondCost/isActive) 파싱 함수와 이 타입을 공유한다. 실제 저장은 컬렉션이 분리된 별도
+ * 함수({@link saveRandomBoxGradeRateDefsForGm}/{@link saveRandomBoxCustomDefsForGm})가 한다.
+ * @author trisakion
+ */
+export type RandomBoxDefSaveRow = RandomBoxGradeRateDef;
+
+/** gm_platform이 `POST /gm/save-random-box-grade-rate`로 보내는 등급별 확률 저장 행 하나.
+ * @author trisakion
+ */
+export type RandomBoxGradeRateSaveRow = RandomBoxGradeRate;
+
+/** gm_platform이 `POST /gm/save-random-box-custom-pool`로 보내는 원형별 가중치 저장 행 하나.
+ * @author trisakion
+ */
+export type RandomBoxCustomPoolSaveRow = RandomBoxCustomPool;
+
+/**
+ * 등급비율 상자 정의(`master_random_box_grade_rate_def`) 전체를 `data` 배열 기준으로 교체
+ * 저장한다(`POST /gm/save-random-box-grade-rate-def`) — 카드 원형/스테이지 설정과 동일한
+ * 전체 교체 방식(upsert + 빠진 행 삭제)이며, 삭제 후보가 아직 등급별 확률
+ * (`master_random_box_grade_rate`)에서 참조되고 있으면 아무것도 쓰지 않고
+ * GM.REFERENCED_CANNOT_DELETE로 거부한다(스테이지 설정↔카드 드랍 가드와 동일 원리, 고아
+ * 확률 행 방지). 자연키는 `boxId` 단일 필드이며 중복은 GM.VALIDATION_FAILED로 막는다.
+ * @param db 메인 앱 DB 핸들
+ * @param rows 저장할 상자 정의 전체(이 컬렉션의 최종 상태로 취급)
+ * @returns 저장 후 전체 등급비율 상자 정의 목록
+ * @throws {BusinessException} boxId 중복 시 GM.VALIDATION_FAILED, 삭제 후보가 확률 행에서
+ *   참조 중이면 GM.REFERENCED_CANNOT_DELETE
+ * @author trisakion
+ */
+export async function saveRandomBoxGradeRateDefsForGm(db: Db, rows: RandomBoxDefSaveRow[]): Promise<RandomBoxGradeRateDef[]> {
+  const boxIds = rows.map(row => row.boxId);
+  if (new Set(boxIds).size !== boxIds.length)
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { rows });
+
+  const collection = db.collection<RandomBoxGradeRateDef>(COLLECTIONS.MASTER_RANDOM_BOX_GRADE_RATE_DEF);
+  const existingIds = await collection.distinct("boxId");
+  const idSet = new Set(boxIds);
+  const deleteCandidates = existingIds.filter(id => !idSet.has(id));
+
+  const rateCollection = db.collection(COLLECTIONS.MASTER_RANDOM_BOX_GRADE_RATE);
+  for (const boxId of deleteCandidates) {
+    if ((await rateCollection.findOne({ boxId })) !== null)
+      throw new BusinessException(ERROR_MAP.GM.REFERENCED_CANNOT_DELETE, { boxId });
+  }
+
+  await Promise.all(rows.map(row => collection.updateOne({ boxId: row.boxId }, { $set: row }, { upsert: true })));
+  if (deleteCandidates.length > 0) await collection.deleteMany({ boxId: { $in: deleteCandidates } });
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_RANDOM_BOX_GRADE_RATE_DEF);
+
+  return collection.find({}, { projection: { _id: 0 } }).toArray() as Promise<RandomBoxGradeRateDef[]>;
+}
+
+/**
+ * 커스텀 상자 정의(`master_random_box_custom_def`) 전체를 교체 저장한다
+ * (`POST /gm/save-random-box-custom-def`) — {@link saveRandomBoxGradeRateDefsForGm}과 동일한
+ * 전체 교체 방식이며, 삭제 후보가 아직 원형별 가중치(`master_random_box_custom_pool`)에서
+ * 참조되고 있으면 GM.REFERENCED_CANNOT_DELETE로 거부한다.
+ * @param db 메인 앱 DB 핸들
+ * @param rows 저장할 상자 정의 전체(이 컬렉션의 최종 상태로 취급)
+ * @returns 저장 후 전체 커스텀 상자 정의 목록
+ * @throws {BusinessException} boxId 중복 시 GM.VALIDATION_FAILED, 삭제 후보가 가중치 행에서
+ *   참조 중이면 GM.REFERENCED_CANNOT_DELETE
+ * @author trisakion
+ */
+export async function saveRandomBoxCustomDefsForGm(db: Db, rows: RandomBoxDefSaveRow[]): Promise<RandomBoxCustomDef[]> {
+  const boxIds = rows.map(row => row.boxId);
+  if (new Set(boxIds).size !== boxIds.length)
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { rows });
+
+  const collection = db.collection<RandomBoxCustomDef>(COLLECTIONS.MASTER_RANDOM_BOX_CUSTOM_DEF);
+  const existingIds = await collection.distinct("boxId");
+  const idSet = new Set(boxIds);
+  const deleteCandidates = existingIds.filter(id => !idSet.has(id));
+
+  const poolCollection = db.collection(COLLECTIONS.MASTER_RANDOM_BOX_CUSTOM_POOL);
+  for (const boxId of deleteCandidates) {
+    if ((await poolCollection.findOne({ boxId })) !== null)
+      throw new BusinessException(ERROR_MAP.GM.REFERENCED_CANNOT_DELETE, { boxId });
+  }
+
+  await Promise.all(rows.map(row => collection.updateOne({ boxId: row.boxId }, { $set: row }, { upsert: true })));
+  if (deleteCandidates.length > 0) await collection.deleteMany({ boxId: { $in: deleteCandidates } });
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_RANDOM_BOX_CUSTOM_DEF);
+
+  return collection.find({}, { projection: { _id: 0 } }).toArray() as Promise<RandomBoxCustomDef[]>;
+}
+
+/**
+ * 등급비율 상자의 등급별 확률(`master_random_box_grade_rate`) 전체를 `data` 배열 기준으로
+ * 교체 저장한다(`POST /gm/save-random-box-grade-rate`) — 스테이지 카드 드랍과 같은 전체 교체
+ * 방식(참조하는 다른 컬렉션이 없어 삭제 가드는 불필요)이며, 자연키는 `(boxId, grade)`다.
+ * boxId는 `master_random_box_grade_rate_def`에 실재해야 한다(고아 확률 행 방지, 스테이지 카드
+ * 드랍의 stageId 존재 검증과 동일 원칙). 추가로 **같은 boxId 내 rate 합이 정확히 100이어야
+ * 한다**(GAME_DESIGN.md 7-1절) — 여러 행을 묶어봐야 하는 검증이라 행 형식 검증(라우트)이
+ * 아니라 여기서 한다. `grade` 값 자체는 어떤 문자열이든 허용한다(등급을 코드에 고정하지
+ * 않는다는 설계, `randomBoxGradeRate.ts` 참고).
+ * @param db 메인 앱 DB 핸들
+ * @param rows 저장할 확률 행 전체(이 컬렉션의 최종 상태로 취급 — 모든 상자를 포함해야 함)
+ * @returns 저장 후 전체 확률 행 목록
+ * @throws {BusinessException} 자연키 중복, 존재하지 않는 boxId 참조, 또는 boxId별 rate 합이
+ *   100이 아니면 GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+export async function saveRandomBoxGradeRatesForGm(db: Db, rows: RandomBoxGradeRateSaveRow[]): Promise<RandomBoxGradeRate[]> {
+  const keyOf = (row: { boxId: string; grade: string }): string => `${row.boxId}:${row.grade}`;
+  const keys = rows.map(keyOf);
+  if (new Set(keys).size !== keys.length)
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { rows });
+
+  for (const row of rows) {
+    if (!masterDataCache.getRandomBoxGradeRateDef(row.boxId))
+      throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { row });
+  }
+
+  const sumsByBox = new Map<string, number>();
+  for (const row of rows) sumsByBox.set(row.boxId, (sumsByBox.get(row.boxId) ?? 0) + row.rate);
+  for (const [boxId, sum] of sumsByBox) {
+    if (sum !== 100) throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { boxId, sum });
+  }
+
+  const collection = db.collection<RandomBoxGradeRate>(COLLECTIONS.MASTER_RANDOM_BOX_GRADE_RATE);
+  const existing = await collection.find({}, { projection: { _id: 0, boxId: 1, grade: 1 } }).toArray();
+  const keySet = new Set(keys);
+  const deleteCandidates = existing.filter(doc => !keySet.has(keyOf(doc)));
+
+  await Promise.all(rows.map(row => collection.updateOne({ boxId: row.boxId, grade: row.grade }, { $set: row }, { upsert: true })));
+  if (deleteCandidates.length > 0)
+    await collection.deleteMany({ $or: deleteCandidates.map(({ boxId, grade }) => ({ boxId, grade })) });
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_RANDOM_BOX_GRADE_RATE);
+
+  return collection.find({}, { projection: { _id: 0 } }).toArray() as Promise<RandomBoxGradeRate[]>;
+}
+
+/**
+ * 커스텀 상자의 원형별 가중치(`master_random_box_custom_pool`) 전체를 교체 저장한다
+ * (`POST /gm/save-random-box-custom-pool`) — 자연키는 `(boxId, templateId)`. boxId는
+ * `master_random_box_custom_def`에, templateId는 `master_card_templates`에 실재해야 한다
+ * (고아 행 방지, 스테이지 카드 드랍의 stageId/templateId 존재 검증과 동일 원칙). weight는
+ * 합계 제약이 없다(상대 가중치, `randomBoxCustomPool.ts` 참고).
+ * @param db 메인 앱 DB 핸들
+ * @param rows 저장할 가중치 행 전체(이 컬렉션의 최종 상태로 취급 — 모든 상자를 포함해야 함)
+ * @returns 저장 후 전체 가중치 행 목록
+ * @throws {BusinessException} 자연키 중복 또는 존재하지 않는 boxId/templateId 참조 시
+ *   GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+export async function saveRandomBoxCustomPoolsForGm(db: Db, rows: RandomBoxCustomPoolSaveRow[]): Promise<RandomBoxCustomPool[]> {
+  const keyOf = (row: { boxId: string; templateId: string }): string => `${row.boxId}:${row.templateId}`;
+  const keys = rows.map(keyOf);
+  if (new Set(keys).size !== keys.length)
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { rows });
+
+  for (const row of rows) {
+    if (!masterDataCache.getRandomBoxCustomDef(row.boxId) || !masterDataCache.getCardTemplate(row.templateId))
+      throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { row });
+  }
+
+  const collection = db.collection<RandomBoxCustomPool>(COLLECTIONS.MASTER_RANDOM_BOX_CUSTOM_POOL);
+  const existing = await collection.find({}, { projection: { _id: 0, boxId: 1, templateId: 1 } }).toArray();
+  const keySet = new Set(keys);
+  const deleteCandidates = existing.filter(doc => !keySet.has(keyOf(doc)));
+
+  await Promise.all(rows.map(row => collection.updateOne({ boxId: row.boxId, templateId: row.templateId }, { $set: row }, { upsert: true })));
+  if (deleteCandidates.length > 0)
+    await collection.deleteMany({ $or: deleteCandidates.map(({ boxId, templateId }) => ({ boxId, templateId })) });
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_RANDOM_BOX_CUSTOM_POOL);
+
+  return collection.find({}, { projection: { _id: 0 } }).toArray() as Promise<RandomBoxCustomPool[]>;
 }
 
 /** gm_platform이 조회할 때 컬렉션 하나에서 한 번에 반환할 최대 로그 건수 — 무제한 스캔 방지. */

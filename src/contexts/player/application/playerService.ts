@@ -6,6 +6,8 @@ import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCac
 import { processLoginAttendance } from "../../attendance/application/attendanceService.js";
 import type { AttendanceLoginResult } from "../../attendance/application/attendanceService.js";
 import type { MailboxRepository } from "../../mailbox/domain/mailboxRepository.js";
+import type { RandomBoxCustomDef } from "../../randomBox/domain/randomBoxCustomDef.js";
+import type { RandomBoxGradeRateDef } from "../../randomBox/domain/randomBoxGradeRateDef.js";
 import type { SynthesisRule } from "../../synthesis/domain/synthesisRule.js";
 import type { PlayerRepository } from "../domain/playerRepository.js";
 
@@ -55,6 +57,9 @@ export interface PlayerSummary {
   squadMaxSize: number;
   /** 합성 규칙 전체(마스터 데이터) — 프론트가 합성 화면의 소재 장수/확률/비용 안내에 그대로 쓴다 */
   synthesisRules: readonly SynthesisRule[];
+  /** 뽑기 가능한 랜덤박스 정의(활성 상태만, 마스터 데이터) — 프론트가 별도 조회 없이 상자
+   * 목록/이름/가격을 그린다(GAME_DESIGN.md 7-1절) */
+  randomBoxes: { gradeRateDefs: RandomBoxGradeRateDef[]; customDefs: RandomBoxCustomDef[] };
   /** 이번 조회에서 처리된 출석보상 결과 — 프론트가 이 필드로 토스트/신규출석부 안내를 띄운다 */
   attendanceNotice: AttendanceLoginResult;
 }
@@ -115,6 +120,10 @@ export async function getPlayerSummary(
     inventory,
     squadMaxSize: config.squadMaxSize,
     synthesisRules: masterDataCache.getSynthesisRules(),
+    randomBoxes: {
+      gradeRateDefs: masterDataCache.getAllRandomBoxGradeRateDefs().filter(def => def.isActive),
+      customDefs: masterDataCache.getAllRandomBoxCustomDefs().filter(def => def.isActive),
+    },
     attendanceNotice,
   };
 }

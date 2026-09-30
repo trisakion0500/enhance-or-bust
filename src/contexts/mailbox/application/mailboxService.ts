@@ -41,6 +41,10 @@ export async function sendMail(
     if (amount !== undefined && (!Number.isFinite(amount) || amount < 0))
       throw new BusinessException(ERROR_MAP.MAILBOX.VALIDATION_FAILED, { attachments });
   }
+  for (const ref of attachments.randomBoxes ?? []) {
+    if ((ref.boxType !== "gradeRate" && ref.boxType !== "custom") || !ref.boxId)
+      throw new BusinessException(ERROR_MAP.MAILBOX.VALIDATION_FAILED, { attachments });
+  }
 
   const createdAt = new Date();
   const expiresAt = new Date(createdAt.getTime() + expiryMs);

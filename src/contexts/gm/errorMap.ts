@@ -8,6 +8,6 @@ export const GM_ERROR_MAP = {
   VALIDATION_FAILED: { code: 10000, httpStatus: 400, message: "요청 값이 올바르지 않습니다." },
   UNAUTHORIZED:      { code: 10001, httpStatus: 401, message: "인증에 실패했습니다." },
   NOT_FOUND:         { code: 10002, httpStatus: 404, message: "요청한 플레이어를 찾을 수 없습니다." },
-  REFERENCED_CANNOT_DELETE: { code: 10003, httpStatus: 409, message: "이미 연결된 데이터가 사용중이므로 삭제할 수 없습니다.(플레이어 보유 카드 / 스테이지 카드 드랍 / 출석 보상 등)" },
+  REFERENCED_CANNOT_DELETE: { code: 10003, httpStatus: 409, message: "이미 연결된 데이터가 사용중이므로 삭제할 수 없습니다.(플레이어 보유 카드 / 스테이지 카드 드랍 / 출석 보상 / 랜덤박스 확률·가중치 등)" },
   INTERNAL_ERROR:    { code: 10999, httpStatus: 500, message: "일시적인 서버 오류입니다. 잠시 후 다시 시도해주세요." },
 } satisfies Record<string, ErrorEntry>;

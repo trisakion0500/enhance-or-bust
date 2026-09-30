@@ -6,6 +6,7 @@ import { ENHANCEMENT_RULES } from "../contexts/enhancement/seedData.js";
 import { SYNTHESIS_RULES } from "../contexts/synthesis/seedData.js";
 import { buildCardDropRules, buildStageConfigs } from "../contexts/battleStage/seedData.js";
 import { ATTENDANCE_BOOK_SEEDS, buildAttendanceCatchupPriceRows, buildAttendanceRewardRows } from "../contexts/attendance/seedData.js";
+import { RANDOM_BOX_CUSTOM_DEF, RANDOM_BOX_CUSTOM_POOL, RANDOM_BOX_GRADE_RATES, RANDOM_BOX_GRADE_RATE_DEF } from "../contexts/randomBox/seedData.js";
 import { replaceCatchupPriceRows, replaceRewardRows, upsertBookDef } from "../contexts/attendance/infrastructure/attendanceStore.js";
 
 /**
@@ -72,6 +73,30 @@ async function main() {
     ),
   );
   await bumpMasterDataVersion(db, COLLECTIONS.MASTER_STAGE_CARD_DROPS);
+
+  await db
+    .collection(COLLECTIONS.MASTER_RANDOM_BOX_GRADE_RATE_DEF)
+    .updateOne({ boxId: RANDOM_BOX_GRADE_RATE_DEF.boxId }, { $set: RANDOM_BOX_GRADE_RATE_DEF }, { upsert: true });
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_RANDOM_BOX_GRADE_RATE_DEF);
+
+  await Promise.all(
+    RANDOM_BOX_GRADE_RATES.map(doc =>
+      db.collection(COLLECTIONS.MASTER_RANDOM_BOX_GRADE_RATE).updateOne({ boxId: doc.boxId, grade: doc.grade }, { $set: doc }, { upsert: true }),
+    ),
+  );
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_RANDOM_BOX_GRADE_RATE);
+
+  await db
+    .collection(COLLECTIONS.MASTER_RANDOM_BOX_CUSTOM_DEF)
+    .updateOne({ boxId: RANDOM_BOX_CUSTOM_DEF.boxId }, { $set: RANDOM_BOX_CUSTOM_DEF }, { upsert: true });
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_RANDOM_BOX_CUSTOM_DEF);
+
+  await Promise.all(
+    RANDOM_BOX_CUSTOM_POOL.map(doc =>
+      db.collection(COLLECTIONS.MASTER_RANDOM_BOX_CUSTOM_POOL).updateOne({ boxId: doc.boxId, templateId: doc.templateId }, { $set: doc }, { upsert: true }),
+    ),
+  );
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_RANDOM_BOX_CUSTOM_POOL);
 
   // 출석부 정의/보상/캐치업가격은 gm_platform이 운영 중 실시간으로 쓰는 컬렉션이라(
   // attendanceStore.ts 참고) 위 컬렉션들처럼 자연키로 직접 upsert하지 않고, 그 실시간

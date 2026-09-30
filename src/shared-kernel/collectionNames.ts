@@ -39,6 +39,15 @@ export const COLLECTIONS = {
   MASTER_ATTENDANCE_REWARDS: "master_attendance_rewards",
   MASTER_ATTENDANCE_CATCHUP_PRICES: "master_attendance_catchup_prices",
 
+  // 랜덤박스(가챠) 마스터 데이터(GAME_DESIGN.md 7-1절) — gradeRate/custom 두 상자 종류를
+  // def(상자 정의)+detail(등급별 확률 / 원형별 가중치) 페어 2세트로 분리한다. 하나의
+  // box_type 판별 컬럼으로 합치지 않는 이유는 gm_platform 그리드/검증 규칙이 종류별로
+  // 완전히 달라서다(각 도메인 타입 주석 참고).
+  MASTER_RANDOM_BOX_GRADE_RATE_DEF: "master_random_box_grade_rate_def",
+  MASTER_RANDOM_BOX_GRADE_RATE: "master_random_box_grade_rate",
+  MASTER_RANDOM_BOX_CUSTOM_DEF: "master_random_box_custom_def",
+  MASTER_RANDOM_BOX_CUSTOM_POOL: "master_random_box_custom_pool",
+
   // 메인 게임 DB — 서버 내부 운영 상태
   SYSTEM_BATCH_RUNS: "system_batch_runs",
   SYSTEM_CHANGE_STREAM_STATE: "system_change_stream_state",
@@ -51,6 +60,7 @@ export const COLLECTIONS = {
   LOG_MAILBOX: "log_mailbox",
   LOG_COUPON: "log_coupon",
   LOG_ATTENDANCE: "log_attendance",
+  LOG_RANDOM_BOX: "log_random_box",
 
   // 로그 DB — 통계 전용(감사 로그 아님)
   STATS_DAILY_ACTIVE_PLAYERS: "stats_daily_active_players",

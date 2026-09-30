@@ -12,6 +12,7 @@
  *  - GM 연동(gm_platform)        : 10000
  *  - 쿠폰(coupon_platform 연동)  : 11000
  *  - 출석보상(Attendance)        : 12000
+ *  - 랜덤박스(RandomBox)         : 13000
  * @author trisakion
  * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
  */

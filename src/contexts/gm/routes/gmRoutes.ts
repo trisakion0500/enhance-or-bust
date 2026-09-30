@@ -8,7 +8,7 @@ import type { AttendanceBookType, AttendanceTargetAudience } from "../../attenda
 import type { PlayerRepository } from "../../player/domain/playerRepository.js";
 import type { Grade } from "../../../shared-kernel/masterData/grade.js";
 import type { Element } from "../../../shared-kernel/masterData/element.js";
-import type { AttendanceBookDefSaveInput, AttendanceDayRewardInput, CardTemplateSaveRow, EnhancementRuleSaveRow, GradeConfigSaveRow, StageCardDropSaveRow, StageConfigSaveRow, SynthesisRuleSaveRow } from "../application/gmService.js";
+import type { AttendanceBookDefSaveInput, AttendanceDayRewardInput, CardTemplateSaveRow, EnhancementRuleSaveRow, GradeConfigSaveRow, RandomBoxCustomPoolSaveRow, RandomBoxDefSaveRow, RandomBoxGradeRateSaveRow, StageCardDropSaveRow, StageConfigSaveRow, SynthesisRuleSaveRow } from "../application/gmService.js";
 import {
   getAttendanceCatchupPricesForGm,
   getAttendanceDefsForGm,
@@ -23,6 +23,10 @@ import {
   getMailboxLogsForGm,
   getPlayerCardsForGm,
   getPlayerForGm,
+  getRandomBoxCustomDefsForGm,
+  getRandomBoxCustomPoolsForGm,
+  getRandomBoxGradeRateDefsForGm,
+  getRandomBoxGradeRatesForGm,
   getStageCardDropsForGm,
   getStageConfigsForGm,
   getSynthesisLogsForGm,
@@ -34,6 +38,10 @@ import {
   saveCardTemplatesForGm,
   saveEnhancementRulesForGm,
   saveGradeConfigsForGm,
+  saveRandomBoxCustomDefsForGm,
+  saveRandomBoxCustomPoolsForGm,
+  saveRandomBoxGradeRateDefsForGm,
+  saveRandomBoxGradeRatesForGm,
   saveStageCardDropsForGm,
   saveStageConfigsForGm,
   saveSynthesisRulesForGm,
@@ -389,6 +397,92 @@ function parseStageConfigsSave(body: unknown): StageConfigSaveRow[] {
 }
 
 /**
+ * `POST /gm/save-random-box-grade-rate-def`/`save-random-box-custom-def` 요청 바디를
+ * 검증된 형태로 파싱한다 — 두 상자 종류가 필드 모양이 완전히 같아 이 파싱 함수를 공유한다.
+ * 형식만 담당하고(boxId 중복, 삭제 후보 참조 여부 등은 각 저장 함수의 책임).
+ * @param body 요청 바디
+ * @returns 파싱된 상자 정의 저장 행 목록
+ * @throws {BusinessException} `data`가 배열이 아니거나 행 형식이 올바르지 않으면 GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+function parseRandomBoxDefSave(body: unknown): RandomBoxDefSaveRow[] {
+  const { data } = (body ?? {}) as Record<string, unknown>;
+  if (!Array.isArray(data)) throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { body });
+
+  return data.map(row => {
+    const r = (row ?? {}) as Record<string, unknown>;
+    const fail = (): never => {
+      throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { row });
+    };
+
+    if (typeof r.boxId !== "string" || !r.boxId) fail();
+    if (typeof r.name !== "string" || !r.name) fail();
+    if (typeof r.diamondCost !== "number" || !Number.isInteger(r.diamondCost) || r.diamondCost < 0) fail();
+    if (typeof r.isActive !== "boolean") fail();
+
+    return {
+      boxId: r.boxId as string,
+      name: r.name as string,
+      diamondCost: r.diamondCost as number,
+      isActive: r.isActive as boolean,
+    };
+  });
+}
+
+/**
+ * `POST /gm/save-random-box-grade-rate` 요청 바디를 검증된 형태로 파싱한다 — 형식만 담당하고
+ * (boxId 실재 여부, boxId별 rate 합=100 등은 `saveRandomBoxGradeRatesForGm()`의 책임). `grade`는
+ * 어떤 문자열이든 허용한다(등급을 코드에 고정하지 않는다는 설계).
+ * @param body 요청 바디
+ * @returns 파싱된 확률 저장 행 목록
+ * @throws {BusinessException} `data`가 배열이 아니거나 행 형식이 올바르지 않으면 GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+function parseRandomBoxGradeRatesSave(body: unknown): RandomBoxGradeRateSaveRow[] {
+  const { data } = (body ?? {}) as Record<string, unknown>;
+  if (!Array.isArray(data)) throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { body });
+
+  return data.map(row => {
+    const r = (row ?? {}) as Record<string, unknown>;
+    const fail = (): never => {
+      throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { row });
+    };
+
+    if (typeof r.boxId !== "string" || !r.boxId) fail();
+    if (typeof r.grade !== "string" || !r.grade) fail();
+    if (typeof r.rate !== "number" || !Number.isInteger(r.rate) || r.rate < 0 || r.rate > 100) fail();
+
+    return { boxId: r.boxId as string, grade: r.grade as string, rate: r.rate as number };
+  });
+}
+
+/**
+ * `POST /gm/save-random-box-custom-pool` 요청 바디를 검증된 형태로 파싱한다 — 형식만 담당하고
+ * (boxId/templateId 실재 여부는 `saveRandomBoxCustomPoolsForGm()`의 책임).
+ * @param body 요청 바디
+ * @returns 파싱된 가중치 저장 행 목록
+ * @throws {BusinessException} `data`가 배열이 아니거나 행 형식이 올바르지 않으면 GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+function parseRandomBoxCustomPoolSave(body: unknown): RandomBoxCustomPoolSaveRow[] {
+  const { data } = (body ?? {}) as Record<string, unknown>;
+  if (!Array.isArray(data)) throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { body });
+
+  return data.map(row => {
+    const r = (row ?? {}) as Record<string, unknown>;
+    const fail = (): never => {
+      throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { row });
+    };
+
+    if (typeof r.boxId !== "string" || !r.boxId) fail();
+    if (typeof r.templateId !== "string" || !r.templateId) fail();
+    if (typeof r.weight !== "number" || !Number.isInteger(r.weight) || r.weight <= 0) fail();
+
+    return { boxId: r.boxId as string, templateId: r.templateId as string, weight: r.weight as number };
+  });
+}
+
+/**
  * 로그 조회 라우트 5개가 공통으로 쓰는 요청 파라미터 파싱 — playerId(필수 문자열),
  * fromDate/toDate(선택, 문자열이면 통과시키고 실제 날짜 파싱은 서비스 단에서 검증한다).
  * @param body 요청 바디
@@ -446,6 +540,7 @@ function parseOptionalDefId(body: unknown): string | undefined {
  * @modified 2026-09-30 trisakion 스테이지 카드 드랍 저장(POST /gm/save-stage-card-drops) 라우트 추가
  * @modified 2026-09-30 trisakion 스테이지 설정 저장(POST /gm/save-stage-configs) 라우트 추가
  * @modified 2026-09-30 trisakion 합성 규칙 저장(POST /gm/save-synthesis-rules) 라우트 추가
+ * @modified 2026-10-01 trisakion 랜덤박스 조회/저장 8종 라우트 추가(GAME_DESIGN.md 7-1절)
  */
 export function createGmRoutes(playerRepository: PlayerRepository, db: Db): Router {
   const router = Router();
@@ -528,6 +623,42 @@ export function createGmRoutes(playerRepository: PlayerRepository, db: Db): Rout
   router.post("/gm/save-stage-card-drops", gmApiKeyAuth, asyncHandler(async (req, res) => {
     const rows = parseStageCardDropsSave(req.body);
     res.json({ result: 0, message: "OK", data: await saveStageCardDropsForGm(db, rows) });
+  }));
+
+  router.post("/gm/get-random-box-grade-rate-def", gmApiKeyAuth, asyncHandler(async (_req, res) => {
+    res.json({ result: 0, message: "OK", data: getRandomBoxGradeRateDefsForGm() });
+  }));
+
+  router.post("/gm/save-random-box-grade-rate-def", gmApiKeyAuth, asyncHandler(async (req, res) => {
+    const rows = parseRandomBoxDefSave(req.body);
+    res.json({ result: 0, message: "OK", data: await saveRandomBoxGradeRateDefsForGm(db, rows) });
+  }));
+
+  router.post("/gm/get-random-box-grade-rate", gmApiKeyAuth, asyncHandler(async (_req, res) => {
+    res.json({ result: 0, message: "OK", data: getRandomBoxGradeRatesForGm() });
+  }));
+
+  router.post("/gm/save-random-box-grade-rate", gmApiKeyAuth, asyncHandler(async (req, res) => {
+    const rows = parseRandomBoxGradeRatesSave(req.body);
+    res.json({ result: 0, message: "OK", data: await saveRandomBoxGradeRatesForGm(db, rows) });
+  }));
+
+  router.post("/gm/get-random-box-custom-def", gmApiKeyAuth, asyncHandler(async (_req, res) => {
+    res.json({ result: 0, message: "OK", data: getRandomBoxCustomDefsForGm() });
+  }));
+
+  router.post("/gm/save-random-box-custom-def", gmApiKeyAuth, asyncHandler(async (req, res) => {
+    const rows = parseRandomBoxDefSave(req.body);
+    res.json({ result: 0, message: "OK", data: await saveRandomBoxCustomDefsForGm(db, rows) });
+  }));
+
+  router.post("/gm/get-random-box-custom-pool", gmApiKeyAuth, asyncHandler(async (_req, res) => {
+    res.json({ result: 0, message: "OK", data: getRandomBoxCustomPoolsForGm() });
+  }));
+
+  router.post("/gm/save-random-box-custom-pool", gmApiKeyAuth, asyncHandler(async (req, res) => {
+    const rows = parseRandomBoxCustomPoolSave(req.body);
+    res.json({ result: 0, message: "OK", data: await saveRandomBoxCustomPoolsForGm(db, rows) });
   }));
 
   router.post("/gm/get-attendance-defs", gmApiKeyAuth, asyncHandler(async (_req, res) => {

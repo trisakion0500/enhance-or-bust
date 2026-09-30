@@ -9,6 +9,7 @@ import { GM_ERROR_MAP } from "../contexts/gm/errorMap.js";
 import { INVENTORY_ERROR_MAP } from "../contexts/player/errorMap/inventory.js";
 import { MAILBOX_ERROR_MAP } from "../contexts/mailbox/errorMap.js";
 import { PROGRESSION_ERROR_MAP } from "../contexts/player/errorMap/progression.js";
+import { RANDOM_BOX_ERROR_MAP } from "../contexts/randomBox/errorMap.js";
 import { SYNTHESIS_ERROR_MAP } from "../contexts/synthesis/errorMap.js";
 
 /**
@@ -30,4 +31,5 @@ export const ERROR_MAP = {
   GM: GM_ERROR_MAP,
   COUPON: COUPON_ERROR_MAP,
   ATTENDANCE: ATTENDANCE_ERROR_MAP,
+  RANDOM_BOX: RANDOM_BOX_ERROR_MAP,
 };

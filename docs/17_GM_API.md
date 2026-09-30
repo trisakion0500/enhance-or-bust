@@ -68,12 +68,13 @@ gm_platform의 외부 API 규약(`{ result, message, data: [...] }`, `data`는 �
 
 ### 시드데이터(마스터데이터) 조회
 
-`master_*` 컬렉션 9종을 컬렉션당 엔드포인트 하나씩 그대로 덤프한다. 응답은 서버가 이미
-적재해둔 `masterDataCache`를 그대로 읽어 반환한다(DB 재조회 없음). **9종 전부 저장 API가
+`master_*` 컬렉션 13종을 컬렉션당 엔드포인트 하나씩 그대로 덤프한다. 응답은 서버가 이미
+적재해둔 `masterDataCache`를 그대로 읽어 반환한다(DB 재조회 없음). **13종 전부 저장 API가
 있다**(카드 원형은 `save-card-templates`, 등급 설정은 `save-grade-configs`, 강화 규칙은
 `save-enhancement-rules`, 합성 규칙은 `save-synthesis-rules`, 스테이지 설정은
-`save-stage-configs`, 스테이지 카드 드랍은 `save-stage-card-drops`, 아래 각 절 / 출석부는
-`save-attendance-def`/`-rewards`/`-catchup-prices`, 아래 "출석부 저장" 절) — 출석부는
+`save-stage-configs`, 스테이지 카드 드랍은 `save-stage-card-drops`, 랜덤박스 4종은
+`save-random-box-grade-rate-def`/`-grade-rate`/`-custom-def`/`-custom-pool`, 아래 각 절 /
+출석부는 `save-attendance-def`/`-rewards`/`-catchup-prices`, 아래 "출석부 저장" 절) — 출석부는
 애초에 gm_platform이 운영 중 실시간으로 쓰도록 설계된 컬렉션이라
 (`23_GAME_DESIGN_ATTENDANCE.md` "비즈니스 키 vs 내부 PK" 절) 값 검증 규칙이 처음부터
 확정돼 있었고, 나머지는 gm_platform이 EDITABLE_GRID로 행 추가/수정/삭제(또는 순수 upsert)를
@@ -90,6 +91,10 @@ gm_platform의 외부 API 규약(`{ result, message, data: [...] }`, `data`는 �
 | `POST /gm/get-synthesis-rules` | `master_synthesis_rules` | 없음 | `{ type, sourceGrade?, resultGrade?, materialCount, successRate?, goldCost? }` (`type`에 따라 필드 일부만 채워짐) |
 | `POST /gm/get-stage-configs` | `master_stage_configs` | 없음 | `{ stageId, monsterHp, monsterAttack, monsterDefense, monsterElement, rewardGold, rewardExp, enhancementStoneDropRate, enhancementStoneMin, enhancementStoneMax, farmRewardRate, cardDropRateFirstClear, cardDropRateFarm }` |
 | `POST /gm/get-stage-card-drops` | `master_stage_card_drops` | 없음 | `{ stageId, templateId, weight }` |
+| `POST /gm/get-random-box-grade-rate-def` | `master_random_box_grade_rate_def` | 없음 | `{ boxId, name, diamondCost, isActive }` |
+| `POST /gm/get-random-box-grade-rate` | `master_random_box_grade_rate` | 없음 | `{ boxId, grade, rate }` |
+| `POST /gm/get-random-box-custom-def` | `master_random_box_custom_def` | 없음 | `{ boxId, name, diamondCost, isActive }` |
+| `POST /gm/get-random-box-custom-pool` | `master_random_box_custom_pool` | 없음 | `{ boxId, templateId, weight }` |
 | `POST /gm/get-attendance-defs` | `master_attendance_defs` | 없음 | `{ _id, defId, name, type, targetAudience, returningInactiveDays?, maxRotationCount, enrollableStart, enrollableEnd, durationDays, catchupMaxCount, createdAt, updatedAt }` |
 | `POST /gm/get-attendance-rewards` | `master_attendance_rewards` | `{ defId? }` | `{ defId, day, itemType, amount, cardTemplateId }` |
 | `POST /gm/get-attendance-catchup-prices` | `master_attendance_catchup_prices` | `{ defId? }` | `{ defId, purchaseIndex, price }` |
@@ -301,6 +306,110 @@ fire/water/grass 중 하나, `rewardGold`/`rewardExp`는 0 이상 정수,
 
 **에러**: 10000(행 형식 오류 — stageId/weight 범위 밖, templateId 빈값, `(stageId,
 templateId)` 중복, 존재하지 않는 stageId/templateId 참조)
+
+### 랜덤박스 저장
+
+등급비율 상자와 커스텀 상자 각각 정의 1종 + 행 1종, 총 4개 API로 나눠 저장한다(gm_platform
+화면 메뉴도 4개). `data` 배열을 각 컬렉션의 **최종 상태**로 취급하는 전체 교체 방식은
+공통이다.
+
+#### `POST /gm/save-random-box-grade-rate-def`
+
+등급비율 상자 정의(`master_random_box_grade_rate_def`)를 저장한다. 카드 원형과 동일한 전체
+교체+삭제 가드 — 삭제 후보의 `boxId`가 아직 등급별 확률(`master_random_box_grade_rate`)에서
+참조되고 있으면 **아무것도 저장하지 않고** 10003으로 거부한다.
+
+행 식별(자연키)은 `boxId` 단일 필드. 검증: `boxId`/`name` 필수 문자열, `diamondCost`는 0
+이상 정수, `isActive`는 boolean, `boxId` 중복 금지.
+
+**요청 body**
+```json
+{
+  "data": [
+    { "boxId": "basic_grade_rate", "name": "기본 상자", "diamondCost": 100, "isActive": true }
+  ]
+}
+```
+
+**응답**: `{ "result": 0, "message": "OK", "data": [ { "boxId", "name", "diamondCost", "isActive" }, ... ] }`
+(저장 후 `master_random_box_grade_rate_def` 전체)
+
+**에러**: 10000(행 형식 오류, boxId 중복), 10003(삭제 후보를 등급별 확률이 아직 참조 중)
+
+#### `POST /gm/save-random-box-grade-rate`
+
+등급비율 상자의 등급별 확률(`master_random_box_grade_rate`)을 저장한다. 스테이지 카드
+드랍과 동일하게 전체 교체이며 삭제 가드는 없다. 행 식별(자연키)은 `(boxId, grade)` 복합키.
+
+검증: `boxId`는 `master_random_box_grade_rate_def`에 실재해야 함(고아 확률 행 방지),
+`grade`는 빈 문자열이 아닌 어떤 문자열이든 허용(등급을 코드에 고정하지 않는 설계),
+`rate`는 0~100 정수, `(boxId, grade)` 중복 금지. **같은 `boxId` 안의 `rate` 합이 정확히
+100이어야 한다** — 여러 행을 묶어 봐야 하는 검증이라 행 하나의 형식 오류가 아니어도
+거부된다. `data`는 저장 대상 상자 전부를 포함해야 한다(일부 상자만 보내면 안 보낸 상자의
+확률 행이 전부 삭제 후보로 처리된다).
+
+**요청 body**
+```json
+{
+  "data": [
+    { "boxId": "basic_grade_rate", "grade": "N", "rate": 60 },
+    { "boxId": "basic_grade_rate", "grade": "R", "rate": 30 },
+    { "boxId": "basic_grade_rate", "grade": "SR", "rate": 8 },
+    { "boxId": "basic_grade_rate", "grade": "SSR", "rate": 2 }
+  ]
+}
+```
+
+**응답**: `{ "result": 0, "message": "OK", "data": [ { "boxId", "grade", "rate" }, ... ] }`
+(저장 후 `master_random_box_grade_rate` 전체)
+
+**에러**: 10000(행 형식 오류, `(boxId, grade)` 중복, 존재하지 않는 boxId 참조, boxId별 rate
+합이 100이 아님)
+
+#### `POST /gm/save-random-box-custom-def`
+
+커스텀 상자 정의(`master_random_box_custom_def`)를 저장한다 — `save-random-box-grade-rate-def`와
+완전히 동일한 형식/검증(필드 모양이 같아 파싱을 공유)이며, 삭제 가드 대상 컬렉션만
+원형별 가중치(`master_random_box_custom_pool`)로 다르다.
+
+**요청 body**
+```json
+{
+  "data": [
+    { "boxId": "sample_custom", "name": "샘플 이벤트 상자", "diamondCost": 150, "isActive": true }
+  ]
+}
+```
+
+**응답**: `{ "result": 0, "message": "OK", "data": [ { "boxId", "name", "diamondCost", "isActive" }, ... ] }`
+(저장 후 `master_random_box_custom_def` 전체)
+
+**에러**: 10000(행 형식 오류, boxId 중복), 10003(삭제 후보를 원형별 가중치가 아직 참조 중)
+
+#### `POST /gm/save-random-box-custom-pool`
+
+커스텀 상자의 원형별 가중치(`master_random_box_custom_pool`)를 저장한다 — 스테이지 카드
+드랍과 동일하게 전체 교체, 삭제 가드 없음. 행 식별(자연키)은 `(boxId, templateId)` 복합키.
+
+검증: `boxId`는 `master_random_box_custom_def`에, `templateId`는 `master_card_templates`에
+각각 실재해야 함(고아 행 방지), `weight`는 0보다 큰 정수, `(boxId, templateId)` 중복 금지.
+등급비율 상자의 `rate` 합 검증과 달리 가중치 합계 제약은 없다(상대 비율만 의미 있음).
+
+**요청 body**
+```json
+{
+  "data": [
+    { "boxId": "sample_custom", "templateId": "N_01", "weight": 70 },
+    { "boxId": "sample_custom", "templateId": "R_01", "weight": 25 },
+    { "boxId": "sample_custom", "templateId": "SR_01", "weight": 5 }
+  ]
+}
+```
+
+**응답**: `{ "result": 0, "message": "OK", "data": [ { "boxId", "templateId", "weight" }, ... ] }`
+(저장 후 `master_random_box_custom_pool` 전체)
+
+**에러**: 10000(행 형식 오류, `(boxId, templateId)` 중복, 존재하지 않는 boxId/templateId 참조)
 
 ### 출석부 저장 (3단계)
 

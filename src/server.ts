@@ -13,6 +13,7 @@ import { createEnhancementRoutes } from "./contexts/enhancement/routes/enhanceme
 import { createGmRoutes } from "./contexts/gm/routes/gmRoutes.js";
 import { createMailboxRoutes } from "./contexts/mailbox/routes/mailboxRoutes.js";
 import { createPlayerRoutes } from "./contexts/player/routes/playerRoutes.js";
+import { createRandomBoxRoutes } from "./contexts/randomBox/routes/randomBoxRoutes.js";
 import { createSynthesisRoutes } from "./contexts/synthesis/routes/synthesisRoutes.js";
 
 /**
@@ -57,6 +58,7 @@ export function createServer(playerRepository: PlayerRepository, mailboxReposito
   app.use(createGmRoutes(playerRepository, db));
   app.use(createEnhancementRoutes(playerRepository));
   app.use(createSynthesisRoutes(playerRepository));
+  app.use(createRandomBoxRoutes(playerRepository));
   app.use(createBattleStageRoutes(playerRepository, mailboxRepository));
   app.use(createMailboxRoutes(mailboxRepository));
   app.use(createCouponRoutes(mailboxRepository, db));

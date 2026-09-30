@@ -5,6 +5,7 @@ import { config } from "../../../config/env.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
 import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
 import { mongoClient } from "../../../infra/mongo.js";
+import { resolveRandomBoxDraw } from "../../randomBox/application/randomBoxService.js";
 import type { CardDocument, PlayerDocument } from "../../player/infrastructure/mongoPlayerRepository.js";
 import { Mail } from "../domain/mail.js";
 import type { MailAttachments } from "../domain/mail.js";
@@ -86,7 +87,14 @@ export class MongoMailboxRepository implements MailboxRepository {
           throw new BusinessException(ERROR_MAP.MAILBOX.EXPIRED, { mailId });
 
         const claimedAt = new Date();
-        const newCards: CardDocument[] = (mailDoc.attachments.cardTemplateIds ?? []).map(templateId => ({
+        // 우편에 실린 랜덤박스는 "개봉 자격"만 갖고 있고, 실제 뽑기는 여기 claim 트랜잭션
+        // 안에서 처음 이루어진다(GAME_DESIGN.md 7-1절) — 카드 드랍(6절)이 발송 전에 결과를
+        // 미리 확정해두는 것과 반대 방향. resolveRandomBoxDraw가 던지는 BusinessException은
+        // 이 콜백 밖으로 그대로 전파돼 withTransaction이 롤백하므로, 우편은 미수령 상태로 남는다.
+        const resolvedBoxTemplateIds = (mailDoc.attachments.randomBoxes ?? []).map(ref =>
+          resolveRandomBoxDraw(ref.boxType, ref.boxId),
+        );
+        const newCards: CardDocument[] = [...(mailDoc.attachments.cardTemplateIds ?? []), ...resolvedBoxTemplateIds].map(templateId => ({
           cardId: randomUUID(),
           templateId,
           level: 1,
@@ -120,7 +128,13 @@ export class MongoMailboxRepository implements MailboxRepository {
           throw new BusinessException(ERROR_MAP.COMMON.NOT_FOUND, { playerId });
 
         await this.mailboxCollection.updateOne({ _id: mailId }, { $set: { claimedAt } }, { session });
-        claimedDoc = { ...mailDoc, claimedAt };
+        // 반환/감사로그에 쓰이는 attachments는 원본(randomBoxes 참조)이 아니라 실제로 지급된
+        // 카드 전체로 교체한다 — randomBoxes는 "어떤 상자를 열었는지" 기록으로 그대로 남긴다.
+        claimedDoc = {
+          ...mailDoc,
+          claimedAt,
+          attachments: { ...mailDoc.attachments, cardTemplateIds: newCards.map(card => card.templateId) },
+        };
       });
 
       return MongoMailboxRepository.toDomain(claimedDoc!);

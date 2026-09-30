@@ -9,6 +9,10 @@ import type { Grade } from "./grade.js";
 import type { GradeConfig } from "./gradeConfig.js";
 import { MASTER_DATA_CONTENTS } from "./masterDataContent.js";
 import type { MasterDataContent } from "./masterDataContent.js";
+import type { RandomBoxCustomDef } from "../../contexts/randomBox/domain/randomBoxCustomDef.js";
+import type { RandomBoxCustomPool } from "../../contexts/randomBox/domain/randomBoxCustomPool.js";
+import type { RandomBoxGradeRate } from "../../contexts/randomBox/domain/randomBoxGradeRate.js";
+import type { RandomBoxGradeRateDef } from "../../contexts/randomBox/domain/randomBoxGradeRateDef.js";
 import type { StageConfig } from "../../contexts/battleStage/domain/stageConfig.js";
 import type { CardDropEntry, CardDropRuleDoc } from "../../contexts/battleStage/domain/cardDrop.js";
 import type { SynthesisRule } from "../../contexts/synthesis/domain/synthesisRule.js";
@@ -43,10 +47,14 @@ class MasterDataCache {
   private attendanceBookDefs = new Map<string, AttendanceBookDef>();
   private attendanceRewards = new Map<string, AttendanceReward[]>();
   private attendanceCatchupPrices = new Map<string, AttendanceCatchupPrice[]>();
+  private randomBoxGradeRateDefs = new Map<string, RandomBoxGradeRateDef>();
+  private randomBoxGradeRates = new Map<string, RandomBoxGradeRate[]>();
+  private randomBoxCustomDefs = new Map<string, RandomBoxCustomDef>();
+  private randomBoxCustomPools = new Map<string, RandomBoxCustomPool[]>();
   private versions = new Map<MasterDataContent, number>();
 
   /**
-   * 9개 마스터 데이터 컬렉션 + 버전 메타를 전부 읽어 캐시를 채운다. 서버 부트스트랩에서
+   * 13개 마스터 데이터 컬렉션 + 버전 메타를 전부 읽어 캐시를 채운다. 서버 부트스트랩에서
    * 한 번 호출한다.
    * @param db 메인 앱 DB 핸들
    */
@@ -121,6 +129,38 @@ class MasterDataCache {
           grouped.set(doc.defId, rows);
         }
         this.attendanceCatchupPrices = grouped;
+        break;
+      }
+      case COLLECTIONS.MASTER_RANDOM_BOX_GRADE_RATE_DEF: {
+        const docs = await db.collection<RandomBoxGradeRateDef>(content).find().toArray();
+        this.randomBoxGradeRateDefs = new Map(docs.map(doc => [doc.boxId, doc]));
+        break;
+      }
+      case COLLECTIONS.MASTER_RANDOM_BOX_GRADE_RATE: {
+        const docs = await db.collection<RandomBoxGradeRate>(content).find().toArray();
+        const grouped = new Map<string, RandomBoxGradeRate[]>();
+        for (const doc of docs) {
+          const rows = grouped.get(doc.boxId) ?? [];
+          rows.push(doc);
+          grouped.set(doc.boxId, rows);
+        }
+        this.randomBoxGradeRates = grouped;
+        break;
+      }
+      case COLLECTIONS.MASTER_RANDOM_BOX_CUSTOM_DEF: {
+        const docs = await db.collection<RandomBoxCustomDef>(content).find().toArray();
+        this.randomBoxCustomDefs = new Map(docs.map(doc => [doc.boxId, doc]));
+        break;
+      }
+      case COLLECTIONS.MASTER_RANDOM_BOX_CUSTOM_POOL: {
+        const docs = await db.collection<RandomBoxCustomPool>(content).find().toArray();
+        const grouped = new Map<string, RandomBoxCustomPool[]>();
+        for (const doc of docs) {
+          const rows = grouped.get(doc.boxId) ?? [];
+          rows.push(doc);
+          grouped.set(doc.boxId, rows);
+        }
+        this.randomBoxCustomPools = grouped;
         break;
       }
       default: {
@@ -286,6 +326,58 @@ class MasterDataCache {
   /** @returns 전체 캐치업 회차별 가격 행 목록(GM 마스터데이터 조회용) */
   getAllAttendanceCatchupPrices(): AttendanceCatchupPrice[] {
     return [...this.attendanceCatchupPrices.values()].flat();
+  }
+
+  /**
+   * @param boxId 조회할 등급비율 상자 인스턴스 ID
+   * @returns 해당 상자 정의, 없으면 undefined
+   */
+  getRandomBoxGradeRateDef(boxId: string): RandomBoxGradeRateDef | undefined {
+    return this.randomBoxGradeRateDefs.get(boxId);
+  }
+
+  /**
+   * @param boxId 조회할 등급비율 상자 인스턴스 ID
+   * @returns 해당 상자의 등급별 확률 행 전체(없으면 빈 배열)
+   */
+  getRandomBoxGradeRates(boxId: string): RandomBoxGradeRate[] {
+    return this.randomBoxGradeRates.get(boxId) ?? [];
+  }
+
+  /**
+   * @param boxId 조회할 커스텀 상자 인스턴스 ID
+   * @returns 해당 상자 정의, 없으면 undefined
+   */
+  getRandomBoxCustomDef(boxId: string): RandomBoxCustomDef | undefined {
+    return this.randomBoxCustomDefs.get(boxId);
+  }
+
+  /**
+   * @param boxId 조회할 커스텀 상자 인스턴스 ID
+   * @returns 해당 상자의 원형별 가중치 행 전체(없으면 빈 배열)
+   */
+  getRandomBoxCustomPool(boxId: string): RandomBoxCustomPool[] {
+    return this.randomBoxCustomPools.get(boxId) ?? [];
+  }
+
+  /** @returns 전체 등급비율 상자 정의 목록(GM 마스터데이터 조회용) */
+  getAllRandomBoxGradeRateDefs(): RandomBoxGradeRateDef[] {
+    return [...this.randomBoxGradeRateDefs.values()];
+  }
+
+  /** @returns 전체 등급비율 상자 확률 행 목록(GM 마스터데이터 조회용) */
+  getAllRandomBoxGradeRates(): RandomBoxGradeRate[] {
+    return [...this.randomBoxGradeRates.values()].flat();
+  }
+
+  /** @returns 전체 커스텀 상자 정의 목록(GM 마스터데이터 조회용) */
+  getAllRandomBoxCustomDefs(): RandomBoxCustomDef[] {
+    return [...this.randomBoxCustomDefs.values()];
+  }
+
+  /** @returns 전체 커스텀 상자 가중치 행 목록(GM 마스터데이터 조회용) */
+  getAllRandomBoxCustomPools(): RandomBoxCustomPool[] {
+    return [...this.randomBoxCustomPools.values()].flat();
   }
 }
 
