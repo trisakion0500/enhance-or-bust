@@ -139,15 +139,16 @@ export async function getPlayerCardsForGm(playerId: string, playerRepository: Pl
 
 /**
  * gm_platform이 조회하는 시드데이터(마스터데이터) 9종 — 컬렉션을 그대로 덤프한다.
- * 등급/합성/스테이지 4종은 아직 조회만 지원한다(밸런스 데이터라 잘못 저장되면 파급이
- * 커서 별도 검증 설계 후 추가 예정). 카드 원형/강화 규칙과 출석부 정의/보상/캐치업가격은
- * 예외로 저장 API가 있다(아래 {@link saveCardTemplatesForGm}/{@link saveEnhancementRulesForGm}
- * 및 출석부 저장 함수 3종).
+ * 합성/스테이지 2종은 아직 조회만 지원한다(밸런스 데이터라 잘못 저장되면 파급이
+ * 커서 별도 검증 설계 후 추가 예정). 카드 원형/등급 설정/강화 규칙과 출석부 정의/보상/
+ * 캐치업가격은 예외로 저장 API가 있다(아래 {@link saveCardTemplatesForGm}/
+ * {@link saveGradeConfigsForGm}/{@link saveEnhancementRulesForGm} 및 출석부 저장 함수 3종).
  * @returns 전체 카드 원형 목록
  * @author trisakion
  * @modified 2026-09-17 trisakion 출석부 정의/보상/캐치업가격 GM 조회 3종 추가로 "6종"→"9종" 문구 갱신
  * @modified 2026-09-29 trisakion 카드 원형 저장 API(saveCardTemplatesForGm) 추가로 "조회만 지원" 대상에서 카드 원형 제외
  * @modified 2026-09-29 trisakion 강화 규칙 저장 API(saveEnhancementRulesForGm) 추가로 "조회만 지원" 대상에서 강화 규칙 제외
+ * @modified 2026-09-30 trisakion 등급 설정 저장 API(saveGradeConfigsForGm) 추가로 "조회만 지원" 대상에서 등급 설정 제외
  */
 export function getCardTemplatesForGm(): CardTemplate[] {
   return masterDataCache.getAllCardTemplates();
@@ -217,6 +218,52 @@ export async function saveCardTemplatesForGm(db: Db, rows: CardTemplateSaveRow[]
  */
 export function getGradeConfigsForGm(): GradeConfig[] {
   return masterDataCache.getAllGradeConfigs();
+}
+
+/** gm_platform이 `POST /gm/save-grade-configs`로 보내는 등급 설정 저장 행 하나. `grade` 값은
+ * gm_platform 쪽에서도 카드 원형(`save-card-templates`)의 등급 컬럼과 동일한 공통코드
+ * 그룹(`CARD_GRADE`)을 참조하도록 등록해, 두 화면에서 등급 표기가 갈리지 않게 한다.
+ * @author trisakion
+ */
+export interface GradeConfigSaveRow {
+  grade: Grade;
+  maxLevel: number;
+  maxEnhancementLevel: number;
+}
+
+/** 등급 설정이 반드시 포함해야 하는 등급 전체 집합 — `Grade` 타입 자체가 고정된 4종
+ * 리터럴이라(`grade.ts`), 카드 원형/강화 규칙과 달리 이 컬렉션은 행을 추가하거나 지울 수
+ * 없다. 하나라도 빠지면 그 등급 카드의 강화/합성/레벨업 시도마다 하는
+ * `masterDataCache.getGradeConfig()` 조회가 실패해 즉시 INTERNAL_ERROR로 막힌다.
+ */
+const REQUIRED_GRADES: Grade[] = ["N", "R", "SR", "SSR"];
+
+/**
+ * 등급 설정(`master_grade_configs`) 전체를 저장한다(`POST /gm/save-grade-configs`) — 카드
+ * 원형/강화 규칙의 "전체 교체(삭제 후보 판단)"와 달리 **순수 upsert**다. `grade`가 고정된
+ * 4종 리터럴이라 행을 추가/삭제할 수 없고, payload는 항상 N/R/SR/SSR을 정확히 하나씩만
+ * 포함해야 한다 — 누락/중복/모르는 값은 전부 GM.VALIDATION_FAILED로 거부한다.
+ * maxLevel/maxEnhancementLevel 자체의 형식 검증(양의 정수 등)은 라우트
+ * (`parseGradeConfigsSave()`)가 맡는다.
+ * @param db 메인 앱 DB 핸들
+ * @param rows 저장할 등급 설정 전체(반드시 N/R/SR/SSR 4행)
+ * @returns 저장 후 전체 등급 설정 목록
+ * @throws {BusinessException} N/R/SR/SSR 4종 집합과 정확히 일치하지 않으면 GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+export async function saveGradeConfigsForGm(db: Db, rows: GradeConfigSaveRow[]): Promise<GradeConfig[]> {
+  const grades = rows.map(row => row.grade);
+  const isExactRequiredSet = grades.length === REQUIRED_GRADES.length
+    && new Set(grades).size === grades.length
+    && REQUIRED_GRADES.every(grade => grades.includes(grade));
+  if (!isExactRequiredSet)
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { rows });
+
+  const collection = db.collection<GradeConfig>(COLLECTIONS.MASTER_GRADE_CONFIGS);
+  await Promise.all(rows.map(row => collection.updateOne({ grade: row.grade }, { $set: row }, { upsert: true })));
+  await bumpMasterDataVersion(db, COLLECTIONS.MASTER_GRADE_CONFIGS);
+
+  return collection.find({}, { projection: { _id: 0 } }).toArray() as Promise<GradeConfig[]>;
 }
 
 /**

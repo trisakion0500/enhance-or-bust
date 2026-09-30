@@ -8,7 +8,7 @@ import type { AttendanceBookType, AttendanceTargetAudience } from "../../attenda
 import type { PlayerRepository } from "../../player/domain/playerRepository.js";
 import type { Grade } from "../../../shared-kernel/masterData/grade.js";
 import type { Element } from "../../../shared-kernel/masterData/element.js";
-import type { AttendanceBookDefSaveInput, AttendanceDayRewardInput, CardTemplateSaveRow, EnhancementRuleSaveRow } from "../application/gmService.js";
+import type { AttendanceBookDefSaveInput, AttendanceDayRewardInput, CardTemplateSaveRow, EnhancementRuleSaveRow, GradeConfigSaveRow } from "../application/gmService.js";
 import {
   getAttendanceCatchupPricesForGm,
   getAttendanceDefsForGm,
@@ -33,6 +33,7 @@ import {
   saveAttendanceRewardsForGm,
   saveCardTemplatesForGm,
   saveEnhancementRulesForGm,
+  saveGradeConfigsForGm,
 } from "../application/gmService.js";
 
 const ATTENDANCE_BOOK_TYPES: AttendanceBookType[] = ["GENERAL", "EVENT"];
@@ -215,6 +216,37 @@ function parseEnhancementRulesSave(body: unknown): EnhancementRuleSaveRow[] {
 }
 
 /**
+ * `POST /gm/save-grade-configs` 요청 바디를 검증된 형태로 파싱한다 — 형식/범위만 담당하고
+ * (N/R/SR/SSR 4종 집합 일치 여부는 `saveGradeConfigsForGm()`의 책임), gm_platform
+ * EDITABLE_GRID가 보내는 `data` 배열을 그대로 행 목록으로 받는다.
+ * @param body 요청 바디
+ * @returns 파싱된 등급 설정 저장 행 목록
+ * @throws {BusinessException} `data`가 배열이 아니거나 행 형식이 올바르지 않으면 GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+function parseGradeConfigsSave(body: unknown): GradeConfigSaveRow[] {
+  const { data } = (body ?? {}) as Record<string, unknown>;
+  if (!Array.isArray(data)) throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { body });
+
+  return data.map(row => {
+    const r = (row ?? {}) as Record<string, unknown>;
+    const fail = (): never => {
+      throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { row });
+    };
+
+    if (typeof r.grade !== "string" || !GRADES.includes(r.grade as Grade)) fail();
+    if (typeof r.maxLevel !== "number" || !Number.isInteger(r.maxLevel) || r.maxLevel < 1) fail();
+    if (typeof r.maxEnhancementLevel !== "number" || !Number.isInteger(r.maxEnhancementLevel) || r.maxEnhancementLevel < 0) fail();
+
+    return {
+      grade: r.grade as Grade,
+      maxLevel: r.maxLevel as number,
+      maxEnhancementLevel: r.maxEnhancementLevel as number,
+    };
+  });
+}
+
+/**
  * 로그 조회 라우트 5개가 공통으로 쓰는 요청 파라미터 파싱 — playerId(필수 문자열),
  * fromDate/toDate(선택, 문자열이면 통과시키고 실제 날짜 파싱은 서비스 단에서 검증한다).
  * @param body 요청 바디
@@ -268,6 +300,7 @@ function parseOptionalDefId(body: unknown): string | undefined {
  *   db 파라미터 신규(저장 검증/쓰기가 DB 접근 필요)
  * @modified 2026-09-29 trisakion 카드 원형 저장(POST /gm/save-card-templates), 강화 규칙 저장
  *   (POST /gm/save-enhancement-rules) 라우트 추가
+ * @modified 2026-09-30 trisakion 등급 설정 저장(POST /gm/save-grade-configs) 라우트 추가
  */
 export function createGmRoutes(playerRepository: PlayerRepository, db: Db): Router {
   const router = Router();
@@ -297,7 +330,7 @@ export function createGmRoutes(playerRepository: PlayerRepository, db: Db): Rout
     res.json({ result: 0, message: "OK", data: cards });
   }));
 
-  // 시드데이터(마스터데이터) 9종 — 카드 원형/강화 규칙/출석부 3종 외에는 아직 조회만, 수정/삭제는 없다.
+  // 시드데이터(마스터데이터) 9종 — 카드 원형/등급 설정/강화 규칙/출석부 3종 외에는 아직 조회만, 수정/삭제는 없다.
   router.post("/gm/get-card-templates", gmApiKeyAuth, asyncHandler(async (_req, res) => {
     res.json({ result: 0, message: "OK", data: getCardTemplatesForGm() });
   }));
@@ -309,6 +342,11 @@ export function createGmRoutes(playerRepository: PlayerRepository, db: Db): Rout
 
   router.post("/gm/get-grade-configs", gmApiKeyAuth, asyncHandler(async (_req, res) => {
     res.json({ result: 0, message: "OK", data: getGradeConfigsForGm() });
+  }));
+
+  router.post("/gm/save-grade-configs", gmApiKeyAuth, asyncHandler(async (req, res) => {
+    const rows = parseGradeConfigsSave(req.body);
+    res.json({ result: 0, message: "OK", data: await saveGradeConfigsForGm(db, rows) });
   }));
 
   router.post("/gm/get-enhancement-rules", gmApiKeyAuth, asyncHandler(async (_req, res) => {

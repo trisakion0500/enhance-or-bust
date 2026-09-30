@@ -69,15 +69,16 @@ gm_platform의 외부 API 규약(`{ result, message, data: [...] }`, `data`는 �
 ### 시드데이터(마스터데이터) 조회
 
 `master_*` 컬렉션 9종을 컬렉션당 엔드포인트 하나씩 그대로 덤프한다. 응답은 서버가 이미
-적재해둔 `masterDataCache`를 그대로 읽어 반환한다(DB 재조회 없음). **등급/합성/
-스테이지 4종은 조회만 지원하고 수정/삭제는 아직 없다** — 밸런스 데이터라 잘못 저장되면
-게임 전체에 영향을 줄 수 있어 별도 검증 설계 후 추가 예정. **카드 원형/강화 규칙과 출석부
-정의 3종은 예외로 저장 API가 있다**(카드 원형은 `save-card-templates`, 강화 규칙은
-`save-enhancement-rules`, 아래 각 절 / 출석부는 `save-attendance-def`/`-rewards`/
-`-catchup-prices`, 아래 "출석부 저장" 절) — 출석부는 애초에 gm_platform이 운영 중 실시간으로 쓰도록 설계된 컬렉션이라
+적재해둔 `masterDataCache`를 그대로 읽어 반환한다(DB 재조회 없음). **합성/스테이지 2종은
+조회만 지원하고 수정/삭제는 아직 없다** — 밸런스 데이터라 잘못 저장되면 게임 전체에
+영향을 줄 수 있어 별도 검증 설계 후 추가 예정. **카드 원형/등급 설정/강화 규칙과 출석부
+정의 3종은 예외로 저장 API가 있다**(카드 원형은 `save-card-templates`, 등급 설정은
+`save-grade-configs`, 강화 규칙은 `save-enhancement-rules`, 아래 각 절 / 출석부는
+`save-attendance-def`/`-rewards`/`-catchup-prices`, 아래 "출석부 저장" 절) — 출석부는
+애초에 gm_platform이 운영 중 실시간으로 쓰도록 설계된 컬렉션이라
 (`23_GAME_DESIGN_ATTENDANCE.md` "비즈니스 키 vs 내부 PK" 절) 값 검증 규칙이 처음부터
-확정돼 있었고, 카드 원형/강화 규칙은 gm_platform이 EDITABLE_GRID로 행 추가/수정/삭제를
-지원하게 되면서 저장 API를 도입했다. **모두 X-API-Key 필요.**
+확정돼 있었고, 카드 원형/등급 설정/강화 규칙은 gm_platform이 EDITABLE_GRID로 행 추가/
+수정/삭제를 지원하게 되면서 저장 API를 도입했다. **모두 X-API-Key 필요.**
 
 대부분 요청 body 없음(빈 객체 전송)이지만, 출석 날짜별 보상/캐치업 가격 2종은 선택
 파라미터 `defId`로 특정 출석부만 좁혀 조회할 수 있다(생략하면 전체 반환).
@@ -137,6 +138,35 @@ gm_platform의 외부 API 규약(`{ result, message, data: [...] }`, `data`는 �
 
 **에러**: 10000(행 형식 오류 — templateId 빈값, grade/element가 허용 값 밖, baseAttack/baseHp가
 1 이상 정수 아님, payload 내 templateId 중복), 10003(삭제 후보가 아직 참조 중)
+
+### 등급 설정 저장
+
+`POST /gm/save-grade-configs` — gm_platform EDITABLE_GRID에서 행 편집을 지원한다. 카드
+원형/강화 규칙과 달리 `grade`가 `Grade` 타입 자체로 고정된 4종 리터럴(N/R/SR/SSR)이라
+행을 추가하거나 지울 수 없다 — **순수 upsert**이며, `data` 배열은 항상 이 4종을 정확히
+하나씩만 포함해야 한다(누락/중복/모르는 값은 전부 거부). gm_platform 쪽 `grade` 컬럼도
+카드 원형 저장 화면과 동일한 공통코드 그룹(`CARD_GRADE`)을 참조하도록 등록해, 두 화면에서
+등급 표기가 갈리지 않게 했다.
+
+`maxLevel`은 1 이상 정수, `maxEnhancementLevel`은 0 이상 정수여야 한다.
+
+**요청 body**
+```json
+{
+  "data": [
+    { "grade": "N", "maxLevel": 20, "maxEnhancementLevel": 5 },
+    { "grade": "R", "maxLevel": 40, "maxEnhancementLevel": 10 },
+    { "grade": "SR", "maxLevel": 60, "maxEnhancementLevel": 15 },
+    { "grade": "SSR", "maxLevel": 60, "maxEnhancementLevel": 15 }
+  ]
+}
+```
+
+**응답**: `{ "result": 0, "message": "OK", "data": [ { "grade", "maxLevel", "maxEnhancementLevel" }, ... ] }`
+(저장 후 `master_grade_configs` 전체, 항상 4행)
+
+**에러**: 10000(행 형식 오류 — maxLevel/maxEnhancementLevel 정수 아님·범위 밖, N/R/SR/SSR
+4종 집합과 불일치)
 
 ### 강화 규칙 저장
 

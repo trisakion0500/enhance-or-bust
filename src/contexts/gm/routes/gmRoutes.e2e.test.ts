@@ -15,8 +15,8 @@ import { createServer } from "../../../server.js";
 /**
  * gm_platform 연동(`/gm/*`) E2E 테스트 — 출석부 저장 API 3종(`save-attendance-def`/
  * `save-attendance-rewards`/`save-attendance-catchup-prices`), 카드 원형 저장 API
- * (`save-card-templates`), 강화 규칙 저장 API(`save-enhancement-rules`) 검증을 다룬다.
- * 다른 GM 조회 엔드포인트는 파라미터가 거의 없어
+ * (`save-card-templates`), 등급 설정 저장 API(`save-grade-configs`), 강화 규칙 저장 API
+ * (`save-enhancement-rules`) 검증을 다룬다. 다른 GM 조회 엔드포인트는 파라미터가 거의 없어
  * (마스터데이터 덤프/로그 조회) 검증 실패 경로 자체가 얇아 별도 테스트를 두지 않았다
  * (`17_GM_API.md` 참고). `GM_PLATFORM_API_KEY`가 `.env`에 설정돼 있으면 `X-API-Key`
  * 헤더로 실어 보낸다(설정 안 되어 있으면 `gmApiKeyAuth.ts`가 검증 자체를 건너뜀).
@@ -85,6 +85,12 @@ async function currentEnhancementRuleRows() {
   return db.collection(COLLECTIONS.MASTER_ENHANCEMENT_RULES).find({}, { projection: { _id: 0 } }).toArray();
 }
 
+/** {@link currentCardTemplateRows}와 동일한 이유로 등급 설정도 DB를 직접 읽어 기준선을 구한다. */
+async function currentGradeConfigRows() {
+  const db = mongoClient.db(process.env.MONGO_APP_DATABASE);
+  return db.collection(COLLECTIONS.MASTER_GRADE_CONFIGS).find({}, { projection: { _id: 0 } }).toArray();
+}
+
 /** 기본값이 채워진 출석부 정의 저장 바디(개별 필드는 override로 덮어씀). 기본은 아직 시작 전인 EVENT. */
 function buildDefBody(defId: string, override: Record<string, unknown> = {}) {
   return {
@@ -113,6 +119,7 @@ const saveDef = (body: unknown) => post("/gm/save-attendance-def", body);
 const saveRewards = (body: unknown) => post("/gm/save-attendance-rewards", body);
 const saveCatchupPrices = (body: unknown) => post("/gm/save-attendance-catchup-prices", body);
 const saveCardTemplates = (body: unknown) => post("/gm/save-card-templates", body);
+const saveGradeConfigs = (body: unknown) => post("/gm/save-grade-configs", body);
 const saveEnhancementRules = (body: unknown) => post("/gm/save-enhancement-rules", body);
 
 test("신규 출석부 정의 저장 성공", async () => {
@@ -364,6 +371,64 @@ test("카드 원형 저장 — 행 형식이 잘못되면 VALIDATION_FAILED(1000
     const { status, json } = await saveCardTemplates({ data: [row] });
     assert.equal(status, 400, JSON.stringify(row));
     assert.equal(json.result, 10000, JSON.stringify(row));
+  }
+});
+
+// 등급 설정은 grade가 Grade 타입 자체로 고정된 4종 리터럴(N/R/SR/SSR)이라 카드 원형/강화
+// 규칙과 달리 행을 추가/삭제할 수 없다 — payload가 이 4종을 정확히 하나씩 포함하는지만
+// 검증하는 순수 upsert다. 실제 값(다른 컨텍스트가 강화/합성/레벨업마다 참조하는 등급별
+// 성장 상한)을 바꾸는 테스트는 두지 않는다 — upsert의 write 경로 자체는 카드 원형/강화
+// 규칙 저장 테스트가 이미 같은 $set 패턴으로 검증했으므로, 여기서는 이 API에서만 새로
+// 생긴 검증 로직(4종 집합 일치)만 다룬다.
+test("등급 설정 저장 — 현재 값 그대로 재저장하면 4종이 그대로 반환된다", async () => {
+  const base = await currentGradeConfigRows();
+  const { status, json } = await saveGradeConfigs({ data: base });
+
+  assert.equal(status, 200);
+  assert.equal(json.result, 0);
+  assert.equal(json.data.length, 4);
+  assert.deepEqual(json.data.map((r: { grade: string }) => r.grade).sort(), ["N", "R", "SR", "SSR"]);
+});
+
+test("등급 설정 저장 — 4종 중 하나라도 빠지면 VALIDATION_FAILED(10000)", async () => {
+  const base = await currentGradeConfigRows();
+  const missingOne = base.filter(r => r.grade !== "SSR");
+
+  const { status, json } = await saveGradeConfigs({ data: missingOne });
+  assert.equal(status, 400);
+  assert.equal(json.result, 10000);
+});
+
+test("등급 설정 저장 — 알 수 없는 등급이 섞이면 VALIDATION_FAILED(10000)", async () => {
+  const base = await currentGradeConfigRows();
+  const withUnknown = [...base, { grade: "UR", maxLevel: 100, maxEnhancementLevel: 20 }];
+
+  const { status, json } = await saveGradeConfigs({ data: withUnknown });
+  assert.equal(status, 400);
+  assert.equal(json.result, 10000);
+});
+
+test("등급 설정 저장 — grade가 중복되면 VALIDATION_FAILED(10000)", async () => {
+  const base = await currentGradeConfigRows();
+  const duplicated = [...base, base[0]];
+
+  const { status, json } = await saveGradeConfigs({ data: duplicated });
+  assert.equal(status, 400);
+  assert.equal(json.result, 10000);
+});
+
+test("등급 설정 저장 — 행 형식이 잘못되면 VALIDATION_FAILED(10000)", async () => {
+  const base = await currentGradeConfigRows();
+  const invalidPayloads = [
+    base.map(r => (r.grade === "N" ? { ...r, maxLevel: 0 } : r)),
+    base.map(r => (r.grade === "N" ? { ...r, maxLevel: 1.5 } : r)),
+    base.map(r => (r.grade === "N" ? { ...r, maxEnhancementLevel: -1 } : r)),
+    base.map(r => (r.grade === "N" ? { ...r, maxEnhancementLevel: 1.5 } : r)),
+  ];
+  for (const rows of invalidPayloads) {
+    const { status, json } = await saveGradeConfigs({ data: rows });
+    assert.equal(status, 400, JSON.stringify(rows));
+    assert.equal(json.result, 10000, JSON.stringify(rows));
   }
 });
 

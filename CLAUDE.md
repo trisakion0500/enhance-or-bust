@@ -449,7 +449,16 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   `masterDataCache.getEnhancementRuleFor()`) 삭제 가드(REFERENCED_CANNOT_DELETE)가 필요
   없다. 대신 자연키(`minTargetEnhancementLevel`) 중복과 **구간 겹침**(예: 1~10과 5~8)을
   `GM.VALIDATION_FAILED`(10000)로 막는다 — `getEnhancementRuleFor()`가 배열 `find()`로
-  첫 매치만 쓰기 때문에 구간이 겹치면 실제 적용 규칙을 예측할 수 없어진다. 단, 출석부 정의
+  첫 매치만 쓰기 때문에 구간이 겹치면 실제 적용 규칙을 예측할 수 없어진다. 등급 설정
+  (`master_grade_configs`)도 같은 이유로 `[기획]등급 설정` API가 EDITABLE_GRID로
+  바뀌면서 `POST /gm/save-grade-configs`를 뒤이어 구현했다 — 다만 카드 원형/강화 규칙과
+  달리 전체 교체가 아니라 순수 upsert다: `grade`가 `Grade` 타입 자체로 고정된 4종
+  리터럴(N/R/SR/SSR)이라 행을 추가하거나 지울 수 없고, payload는 항상 이 4종을 정확히
+  하나씩만 포함해야 한다(누락/중복/모르는 값은 `GM.VALIDATION_FAILED`(10000)로 거부) —
+  하나라도 빠지면 그 등급 카드의 강화/합성/레벨업 시도마다 하는
+  `masterDataCache.getGradeConfig()` 조회가 실패해 즉시 INTERNAL_ERROR로 막힌다. gm_platform
+  쪽 `grade` 컬럼도 카드 원형 저장 화면과 동일한 공통코드 그룹(`CARD_GRADE`)을 참조하도록
+  등록해 두 화면의 등급 표기를 통일했다. 단, 출석부 정의
   3종(`master_attendance_defs`/
   `_rewards`/`_catchup_prices`)은 예외 — 애초에 gm_platform이 운영 중 실시간으로 쓰도록
   설계된 컬렉션이라 값 검증 규칙이 처음부터 확정돼 있었고, 아래 문단에서 저장 API를 실제로
