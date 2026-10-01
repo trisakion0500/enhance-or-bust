@@ -422,7 +422,9 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   gm_platform 그리드가 1차원으로 그릴 수 있도록 `economy.gold`처럼 점 표기로 평탄화해
   응답), `POST /gm/get-player-cards`(`playerId` **필수**, 보유 카드를 `GET /player/me`와
   동일하게 마스터 데이터 조인 포함해 조회). 재화 지급/차감·카드 지급 API는 한때 구현했다가
-  삭제했다(gm_platform 쪽엔 하드삭제가 없어 `status=0`으로 중지 처리). 이어서 시드데이터
+  삭제했다(gm_platform 쪽엔 하드삭제가 없어 `status=0`으로 중지 처리) — 지급은 이후
+  `POST /gm/grant-mail`로 다시 도입했고(아래 별도 bullet), 차감(회수)은 여전히 없다.
+  이어서 시드데이터
   (마스터데이터) 6개 컬렉션 조회도 추가했다 — `master_data_meta`를 매 요청 새로 조회하지
   않고 서버가 이미 적재해둔 `masterDataCache` 싱글톤을 그대로 읽어 반환한다(DB 재조회
   없음). 컬렉션마다 행 모양이 완전히 달라(카드 원형 vs 스테이지 설정 등) gm_platform의
@@ -615,6 +617,43 @@ TECH_STACK.md의 "캐시/조회 최적화"라는 표현을 아래로 구체화�
   def의 `durationDays`를 바꾸는 수정까지 막으면 "def를 먼저 고쳐야 행을 저장할 수 있는" 순환이
   되기 때문. defId를 바꾸는 수정이면 기존 보상/캐치업 행의 defId도 함께 바꿔 고아 행을 방지한다.
   `createGmRoutes()`가 이제 `db`를 받는다(저장 검증/쓰기에 필요).
+- 랜덤박스(가챠) 기능 추가(`docs/01_GAME_DESIGN.md` 7-1절) — 등급비율(gradeRate) 상자와
+  커스텀(custom) 상자 2종. 등급비율 상자는 상자별 등급 확률 테이블에서 등급을 먼저 뽑고
+  그 등급의 카드 원형 중 균등 추첨, 커스텀 상자는 상자별 카드 원형 가중치 풀에서 바로
+  추첨한다(`randomBoxDraw.ts`의 `pickGrade`/`pickUniformCardTemplate`/
+  `pickCustomBoxTemplate`). 두 가지 획득 경로가 있다: **직접 뽑기**(`POST
+  /random-box/grade-rate/:boxId/draw`, `POST /random-box/custom/:boxId/draw` — 다이아
+  소모, 강화/합성/전투-스테이지와 동일하게 `withOptimisticRetry`+Redis 락으로 원자 처리,
+  즉시 결과 반환)와 **우편 경유 개봉**(우편에 "어떤 상자를 열 자격"(`boxType`+`boxId`)만
+  실어 보내고, 실제 뽑기는 발송 시점이 아니라 `ClaimMail` 수령 시점에
+  `resolveRandomBoxDraw()`를 호출해 그 자리에서 수행 — 다이아 소모 없음, 두 경로가 뽑기
+  로직 자체는 공유). 상자 정의가 없거나 비활성(`isActive`)이면 `RANDOM_BOX.NOT_FOUND`,
+  확률 테이블/가중치 풀이 비어있거나 뽑힌 등급에 카드 원형이 없으면
+  `RANDOM_BOX.INTERNAL_ERROR`(운영 실수로 보고 재추첨/폴백 없이 즉시 실패시킴). 감사 로그
+  (`log_random_box`)는 직접 뽑기만 남기고(`action: "draw"`), 우편 경유 개봉은 별도 기록 없이
+  `log_mailbox`의 `claim`(`attachments.cardTemplateIds`)에 이미 실제 결과가 남아 중복
+  기록하지 않는다. GM 관리는 마스터데이터 4종(등급비율 상자 정의/등급별 확률, 커스텀 상자
+  정의/원형별 가중치) 전부 조회+저장 API를 갖춰 gm_platform에 EDITABLE_GRID로 등록했다 —
+  정의 2종은 카드 원형과 동일한 전체 교체+삭제 가드(확률/가중치 행이 참조 중이면
+  `GM.REFERENCED_CANNOT_DELETE`), 확률/가중치 2종은 스테이지 카드 드랍과 동일한 전체
+  교체(삭제 가드 없음, 상위 boxId는 정의 컬렉션에 실재해야 함)이며, 등급별 확률은 추가로
+  같은 boxId 내 rate 합이 정확히 100이어야 한다. `grade` 값은 등급을 코드에 고정하지 않는
+  설계라 임의 문자열을 허용한다(카드 원형/등급 설정의 `CARD_GRADE` 공통코드와 달리
+  gm_platform 쪽에도 코드 그룹을 연결하지 않음).
+- GM 재화/카드 지급 API 추가(`POST /gm/grant-mail`) — 과거 삭제했던 `GRANT_CURRENCY`/
+  `GRANT_CARD`를 하나로 통합해 재도입한 버전. 기존 보상 지급(스테이지 클리어/쿠폰)과 동일하게
+  Mailbox를 경유해(`sourceType: "gm_grant"`) 인벤토리 슬롯 상한 검증 등을 재사용한다.
+  `gold`/`enhancementStone`/`diamond`는 고정 필드로 받고, 카드처럼 재화가 아닌 아이템은
+  `itemType`/`itemId`/`quantity` 한 슬롯으로 받는다(gm_platform 입력칸이 JSON 배열을
+  다루려면 운영자가 직접 JSON을 타이핑해야 해서 실사용성이 낮아 배열 대신 단일 슬롯을
+  택함 — 출석부 보상의 "하루 카드 1종" 제약과 동일한 이유, 다른 카드까지 같이 주려면 호출을
+  한 번 더 한다). `itemType`은 gm_platform에 공통코드(`GRANT_ITEM_TYPE` 그룹)로 등록해
+  드롭다운으로 선택하며 현재는 `"card"`만 유효하다. `reason`(지급 사유)은 **필수**이며
+  플레이어에게는 노출하지 않고 감사 로그(`log_mailbox`)에만 남긴다 — 이 로그의 `actorId`도
+  플레이어 본인이 아니라 `"GM"` sentinel(`auditLog.ts`의 `GM_ACTOR`)로 기록해 플레이어가
+  직접 받은 보상과 구분한다(`sendMail()`에 `actorId`/`reason` 선택 파라미터를 추가해 지원,
+  기존 호출부엔 영향 없음). **지급(grant)만 다루고 회수(차감)는 다루지 않는다** — 회수는
+  플레이어가 수령을 미루면 의미가 없는 즉시반영 성격의 별도 기능이라 범위 밖으로 남겨뒀다.
 
 ## MongoDB 데이터 모델링 / 원자성 전략 (확정)
 
