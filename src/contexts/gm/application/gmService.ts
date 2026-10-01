@@ -1,9 +1,14 @@
 import type { Db } from "mongodb";
+import { randomUUID } from "node:crypto";
 import { BusinessException } from "../../../shared-kernel/businessException.js";
 import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
 import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
 import { config } from "../../../config/env.js";
 import { mongoLogClient } from "../../../infra/mongoLog.js";
+import { GM_ACTOR } from "../../../shared-kernel/auditLog.js";
+import { sendMail } from "../../mailbox/application/mailboxService.js";
+import type { MailAttachments } from "../../mailbox/domain/mail.js";
+import type { MailboxRepository } from "../../mailbox/domain/mailboxRepository.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
 import { bumpMasterDataVersion } from "../../../shared-kernel/masterData/masterDataVersion.js";
 import type { CardTemplate } from "../../../shared-kernel/masterData/cardTemplate.js";
@@ -139,6 +144,67 @@ export async function getPlayerCardsForGm(playerId: string, playerRepository: Pl
       enhancementLevel: card.enhancementLevel,
     };
   });
+}
+
+/** 현재 유효한 {@link GmGrantMailInput.itemType} 값 — gm_platform 입력칸이 JSON 배열을
+ * 다루는 걸 꺼려해(운영자가 직접 JSON을 타이핑해야 함) `cardTemplateIds` 배열 대신 둔
+ * 단일 아이템 슬롯이다. 카드 외 아이템(예: 랜덤박스 자격)이 필요해지면 이 목록에 추가한다. */
+export const GRANT_MAIL_ITEM_TYPES = ["card"] as const;
+
+/** `POST /gm/grant-mail`이 받는 지급 요청 — 재화 3종은 고정 필드, 그 외 아이템(현재는 카드만)은
+ * 아이템타입/고유번호/수량 한 슬롯으로 받는다(한 번에 하나의 비-재화 아이템만 지급 가능 —
+ * 출석부 보상의 "하루 카드 1종" 제약과 동일한 이유).
+ * @author trisakion
+ */
+export interface GmGrantMailInput {
+  playerId: string;
+  gold?: number;
+  enhancementStone?: number;
+  diamond?: number;
+  /** 재화가 아닌 아이템의 종류 — 현재는 `"card"`만 유효(위 {@link GRANT_MAIL_ITEM_TYPES}) */
+  itemType?: (typeof GRANT_MAIL_ITEM_TYPES)[number];
+  /** itemType별 고유번호 — `"card"`면 카드 원형 ID. itemType이 없으면 쓰이지 않는다 */
+  itemId?: string;
+  /** itemId 몇 개를 지급할지 — `"card"`면 그만큼 새 카드 인스턴스가 생긴다 */
+  quantity?: number;
+  /** 왜 지급하는지 — 플레이어에게는 노출되지 않고 감사 로그(`log_mailbox`)에만 남는다 */
+  reason: string;
+}
+
+/**
+ * GM 운영자가 플레이어에게 재화/카드를 우편으로 지급한다(`POST /gm/grant-mail`) — 기존 보상
+ * 지급(스테이지 클리어/쿠폰)과 동일하게 Mailbox를 경유해, 그쪽 멱등 처리와 인벤토리 슬롯 상한
+ * 검증을 그대로 재사용한다. 지급은 보상이라 즉시반영이 필요 없어 이 경로로 충분하지만, 회수
+ * (차감)는 플레이어가 수령을 미루면 의미가 없어 이 함수의 대상이 아니다(별도 즉시반영 경로 필요).
+ * 감사 로그의 actorId는 플레이어 본인이 아니라 {@link GM_ACTOR}로 남겨 운영자 개입임을
+ * 구분한다. sourceId는 호출마다 새 `randomUUID()`를 써서 멱등 처리를 하지 않는다 — gm_platform
+ * 화면의 수동 클릭 1회성 액션이라 재시도 멱등키가 따로 없고, 중복 클릭 방지는 운영자 책임으로 둔다.
+ * @param input 지급 요청(재화/아이템 한 슬롯/사유)
+ * @param playerRepository Player 영속성 포트(대상 플레이어 존재 확인)
+ * @param mailboxRepository Mailbox 영속성 포트
+ * @throws {BusinessException} playerId가 없으면 GM.NOT_FOUND, itemId가 마스터 데이터에 없으면
+ *   GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+export async function grantMailToPlayer(
+  input: GmGrantMailInput,
+  playerRepository: PlayerRepository,
+  mailboxRepository: MailboxRepository,
+): Promise<void> {
+  const player = await playerRepository.findById(input.playerId);
+  if (!player) throw new BusinessException(ERROR_MAP.GM.NOT_FOUND, { playerId: input.playerId });
+
+  if (input.itemType === "card" && !masterDataCache.getCardTemplate(input.itemId!))
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { itemId: input.itemId });
+
+  const attachments: MailAttachments = {
+    ...(input.gold ? { gold: input.gold } : {}),
+    ...(input.enhancementStone ? { enhancementStone: input.enhancementStone } : {}),
+    ...(input.diamond ? { diamond: input.diamond } : {}),
+    ...(input.itemType === "card" ? { cardTemplateIds: Array.from({ length: input.quantity! }, () => input.itemId!) } : {}),
+  };
+
+  await sendMail(input.playerId, "관리자 지급", attachments, "gm_grant", randomUUID(), mailboxRepository, undefined, GM_ACTOR, input.reason);
 }
 
 /**

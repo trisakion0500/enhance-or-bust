@@ -33,6 +33,12 @@ gm_platform의 apiExecution은 등록된 API를 항상 `POST {api_base_url}{endp
 
 - **플레이어 조회**: `POST /gm/get-player`(단건/전체, 최대 200명), `POST
   /gm/get-player-cards`(보유 카드, playerId 필수)
+- **재화/카드 지급**: `POST /gm/grant-mail` — 골드/강화석/다이아/카드를 한 번에 우편으로
+  지급한다(기존 보상 지급과 동일하게 Mailbox 경유, `sourceType: "gm_grant"`). `reason`(지급
+  사유) 필수 — 플레이어에겐 노출 안 하고 감사 로그에만 남기며, actorId도 플레이어 본인이
+  아니라 `"GM"` sentinel로 구분한다. 과거 한때 있었다가 지운 `GRANT_CURRENCY`/`GRANT_CARD`
+  (status=0으로 중지)를 재화/카드 지급 하나로 통합한 버전 — **지급만 다루고 회수(차감)는
+  다루지 않는다**(회수는 즉시반영이 필요한 별개 성격이라 범위 밖, 상세는 `17_GM_API.md`).
 - **시드데이터(마스터데이터) 조회**: `master_*` 컬렉션 13종, 컬렉션당 엔드포인트 하나씩
   (`get-card-templates`/`get-grade-configs`/`get-enhancement-rules`/
   `get-synthesis-rules`/`get-stage-configs`/`get-stage-card-drops`/
@@ -111,7 +117,8 @@ gm_platform의 apiExecution은 등록된 API를 항상 `POST {api_base_url}{endp
 ## `changes` 필드 평탄화
 
 재화 지급/차감 API는 한때 구현했다가 삭제했다(gm_platform 쪽엔 하드삭제가 없어
-`status=0`으로 중지 처리). `changes` 필드는 같은 컬렉션 안에서도 액션마다(예:
+`status=0`으로 중지 처리) — 지급은 이후 `grant-mail`(위 "구현된 엔드포인트" 절)로 다시
+도입됐고, 차감(회수)은 여전히 없다. `changes` 필드는 같은 컬렉션 안에서도 액션마다(예:
 log_synthesis의 gradeUpgrade/enhanceMaterial) 모양이 달라 gm_platform 그리드가 원본
 객체를 `[object Object]`로 렌더링하는 문제가 있었다 — `getPlayerForGm()`의
 `economy.gold` 평탄화와 같은 원리로 `gmService.ts`의 `flattenChanges()`가 중첩 객체를

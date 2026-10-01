@@ -8,6 +8,9 @@ import { connectMongoLog, mongoLogClient } from "../../../infra/mongoLog.js";
 import { connectRedis, redisClient } from "../../../infra/redis.js";
 import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
 import { masterDataCache } from "../../../shared-kernel/masterData/masterDataCache.js";
+import { Economy } from "../../player/domain/economy.js";
+import { Inventory } from "../../player/domain/inventory.js";
+import { Player } from "../../player/domain/player.js";
 import { MongoMailboxRepository } from "../../mailbox/infrastructure/mongoMailboxRepository.js";
 import { MongoPlayerRepository } from "../../player/infrastructure/mongoPlayerRepository.js";
 import { createServer } from "../../../server.js";
@@ -17,18 +20,21 @@ import { createServer } from "../../../server.js";
  * `save-attendance-rewards`/`save-attendance-catchup-prices`), 카드 원형 저장 API
  * (`save-card-templates`), 등급 설정 저장 API(`save-grade-configs`), 강화 규칙 저장 API
  * (`save-enhancement-rules`), 스테이지 카드 드랍 저장 API(`save-stage-card-drops`), 스테이지
- * 설정 저장 API(`save-stage-configs`), 합성 규칙 저장 API(`save-synthesis-rules`) 검증을
- * 다룬다. 다른 GM 조회 엔드포인트는 파라미터가 거의 없어
+ * 설정 저장 API(`save-stage-configs`), 합성 규칙 저장 API(`save-synthesis-rules`), 재화/카드
+ * 지급 API(`grant-mail`) 검증을 다룬다. 다른 GM 조회 엔드포인트는 파라미터가 거의 없어
  * (마스터데이터 덤프/로그 조회) 검증 실패 경로 자체가 얇아 별도 테스트를 두지 않았다
  * (`17_GM_API.md` 참고). `GM_PLATFORM_API_KEY`가 `.env`에 설정돼 있으면 `X-API-Key`
  * 헤더로 실어 보낸다(설정 안 되어 있으면 `gmApiKeyAuth.ts`가 검증 자체를 건너뜀).
  * @author trisakion
+ * @modified 2026-10-01 trisakion 재화/카드 지급(POST /gm/grant-mail) 테스트 추가
  */
 
 let baseUrl: string;
+let playerRepository: MongoPlayerRepository;
 let httpServer: import("node:http").Server;
 const createdDefIds: string[] = [];
 const createdTemplateIds: string[] = [];
+const createdPlayerIds: string[] = [];
 
 before(async () => {
   const db = await connectMongo();
@@ -36,7 +42,7 @@ before(async () => {
   await connectRedis();
   await masterDataCache.loadAll(db);
 
-  const playerRepository = new MongoPlayerRepository(db);
+  playerRepository = new MongoPlayerRepository(db);
   httpServer = createServer(playerRepository, new MongoMailboxRepository(db), db).listen(0);
   await new Promise<void>(resolve => httpServer.once("listening", resolve));
   const { port } = httpServer.address() as AddressInfo;
@@ -52,6 +58,9 @@ after(async () => {
   await db.collection(COLLECTIONS.MASTER_STAGE_CARD_DROPS).deleteMany({ templateId: { $in: createdTemplateIds } });
   await db.collection(COLLECTIONS.MASTER_ENHANCEMENT_RULES).deleteMany({ minTargetEnhancementLevel: { $gte: 16, $lte: 20 } });
   await db.collection(COLLECTIONS.MASTER_STAGE_CONFIGS).deleteMany({ stageId: TEST_UNREFERENCED_STAGE_ID });
+  await db.collection<{ _id: string }>(COLLECTIONS.PLAYERS).deleteMany({ _id: { $in: createdPlayerIds } });
+  await db.collection(COLLECTIONS.MAILBOX).deleteMany({ playerId: { $in: createdPlayerIds } });
+  await mongoLogClient.db(config.mongoAppDatabaseLog).collection(COLLECTIONS.LOG_MAILBOX).deleteMany({ "changes.sourceType": "gm_grant" });
   await new Promise(resolve => httpServer.close(resolve));
   await mongoClient.close();
   await mongoLogClient.close();
@@ -70,6 +79,15 @@ function nextTemplateId(): string {
   const templateId = `gm-test-${randomUUID()}`;
   createdTemplateIds.push(templateId);
   return templateId;
+}
+
+/** GM 지급 테스트용 플레이어를 만들고 정리 대상 목록에 등록한다. */
+async function createTestPlayer() {
+  const playerId = randomUUID();
+  const player = new Player(playerId, 0, "test", `test-${playerId}`, "테스트유저", "test@example.com", undefined, new Inventory([]), new Economy(0, 0, 0), 0);
+  await playerRepository.create(player);
+  createdPlayerIds.push(playerId);
+  return playerId;
 }
 
 /**
@@ -145,6 +163,7 @@ const saveEnhancementRules = (body: unknown) => post("/gm/save-enhancement-rules
 const saveStageCardDrops = (body: unknown) => post("/gm/save-stage-card-drops", body);
 const saveStageConfigs = (body: unknown) => post("/gm/save-stage-configs", body);
 const saveSynthesisRules = (body: unknown) => post("/gm/save-synthesis-rules", body);
+const grantMail = (body: unknown) => post("/gm/grant-mail", body);
 
 test("신규 출석부 정의 저장 성공", async () => {
   const defId = nextDefId();
@@ -830,4 +849,102 @@ test("합성 규칙 저장 — 행 형식이 잘못되면 VALIDATION_FAILED(1000
   const { status, json } = await saveSynthesisRules({ data: [...otherRows, nRow, { type: "unknown", materialCount: 1 }] });
   assert.equal(status, 400);
   assert.equal(json.result, 10000);
+});
+
+// 재화/카드 지급(grant-mail)은 Mailbox를 경유하므로, 실제 지급 반영 여부는 응답이 아니라
+// player_mailbox 문서(sourceType="gm_grant")와 그 안의 attachments로 확인한다. 감사 로그는
+// sendMail()이 남기는 log_mailbox의 "send" 액션을 actorId="GM"(플레이어 본인이 아님)과
+// changes.reason으로 확인한다 — 플레이어가 직접 지급받은 보상(스테이지 클리어 등)과 구분된다.
+async function findGmGrantMail(playerId: string) {
+  const db = mongoClient.db(process.env.MONGO_APP_DATABASE);
+  return db.collection(COLLECTIONS.MAILBOX).findOne({ playerId, sourceType: "gm_grant" });
+}
+
+async function findGmGrantAuditLog(playerId: string) {
+  return mongoLogClient
+    .db(config.mongoAppDatabaseLog)
+    .collection(COLLECTIONS.LOG_MAILBOX)
+    .findOne({ actorId: "GM", "changes.attachments": { $exists: true } }, { sort: { occurredAt: -1 } })
+    .then(async log => {
+      // 여러 테스트가 섞여도 되도록, 방금 만든 지급 우편의 mailId와 짝지어 정확한 로그만 반환한다.
+      const mail = await findGmGrantMail(playerId);
+      if (!log || !mail || log.changes.mailId !== mail._id) return null;
+      return log;
+    });
+}
+
+test("GM 지급 — 골드+카드를 보내면 우편으로 들어가고 감사 로그에 actorId=GM과 사유가 남는다", async () => {
+  const playerId = await createTestPlayer();
+  const { status, json } = await grantMail({ playerId, gold: 500, itemType: "card", itemId: "N_01", quantity: 2, reason: "버그 보상" });
+
+  assert.equal(status, 200);
+  assert.equal(json.result, 0);
+
+  const mail = await findGmGrantMail(playerId);
+  assert.ok(mail);
+  assert.equal(mail!.attachments.gold, 500);
+  assert.deepEqual(mail!.attachments.cardTemplateIds, ["N_01", "N_01"]);
+
+  const log = await findGmGrantAuditLog(playerId);
+  assert.ok(log, "감사 로그가 남아있어야 한다");
+  assert.equal(log!.actorId, "GM");
+  assert.equal(log!.changes.reason, "버그 보상");
+});
+
+test("GM 지급 — 존재하지 않는 playerId면 NOT_FOUND(10002)", async () => {
+  const { status, json } = await grantMail({ playerId: randomUUID(), gold: 100, reason: "테스트" });
+
+  assert.equal(status, 404);
+  assert.equal(json.result, 10002);
+});
+
+test("GM 지급 — reason이 없거나 빈 문자열이면 VALIDATION_FAILED(10000)", async () => {
+  const playerId = await createTestPlayer();
+  for (const reason of [undefined, ""]) {
+    const { status, json } = await grantMail({ playerId, gold: 100, reason });
+    assert.equal(status, 400, JSON.stringify(reason));
+    assert.equal(json.result, 10000, JSON.stringify(reason));
+  }
+});
+
+test("GM 지급 — 지급 항목이 하나도 없으면 VALIDATION_FAILED(10000)", async () => {
+  const playerId = await createTestPlayer();
+  const { status, json } = await grantMail({ playerId, reason: "빈 지급" });
+
+  assert.equal(status, 400);
+  assert.equal(json.result, 10000);
+});
+
+test("GM 지급 — 금액이 음수/소수면 VALIDATION_FAILED(10000)", async () => {
+  const playerId = await createTestPlayer();
+  for (const gold of [-1, 1.5]) {
+    const { status, json } = await grantMail({ playerId, gold, reason: "테스트" });
+    assert.equal(status, 400, String(gold));
+    assert.equal(json.result, 10000, String(gold));
+  }
+});
+
+test("GM 지급 — 존재하지 않는 카드 원형 ID면 VALIDATION_FAILED(10000)", async () => {
+  const playerId = await createTestPlayer();
+  const { status, json } = await grantMail({ playerId, itemType: "card", itemId: "NO_SUCH_TEMPLATE", quantity: 1, reason: "테스트" });
+
+  assert.equal(status, 400);
+  assert.equal(json.result, 10000);
+});
+
+test("GM 지급 — itemType이 알 수 없는 값이거나 itemId/quantity가 짝 없이 오면 VALIDATION_FAILED(10000)", async () => {
+  const playerId = await createTestPlayer();
+  const invalidBodies = [
+    { playerId, itemType: "unknown", itemId: "N_01", quantity: 1, reason: "테스트" },
+    { playerId, itemType: "card", quantity: 1, reason: "테스트" },
+    { playerId, itemType: "card", itemId: "N_01", reason: "테스트" },
+    { playerId, itemType: "card", itemId: "N_01", quantity: 0, reason: "테스트" },
+    { playerId, itemId: "N_01", reason: "테스트" },
+    { playerId, quantity: 1, reason: "테스트" },
+  ];
+  for (const body of invalidBodies) {
+    const { status, json } = await grantMail(body);
+    assert.equal(status, 400, JSON.stringify(body));
+    assert.equal(json.result, 10000, JSON.stringify(body));
+  }
 });

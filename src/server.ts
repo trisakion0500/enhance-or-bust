@@ -30,6 +30,8 @@ import { createSynthesisRoutes } from "./contexts/synthesis/routes/synthesisRout
  *   실제 API 라우터 전부보다는 앞에 위치
  * @modified 2026-09-21 trisakion createGmRoutes에 db 전달 추가 — 출석부 정의 저장
  *   (POST /gm/save-attendance-def) 라우트가 DB 접근 필요
+ * @modified 2026-10-01 trisakion createGmRoutes에 mailboxRepository 전달 추가 — 재화/카드
+ *   지급(POST /gm/grant-mail) 라우트가 우편 발송에 사용
  */
 export function createServer(playerRepository: PlayerRepository, mailboxRepository: MailboxRepository, db: Db) {
   const app = express();
@@ -55,7 +57,7 @@ export function createServer(playerRepository: PlayerRepository, mailboxReposito
   // 뒤에 마운트되면 그 requireAuth가 경로 매칭 전에 먼저 걸려 /gm/*까지 세션 인증을 요구하게
   // 된다(gmRoutes 자체는 라우트별로 gmApiKeyAuth를 붙여 안전하지만, 그 앞의 다른 라우터가
   // 가로채는 문제라 gmRoutes 쪽 수정만으론 해결이 안 됨) — 그래서 이 라우터들보다 먼저 마운트한다.
-  app.use(createGmRoutes(playerRepository, db));
+  app.use(createGmRoutes(playerRepository, db, mailboxRepository));
   app.use(createEnhancementRoutes(playerRepository));
   app.use(createSynthesisRoutes(playerRepository));
   app.use(createRandomBoxRoutes(playerRepository));

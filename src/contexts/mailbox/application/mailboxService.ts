@@ -21,12 +21,18 @@ import { COLLECTIONS } from "../../../shared-kernel/collectionNames.js";
  * @param expiryMs 발송 시각으로부터 만료까지 걸리는 시간(ms) — 실제 게임 트리거는
  *   `mailContent.ts`의 `MAIL_CONTENTS` 레지스트리 값을 넘겨야 하고, 생략 시 기본값
  *   {@link MAIL_EXPIRY_MS}가 쓰인다(레지스트리에 없는 임시/테스트용 발송)
+ * @param actorId 감사 로그에 남길 행위자 — 생략하면 수신자(`playerId`) 본인 행위로 기록된다.
+ *   GM 지급처럼 수신자가 아닌 제3자가 트리거한 발송만 {@link GM_ACTOR} 등으로 넘긴다
+ * @param reason 감사 로그에만 남기는 발송 사유(선택) — 우편 자체에는 노출되지 않는다. GM
+ *   지급의 "왜 지급했는지" 메모 용도
  * @returns 실제로 새로 발송됐으면 true, 이미 같은 (sourceType, sourceId)로 발송된 적 있어
  *   멱등 스킵됐으면 false — 호출부가 이 값으로 자기 쪽 후속 처리(감사 로그 등)의 중복 여부를
  *   판단할 수 있다(coupon 재처리 배치의 `reconcileUnconfirmedCoupons()` 참고)
  * @throws {BusinessException} attachments에 음수/NaN 값이 있으면 MAILBOX.VALIDATION_FAILED
  * @author trisakion
  * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
+ * @modified 2026-10-01 trisakion GM 지급(`grantMailToPlayer`)에서 actorId를 플레이어 본인이
+ *   아닌 {@link GM_ACTOR}로 남겨야 해서 actorId/reason 선택 파라미터 추가
  */
 export async function sendMail(
   playerId: string,
@@ -36,6 +42,8 @@ export async function sendMail(
   sourceId: string,
   mailboxRepository: MailboxRepository,
   expiryMs: number = MAIL_EXPIRY_MS,
+  actorId: string = playerId,
+  reason?: string,
 ): Promise<boolean> {
   for (const amount of [attachments.gold, attachments.enhancementStone, attachments.diamond]) {
     if (amount !== undefined && (!Number.isFinite(amount) || amount < 0))
@@ -54,9 +62,9 @@ export async function sendMail(
   // 새로 삽입됐을 때만 남긴다.
   if (inserted)
     await writeAuditLog(COLLECTIONS.LOG_MAILBOX, {
-      actorId: playerId,
+      actorId,
       action: "send",
-      changes: { mailId: mail.mailId, title, attachments, sourceType, sourceId },
+      changes: { mailId: mail.mailId, title, attachments, sourceType, sourceId, ...(reason !== undefined ? { reason } : {}) },
     });
   return inserted;
 }

@@ -66,6 +66,40 @@ gm_platform의 외부 API 규약(`{ result, message, data: [...] }`, `data`는 �
 
 **에러**: 10000(playerId 누락/문자열 아님), 10002(플레이어 없음)
 
+### `POST /gm/grant-mail`
+
+GM 운영자가 플레이어에게 재화(골드/강화석/다이아)/카드를 한 번에 우편으로 지급한다. 기존
+보상 지급(스테이지 클리어/쿠폰)과 동일하게 Mailbox를 경유한다(`sourceType: "gm_grant"`) —
+인벤토리 슬롯 상한 검증 등을 새로 만들지 않고 그대로 재사용한다. **지급(grant)만 다루고
+회수(차감)는 다루지 않는다** — 회수는 플레이어가 수령을 미루면 의미가 없는 즉시반영 성격의
+별도 기능이라 이 API의 대상이 아니다. `reason`은 왜 지급하는지 적는 사유로 **필수**이며,
+플레이어에게는 노출되지 않고 감사 로그(`log_mailbox`)에만 남는다 — 감사 로그의 `actorId`는
+플레이어 본인이 아니라 `"GM"` sentinel로 기록돼, 플레이어가 직접 받은 보상과 구분된다(GM
+인증이 공용 API Key라 운영자 개인까지는 식별하지 못함). 골드/강화석/다이아는
+`gold`/`enhancementStone`/`diamond` 고정 필드로 받고, 그 외 아이템(현재는 카드만)은
+`itemType`/`itemId`/`quantity` 한 슬롯으로 받는다 — gm_platform 입력칸이 JSON 배열을
+다루려면 운영자가 직접 JSON을 타이핑해야 해서(실사용성 낮음) 배열 대신 단일 슬롯을 택했다
+(출석부 보상의 "하루 카드 1종" 제약과 동일한 이유 — 한 번에 하나의 비재화 아이템만 지급
+가능, 다른 카드까지 같이 주려면 호출을 한 번 더 한다). `itemType`은 현재 `"card"`만
+유효하고, 지정하면 `itemId`(카드 원형 ID, 마스터데이터에 실재해야 함)/`quantity`(1 이상
+정수, 그만큼 새 카드 인스턴스 생성)가 함께 있어야 한다. `gold`/`enhancementStone`/`diamond`/
+`itemType` 중 최소 하나는 있어야 한다. 응답은 KEY_VALUE/GRID로 보여줄 데이터가 없어
+`data: []`를 반환한다(지급 성공 여부는 `result`로 판단). **X-API-Key 필요.**
+
+**요청 body**
+```json
+{ "playerId": "player-1", "gold": 500, "itemType": "card", "itemId": "N_01", "quantity": 2, "reason": "버그 보상" }
+```
+
+**응답**
+```json
+{ "result": 0, "message": "OK", "data": [] }
+```
+
+**에러**: 10000(playerId/reason 누락, 금액이 0 이상 정수 아님, itemType이 알 수 없는 값이거나
+itemId/quantity와 짝이 안 맞음, itemId가 마스터데이터에 없음, 지급 항목이 하나도 없음),
+10002(playerId 없음)
+
 ### 시드데이터(마스터데이터) 조회
 
 `master_*` 컬렉션 13종을 컬렉션당 엔드포인트 하나씩 그대로 덤프한다. 응답은 서버가 이미

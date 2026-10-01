@@ -7,6 +7,14 @@ import { logger } from "../infra/logger.js";
  */
 export const SYSTEM_ACTOR = "SYSTEM";
 
+/** GM 운영자가 gm_platform을 통해 직접 수행하는 액션(재화/카드 지급 등)의 actorId sentinel —
+ * 플레이어 본인 행위가 아니라 운영자 개입이라는 걸 감사 로그에서 구분하기 위함. gm_platform
+ * 인증이 공용 API Key라 운영자 개인 식별은 못 하지만, 최소한 "player 본인이 한 일이 아니다"는
+ * 구분은 필요해 둔다.
+ * @author trisakion
+ */
+export const GM_ACTOR = "GM";
+
 /** 감사 로그 한 건 — 언제(occurredAt)/누가(actorId)/무엇을(action)/어떤 내용이 바뀌었는지(changes). */
 interface AuditLogEntry {
   /** 행위자 playerId, 또는 배치/크론이면 {@link SYSTEM_ACTOR} */

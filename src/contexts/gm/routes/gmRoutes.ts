@@ -6,10 +6,12 @@ import { ERROR_MAP } from "../../../shared-kernel/errorMap.js";
 import { gmApiKeyAuth } from "../../../shared-kernel/gmApiKeyAuth.js";
 import type { AttendanceBookType, AttendanceTargetAudience } from "../../attendance/domain/attendanceBookDef.js";
 import type { PlayerRepository } from "../../player/domain/playerRepository.js";
+import type { MailboxRepository } from "../../mailbox/domain/mailboxRepository.js";
 import type { Grade } from "../../../shared-kernel/masterData/grade.js";
 import type { Element } from "../../../shared-kernel/masterData/element.js";
-import type { AttendanceBookDefSaveInput, AttendanceDayRewardInput, CardTemplateSaveRow, EnhancementRuleSaveRow, GradeConfigSaveRow, RandomBoxCustomPoolSaveRow, RandomBoxDefSaveRow, RandomBoxGradeRateSaveRow, StageCardDropSaveRow, StageConfigSaveRow, SynthesisRuleSaveRow } from "../application/gmService.js";
+import type { AttendanceBookDefSaveInput, AttendanceDayRewardInput, CardTemplateSaveRow, EnhancementRuleSaveRow, GmGrantMailInput, GradeConfigSaveRow, RandomBoxCustomPoolSaveRow, RandomBoxDefSaveRow, RandomBoxGradeRateSaveRow, StageCardDropSaveRow, StageConfigSaveRow, SynthesisRuleSaveRow } from "../application/gmService.js";
 import {
+  GRANT_MAIL_ITEM_TYPES,
   getAttendanceCatchupPricesForGm,
   getAttendanceDefsForGm,
   getAttendanceLogsForGm,
@@ -31,6 +33,7 @@ import {
   getStageConfigsForGm,
   getSynthesisLogsForGm,
   getSynthesisRulesForGm,
+  grantMailToPlayer,
   listPlayersForGm,
   saveAttendanceBookDefForGm,
   saveAttendanceCatchupPricesForGm,
@@ -517,6 +520,47 @@ function parseOptionalDefId(body: unknown): string | undefined {
 }
 
 /**
+ * `POST /gm/grant-mail` 요청 바디를 검증된 형태로 파싱한다 — 형식 검증만 담당하고
+ * (필수 필드/타입, 최소 하나의 지급 항목), playerId 존재/itemId 실재 여부 등
+ * 비즈니스 검증은 `grantMailToPlayer()`의 책임이다.
+ * @param body 요청 바디
+ * @returns 파싱된 지급 요청
+ * @throws {BusinessException} playerId/reason 누락, 금액이 0 이상 정수가 아님, itemType이
+ *   알 수 없는 값이거나 itemId/quantity와 짝이 안 맞음, 또는 지급 항목이 하나도 없으면
+ *   GM.VALIDATION_FAILED
+ * @author trisakion
+ */
+function parseGrantMailBody(body: unknown): GmGrantMailInput {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const fail = (): never => {
+    throw new BusinessException(ERROR_MAP.GM.VALIDATION_FAILED, { body });
+  };
+
+  if (typeof b.playerId !== "string" || !b.playerId) fail();
+  if (typeof b.reason !== "string" || !b.reason) fail();
+  for (const amount of [b.gold, b.enhancementStone, b.diamond]) {
+    if (amount !== undefined && (typeof amount !== "number" || !Number.isInteger(amount) || amount < 0)) fail();
+  }
+  if (b.itemType !== undefined) {
+    if (!GRANT_MAIL_ITEM_TYPES.includes(b.itemType as (typeof GRANT_MAIL_ITEM_TYPES)[number])) fail();
+    if (typeof b.itemId !== "string" || !b.itemId) fail();
+    if (typeof b.quantity !== "number" || !Number.isInteger(b.quantity) || b.quantity < 1) fail();
+  } else if (b.itemId !== undefined || b.quantity !== undefined) {
+    fail();
+  }
+  if (!b.gold && !b.enhancementStone && !b.diamond && !b.itemType) fail();
+
+  return {
+    playerId: b.playerId as string,
+    reason: b.reason as string,
+    ...(b.gold !== undefined ? { gold: b.gold as number } : {}),
+    ...(b.enhancementStone !== undefined ? { enhancementStone: b.enhancementStone as number } : {}),
+    ...(b.diamond !== undefined ? { diamond: b.diamond as number } : {}),
+    ...(b.itemType !== undefined ? { itemType: b.itemType as "card", itemId: b.itemId as string, quantity: b.quantity as number } : {}),
+  };
+}
+
+/**
  * gm_platform 연동 전용 라우터 — 세션 쿠키가 아니라 X-API-Key(`gmApiKeyAuth`)로 인증한다.
  * gm_platform의 apiExecution은 등록된 API를 항상 `POST {api_base_url}{endpoint}`로 호출하므로
  * (gm_platform의 test_game_server와 동일 관례), 조회 엔드포인트도 GET이 아니라 POST로 둔다.
@@ -527,6 +571,7 @@ function parseOptionalDefId(body: unknown): string | undefined {
  * Express가 경로+메서드가 실제로 일치할 때만 이 미들웨어를 태우므로 서로 간섭하지 않는다.
  * @param playerRepository Player 영속성 포트(DI)
  * @param db 메인 앱 DB 핸들(출석부 정의 저장 라우트가 사용)
+ * @param mailboxRepository Mailbox 영속성 포트(DI) — GM 지급(`grant-mail`)이 우편 발송에 사용
  * @returns 등록된 Express Router
  * @author trisakion
  * @modified trisakion 생성 이후 수정 이력 있음(상세 날짜/내용은 소급 정리 대상 밖 — git log 참고)
@@ -541,8 +586,10 @@ function parseOptionalDefId(body: unknown): string | undefined {
  * @modified 2026-09-30 trisakion 스테이지 설정 저장(POST /gm/save-stage-configs) 라우트 추가
  * @modified 2026-09-30 trisakion 합성 규칙 저장(POST /gm/save-synthesis-rules) 라우트 추가
  * @modified 2026-10-01 trisakion 랜덤박스 조회/저장 8종 라우트 추가(GAME_DESIGN.md 7-1절)
+ * @modified 2026-10-01 trisakion 재화/카드 지급 라우트(POST /gm/grant-mail) 추가, mailboxRepository
+ *   파라미터 신규(우편 발송에 사용)
  */
-export function createGmRoutes(playerRepository: PlayerRepository, db: Db): Router {
+export function createGmRoutes(playerRepository: PlayerRepository, db: Db, mailboxRepository: MailboxRepository): Router {
   const router = Router();
 
   router.post("/gm/get-player", gmApiKeyAuth, asyncHandler(async (req, res) => {
@@ -568,6 +615,12 @@ export function createGmRoutes(playerRepository: PlayerRepository, db: Db): Rout
 
     const cards = await getPlayerCardsForGm(playerId, playerRepository);
     res.json({ result: 0, message: "OK", data: cards });
+  }));
+
+  router.post("/gm/grant-mail", gmApiKeyAuth, asyncHandler(async (req, res) => {
+    const input = parseGrantMailBody(req.body);
+    await grantMailToPlayer(input, playerRepository, mailboxRepository);
+    res.json({ result: 0, message: "OK", data: [] });
   }));
 
   // 시드데이터(마스터데이터) 9종 — 이제 전부 저장 API가 있다(아래 각 save-* 라우트 참고).
